@@ -1,0 +1,100 @@
+Created by PLY version 3.6 (http://www.dabeaz.com/ply)
+
+Grammar
+
+Rule 0     S' -> module
+Rule 1     module -> py_expr
+Rule 2     py_expr -> ` py_func_call `
+Rule 3     py_func_call -> IDENTIFIER ( STRING_LITERAL )
+
+Terminals, with rules where they appear
+
+(                    : 3
+)                    : 3
+IDENTIFIER           : 3
+STRING_LITERAL       : 3
+`                    : 2 2
+error                : 
+
+Nonterminals, with rules where they appear
+
+module               : 0
+py_expr              : 1
+py_func_call         : 2
+
+Parsing method: LALR
+
+state 0
+
+    (0) S' -> . module
+    (1) module -> . py_expr
+    (2) py_expr -> . ` py_func_call `
+
+    `               shift and go to state 3
+
+    py_expr                        shift and go to state 1
+    module                         shift and go to state 2
+
+state 1
+
+    (1) module -> py_expr .
+
+    $end            reduce using rule 1 (module -> py_expr .)
+
+
+state 2
+
+    (0) S' -> module .
+
+
+
+state 3
+
+    (2) py_expr -> ` . py_func_call `
+    (3) py_func_call -> . IDENTIFIER ( STRING_LITERAL )
+
+    IDENTIFIER      shift and go to state 4
+
+    py_func_call                   shift and go to state 5
+
+state 4
+
+    (3) py_func_call -> IDENTIFIER . ( STRING_LITERAL )
+
+    (               shift and go to state 6
+
+
+state 5
+
+    (2) py_expr -> ` py_func_call . `
+
+    `               shift and go to state 7
+
+
+state 6
+
+    (3) py_func_call -> IDENTIFIER ( . STRING_LITERAL )
+
+    STRING_LITERAL  shift and go to state 8
+
+
+state 7
+
+    (2) py_expr -> ` py_func_call ` .
+
+    $end            reduce using rule 2 (py_expr -> ` py_func_call ` .)
+
+
+state 8
+
+    (3) py_func_call -> IDENTIFIER ( STRING_LITERAL . )
+
+    )               shift and go to state 9
+
+
+state 9
+
+    (3) py_func_call -> IDENTIFIER ( STRING_LITERAL ) .
+
+    `               reduce using rule 3 (py_func_call -> IDENTIFIER ( STRING_LITERAL ) .)
+
