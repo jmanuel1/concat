@@ -1,0 +1,30 @@
+"""4-bit half adder (rosetta code)."""pop
+
+# python has not
+
+
+def xor:
+    # a b -> (a xor b)
+    over over not and  # a b (a and not b)
+    _r  # temporarily stash top http://wiki.laptop.org/go/Forth_stack_operators
+    swap not and  # (b and not a)
+    r_  # remove item from top of stash
+    or  # (a xor b)
+
+
+def halfadder:
+    # a b -> sum carry
+    over over and _r xor r_
+
+
+def fulladder:
+    halfadder _r swap halfadder r_ or
+
+
+def _4bitadder:
+    4 roll 0  fulladder swap _r _r
+    3 roll r_ fulladder swap _r _r
+    2 roll r_ fulladder swap _r fulladder r_ r_ r_ 3 roll
+
+'' input $int map unlist '' input $int map unlist _4bitadder
+print 4 tolist $int map $str map '' $+ reduce print

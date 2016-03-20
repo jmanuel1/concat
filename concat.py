@@ -5,6 +5,7 @@ import parse
 import argparse
 import sys
 import ast
+import astunparse
 
 
 filename = '<stdin>'
@@ -31,5 +32,9 @@ args = arg_parser.parse_args()
 ast_ = parse.parse(args.file.read())
 args.file.close()
 ast.fix_missing_locations(ast_)
+with open('debug.out', 'w') as f:
+    f.write(astunparse.unparse(ast_))
+    f.write('\n------------ AST DUMP ------------\n')
+    f.write(astunparse.dump(ast_))
 prog = compile(ast_, filename, 'exec')
 exec(prog, {})
