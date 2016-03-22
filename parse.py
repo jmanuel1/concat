@@ -9,7 +9,7 @@ import ast
 # TODO: clean up the grammar
 
 
-def p_module(p):
+def p_module(p):  # noqa
     """module : ENCODING module
               | statement module ENDMARKER
               | statement module
@@ -28,23 +28,23 @@ def p_module(p):
 
     if isinstance(p[1], str) and not p[1].isspace():
         p[0] = ast.Module(
-            [ast.ImportFrom('libconcat', [ast.alias('*', None)], 0)]
-            + p[2].body)
+            [ast.ImportFrom('libconcat', [ast.alias('*', None)], 0)] +
+            p[2].body)
 
 
-def p_statement(p):
+def p_statement(p):  # noqa
     """statement : stmt_list NEWLINE
                  | compound_stmt
     """
     p[0] = p[1]
 
 
-def p_compound_stmt(p):
+def p_compound_stmt(p):  # noqa
     """compound_stmt : funcdef"""
     p[0] = p[1]
 
 
-def p_funcdef(p):
+def p_funcdef(p):  # noqa
     """funcdef : NAME funcname COLON suite"""
     if p[1] != 'def':
         print('bad token {} at ({}, {})'.format(
@@ -59,12 +59,12 @@ def p_funcdef(p):
         kw_defaults=[]), p[4], [], None)
 
 
-def p_funcname(p):
+def p_funcname(p):  # noqa
     """funcname : NAME"""
     p[0] = p[1]
 
 
-def p_suite(p):
+def p_suite(p):  # noqa
     """suite : stmt_list NEWLINE
              | NEWLINE INDENT statement_plus DEDENT
     """
@@ -74,7 +74,7 @@ def p_suite(p):
         p[0] = p[3]
 
 
-def p_statement_plus(p):
+def p_statement_plus(p):  # noqa
     """statement_plus : statement statement_plus
                       | statement
     """
@@ -86,7 +86,7 @@ def p_statement_plus(p):
         p[0] = p[1]
 
 
-def p_stmt_list(p):
+def p_stmt_list(p):  # noqa
     """stmt_list : simple_stmt
                  | ';' simple_stmt stmt_list
                  | simple_stmt ';'
@@ -97,12 +97,12 @@ def p_stmt_list(p):
         p[0] = p[1]
 
 
-def p_simple_stmt(p):
+def p_simple_stmt(p):  # noqa
     """simple_stmt : expression"""
     p[0] = p[1]
 
 
-def p_expression(p):
+def p_expression(p):  # noqa
     """expression : STRING expression
                   | NAME expression
                   | NUMBER expression
@@ -145,7 +145,7 @@ def _push(expr):
         [])
 
 
-def p_empty(p):
+def p_empty(p):  # noqa
     """empty :"""
     pass
 
