@@ -66,11 +66,21 @@ class Token:
         """Create the Token object."""
         self.type = self.value = self.start = self.end = None
 
-    def __repr__(self):
-        """NOTE: This representation cannot be eval'd."""
-        # lesser TODO: make eval-able (as a tuple, at least).
+    def __str__(self):
+        """Convert to a string.
+
+        A nice representation is returned, not a valid expression.
+        """
         return '({}, {}, start {})'.format(
             repr(self.type), repr(self.value), repr(self.start))
+
+    def __repr__(self):
+        """Return a tuple representation as a valid expression."""
+        return '({}, {}, {}, {})'.format(
+            repr(self.type),
+            repr(self.value),
+            repr(self.start),
+            repr(self.end))
 
 lexer = Lexer()
 
