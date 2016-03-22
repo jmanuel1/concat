@@ -6,34 +6,47 @@ from lex import tokens  # noqa
 import ply.yacc
 import ast
 
-# TODO: clean up the grammar
+# TODO: remove shift/reduce conflicts
 
 
 def p_module(p):  # noqa
-    """module : ENCODING module
-              | statement module ENDMARKER
-              | statement module
-              | NEWLINE module
-              | empty
+    """module : module_encoding
+              | module_statement
+              | module_newline
+              | empty_module
     """
-    if len(p) >= 3:
-        if isinstance(p[1], ast.stmt):
-            p[0] = ast.Module(body=[p[1]] + p[2].body)
-        elif isinstance(p[1], list):
-            p[0] = ast.Module(body=p[1] + p[2].body)
-        else:
-            p[0] = p[2]
-    else:
-        p[0] = ast.Module(body=[])
+    p[0] = p[1]
 
-    if isinstance(p[1], str) and not p[1].isspace():
-        p[0] = ast.Module(
-            [ast.ImportFrom('libconcat', [ast.alias('*', None)], 0)] +
-            p[2].body)
+
+def p_empty_module(p):  # noqa
+    """empty_module : empty"""
+    p[0] = ast.Module(body=[])
+
+
+def p_module_newline(p):  # noqa
+    """module_newline : NEWLINE module"""
+    p[0] = p[2]
+
+
+def p_module_statment(p):  # noqa
+    """module_statement : statement module ENDMARKER
+                        | statement module
+    """
+    if isinstance(p[1], ast.stmt):
+        p[0] = ast.Module(body=[p[1]] + p[2].body)
+    elif isinstance(p[1], list):
+        p[0] = ast.Module(body=p[1] + p[2].body)
+
+
+def p_module_encoding(p):  # noqa
+    """module_encoding : ENCODING module"""
+    p[0] = ast.Module(
+        [ast.ImportFrom('libconcat', [ast.alias('*', None)], 0)] +
+        p[2].body)
 
 
 def p_statement(p):  # noqa
-    """statement : stmt_list NEWLINE
+    """statement : terminated_stmt_list
                  | compound_stmt
     """
     p[0] = p[1]
@@ -45,11 +58,7 @@ def p_compound_stmt(p):  # noqa
 
 
 def p_funcdef(p):  # noqa
-    """funcdef : NAME funcname COLON suite"""
-    if p[1] != 'def':
-        print('bad token {} at ({}, {})'.format(
-            p[1], p.lineno(1), p.lexpos(1)))
-        raise SyntaxError
+    """funcdef : DEF funcname COLON suite"""
     p[0] = ast.FunctionDef(p[2], ast.arguments(
         args=[],
         vararg=None,
@@ -65,36 +74,49 @@ def p_funcname(p):  # noqa
 
 
 def p_suite(p):  # noqa
-    """suite : stmt_list NEWLINE
-             | NEWLINE INDENT statement_plus DEDENT
+    """suite : terminated_stmt_list
+             | indented_block
     """
-    if len(p) == 3:
-        p[0] = p[1]
-    else:
-        p[0] = p[3]
+    p[0] = p[1]
+
+
+def p_terminated_stmt_list(p):  # noqa
+    """terminated_stmt_list : stmt_list NEWLINE"""
+    p[0] = p[1]
+
+
+def p_indented_block(p):  # noqa
+    """indented_block : NEWLINE INDENT statement_plus DEDENT"""
+    p[0] = p[3]
 
 
 def p_statement_plus(p):  # noqa
-    """statement_plus : statement statement_plus
+    """statement_plus : statement_statement_plus
                       | statement
     """
     if isinstance(p[1], ast.stmt):
         p[1] = [p[1]]
-    if len(p) == 3:
-        p[0] = p[1] + p[2]
-    else:
-        p[0] = p[1]
+    p[0] = p[1]
+
+
+def p_statement_statement_plus(p):  # noqa
+    """statement_statement_plus : statement statement_plus"""
+    if isinstance(p[1], ast.stmt):
+        p[1] = [p[1]]
+    p[0] = p[1] + p[2]
 
 
 def p_stmt_list(p):  # noqa
     """stmt_list : simple_stmt
-                 | ';' simple_stmt stmt_list
-                 | simple_stmt ';'
+                 | semi_stmt_list
+                 | simple_stmt SEMI
     """
-    if p[1] == ';':
-        p[0] = p[2] + p[3]
-    else:
-        p[0] = p[1]
+    p[0] = p[1]
+
+
+def p_semi_stmt_list(p):  # noqa
+    """semi_stmt_list : SEMI simple_stmt stmt_list"""
+    p[0] = p[2] + p[3]
 
 
 def p_simple_stmt(p):  # noqa
@@ -103,31 +125,57 @@ def p_simple_stmt(p):  # noqa
 
 
 def p_expression(p):  # noqa
-    """expression : STRING expression
-                  | NAME expression
-                  | NUMBER expression
-                  | DOLLARSIGN NAME expression
-                  | DOLLARSIGN PLUS expression
-                  | empty
+    """expression : implicit_string_push
+                  | bin_bool_func
+                  | unary_bool_func
+                  | func_compose
+                  | implicit_number_push
+                  | push_func
+                  | push_plus
+                  | empty_expression
     """
-    if len(p) == 2:
-        p[0] = []
-    elif p[1] in {'and', 'or'}:
-        p[0] = ast.parse(
-            'stack[-2:] = [stack[-2] {} stack[-1]]'.format(p[1])).body + p[2]
-    elif p[1] in {'not'}:
-        p[0] = ast.parse('stack.append(not stack.pop())').body + p[2]
-    elif p[1].isnumeric():
-        p[0] = [ast.Expr(_push(ast.Num(int(p[1]))))] + p[2]
-    elif '"' in p[1] or "'" in p[1]:
-        p[0] = [ast.Expr(_push(_str_to_node(p[1])))] + p[2]
-    elif p[1].isidentifier():
-        p[0] = [ast.Expr(ast.Call(ast.Name(p[1], ast.Load()), [], []))] + p[2]
-    elif len(p) == 4:
-        if p[2] in {'+'}:
-            p[0] = ast.parse('stack.append(add)').body + p[3]
-        else:
-            p[0] = [ast.Expr(_push(ast.Name(p[2], ast.Load())))] + p[3]
+    p[0] = p[1]
+
+
+def p_implicit_number_push(p):  # noqa
+    """implicit_number_push : NUMBER expression"""
+    p[0] = [ast.Expr(_push(ast.Num(int(p[1]))))] + p[2]
+
+
+def p_push_func(p):  # noqa
+    """push_func : DOLLARSIGN NAME expression"""
+    p[0] = [ast.Expr(_push(ast.Name(p[2], ast.Load())))] + p[3]
+
+
+def p_push_plus(p):  # noqa
+    """push_plus : DOLLARSIGN PLUS expression"""
+    p[0] = ast.parse('stack.append(add)').body + p[3]
+
+
+def p_implicit_string_push(p):  # noqa
+    """implicit_string_push : STRING expression"""
+    p[0] = [ast.Expr(_push(_str_to_node(p[1])))] + p[2]
+
+
+def p_bin_bool_func(p):  # noqa
+    """bin_bool_func : BIN_BOOL_FUNC expression"""
+    p[0] = ast.parse(
+        'stack[-2:] = [stack[-2] {} stack[-1]]'.format(p[1])).body + p[2]
+
+
+def p_unary_bool_func(p):  # noqa
+    """unary_bool_func : UNARY_BOOL_FUNC expression"""
+    p[0] = ast.parse('stack.append(not stack.pop())').body + p[2]
+
+
+def p_func_compose(p):  # noqa
+    """func_compose : NAME expression"""
+    p[0] = [ast.Expr(ast.Call(ast.Name(p[1], ast.Load()), [], []))] + p[2]
+
+
+def p_empty_expression(p):  # noqa
+    """empty_expression : empty"""
+    p[0] = []
 
 
 def _libconcat_ref(name):

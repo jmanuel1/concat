@@ -4,10 +4,12 @@ import sys
 import io
 import token
 
-tokens = tuple(token.tok_name.values()) + ('DOLLARSIGN',)
+tokens = tuple(token.tok_name.values()) + \
+    ('DOLLARSIGN', 'DEF', 'BIN_BOOL_FUNC', 'UNARY_BOOL_FUNC')
 
 
 class Lexer:
+    # TODO: shut off D211
 
     """Lexes the input given at initialization.
 
@@ -41,6 +43,12 @@ class Lexer:
                 return self.token()
             elif tok.value == '$':
                 tok.type = 'DOLLARSIGN'
+        elif tok.value == 'def':
+            tok.type = 'DEF'
+        elif tok.value in {'and', 'or'}:
+            tok.type = 'BIN_BOOL_FUNC'
+        elif tok.value == 'not':
+            tok.type = 'UNARY_BOOL_FUNC'
         return tok
 
 
