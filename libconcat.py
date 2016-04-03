@@ -6,10 +6,15 @@ import operator
 
 class Stack(list):
 
+    def __init__(self, debug=False):
+        self.debug = debug
+
     def _debug(self):
-        # lesser TODO: make this a programmable option
-        # builtins.print('DEBUG:', repr(self))
-        pass
+        # TODO: make this a cmd option
+        # TODO: call self._debug AFTER mutating stack, not before, so the last
+        # change is printed
+        if self.debug:
+            builtins.print('DEBUG:', repr(self))
 
     def append(self, item):
         self._debug()
@@ -28,7 +33,7 @@ class Stack(list):
         super().__setitem__(key, value)
 
 
-stack = Stack()
+stack = Stack(debug=False)
 stash = []
 
 
