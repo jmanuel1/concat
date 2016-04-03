@@ -11,26 +11,21 @@ class Stack(list):
 
     def _debug(self):
         # TODO: make this a cmd option
-        # TODO: call self._debug AFTER mutating stack, not before, so the last
-        # change is printed
         if self.debug:
             builtins.print('DEBUG:', repr(self))
 
     def append(self, item):
-        self._debug()
         super().append(item)
+        self._debug()
 
     def pop(self):
+        value = super().pop()
         self._debug()
-        return super().pop()
-
-    # def __getitem__(self, key):
-    #     self._debug()
-    #     return super().__getitem__(key)
+        return value
 
     def __setitem__(self, key, value):
-        self._debug()
         super().__setitem__(key, value)
+        self._debug()
 
 
 stack = Stack(debug=False)
