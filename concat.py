@@ -27,9 +27,11 @@ arg_parser.add_argument(
     type=file_type('r'),
     default=sys.stdin,
     help='file to run')
+arg_parser.add_argument('--debug', action='store_true',
+                        default=False, help='turn stack debugging on')
 args = arg_parser.parse_args()
 
-ast_ = parse.parse(args.file.read())
+ast_ = parse.parse(args.file.read(), args.debug)
 args.file.close()
 ast.fix_missing_locations(ast_)
 with open('debug.out', 'w') as f:

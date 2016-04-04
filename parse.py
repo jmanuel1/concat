@@ -6,6 +6,8 @@ from lex import tokens  # noqa
 import ply.yacc
 import ast
 
+
+debug_on = False
 # TODO: remove shift/reduce conflicts
 
 
@@ -40,8 +42,10 @@ def p_module_statment(p):  # noqa
 
 def p_module_encoding(p):  # noqa
     """module_encoding : ENCODING module"""
+    global debug_on
     p[0] = ast.Module(
         [ast.ImportFrom('libconcat', [ast.alias('*', None)], 0)] +
+        (ast.parse('stack.debug = True').body if debug_on else []) +
         p[2].body)
 
 
@@ -211,8 +215,10 @@ def _str_to_node(string):
     return ast.Str(string.strip('\'"'))
 
 
-def parse(string):
+def parse(string, debug):
     """Parse a string in the Concat language."""
+    global debug_on
+    debug_on = debug
     return ply.yacc.parse(string, lexer=lex.lexer, debug=0)
 
 

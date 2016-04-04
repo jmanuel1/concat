@@ -10,7 +10,6 @@ class Stack(list):
         self.debug = debug
 
     def _debug(self):
-        # TODO: make this a cmd option
         if self.debug:
             builtins.print('DEBUG:', repr(self))
 
