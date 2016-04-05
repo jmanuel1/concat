@@ -8,7 +8,8 @@ import ast
 
 
 debug_on = False
-# TODO: remove shift/reduce conflicts
+# note to self: remove shift/reduce conflicts if parsing is incorrect;
+# reduce/reduce is almost always bad
 
 
 def p_module(p):  # noqa
