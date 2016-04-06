@@ -9,8 +9,6 @@ tokens = tuple(token.tok_name.values()) + \
 
 
 class Lexer:
-    # TODO: shut off D211
-
     """Lexes the input given at initialization.
 
     Use token() to get the next token.
@@ -53,7 +51,6 @@ class Lexer:
 
 
 class Token:
-
     """Class to represent tokens.
 
     self.type - token type, as string.
