@@ -125,8 +125,14 @@ def p_semi_stmt_list(p):  # noqa
 
 
 def p_simple_stmt(p):  # noqa
-    """simple_stmt : expression"""
+    """simple_stmt : expression
+                   | import_stmt"""
     p[0] = p[1]
+
+
+def p_import_stmt(p):
+    """import_stmt : IMPORT NAME"""
+    p[0] = ast.parse('{} = import_and_convert("{}")'.format(p[2], p[2])).body
 
 
 def p_expression(p):  # noqa
@@ -138,8 +144,20 @@ def p_expression(p):  # noqa
                   | push_func
                   | push_plus
                   | empty_expression
+                  | attributeref
+                  | none
     """
     p[0] = p[1]
+
+
+def p_none(p):
+    """none : NONE expression"""
+    p[0] = ast.parse('stack.append(None)').body + p[2]
+
+
+def p_attributeref(p):
+    """attributeref : NAME DOT NAME expression"""
+    p[0] = ast.parse('{}.{}()'.format(p[1], p[3])).body + p[4]
 
 
 def p_implicit_number_push(p):  # noqa

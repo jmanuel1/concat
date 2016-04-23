@@ -1,7 +1,7 @@
 import builtins
-import sys
-import functools
 import operator
+import importlib
+import inspect
 
 
 class Stack(list):
@@ -27,8 +27,29 @@ class Stack(list):
         self._debug()
 
 
+class ConvertedModule:
+    def __init__(self, m):
+        self.m = m
+
+    def __getattr__(self, key):
+        attr = getattr(self.m, key)
+        nargs = len(inspect.signature(attr).parameters)
+
+        def method():
+            args = stack[len(stack) - nargs:]
+            stack[len(stack) - nargs:] = [attr(*args)]
+        return method
+
 stack = Stack(debug=False)
 stash = []
+
+
+def bytes():
+    errors, encoding, string = [stack.pop() for _ in range(3)]
+    if errors is None:
+        stack.append(builtins.bytes(string, encoding))
+    else:
+        stack.append(builtins.bytes(string, encoding, errors))
 
 
 def unlist():
@@ -53,7 +74,7 @@ def str():
 # The required copyright notice:
 # Copyright © 2001-2016 Python Software Foundation; All Rights Reserved
 # The required license agreement: PSF_AGREEMENT.md
-def reduce(): # iterable, initializer, function
+def reduce():  # iterable, initializer, function
     func, initializer, it = stack.pop(), stack.pop(), iter(stack.pop())
 
     if initializer is None:
@@ -69,7 +90,7 @@ def add():
     stack[-2:] = [operator.add(stack[-2], stack[-1])]
 
 
-def map(): # iter func
+def map():  # iter func
     result = []
     for item in stack[-2]:
         stack.append(item)
@@ -87,8 +108,13 @@ def pop():
     stack.pop()
 
 
-def over(): # a b
+def over():  # a b
     stack.append(stack[-2])
+
+
+def import_and_convert(module):
+    m = importlib.import_module(module)
+    return ConvertedModule(m)
 
 
 def _r():

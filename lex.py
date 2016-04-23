@@ -5,7 +5,7 @@ import io
 import token
 
 tokens = tuple(token.tok_name.values()) + \
-    ('DOLLARSIGN', 'DEF', 'BIN_BOOL_FUNC', 'UNARY_BOOL_FUNC')
+    ('DOLLARSIGN', 'DEF', 'BIN_BOOL_FUNC', 'UNARY_BOOL_FUNC', 'IMPORT', 'NONE')
 
 
 class Lexer:
@@ -41,8 +41,8 @@ class Lexer:
                 return self.token()
             elif tok.value == '$':
                 tok.type = 'DOLLARSIGN'
-        elif tok.value == 'def':
-            tok.type = 'DEF'
+        elif tok.value in {'def', 'import', 'None'}:
+            tok.type = tok.value.upper()
         elif tok.value in {'and', 'or'}:
             tok.type = 'BIN_BOOL_FUNC'
         elif tok.value == 'not':
