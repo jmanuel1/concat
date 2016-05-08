@@ -11,4 +11,6 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 The file `examples/four_bit_adder.cat` is based on the Forth answer to [this programming task on Rosetta Code](https://rosettacode.org/wiki/Four_bit_adder), contributed by user Hansoft. Therefore, it is under the [GNU Free Documentation License 1.2](http://www.gnu.org/licenses/fdl-1.2.html) and **not** the MIT license above.
 
+The file `examples/sub_cipher.cat` is based on the Python answer to [this programming task on Rosetta Code](https://rosettacode.org/wiki/Substitution_Cipher), contributed by user Zorro1024. Therefore, it is under the [GNU Free Documentation License 1.2](http://www.gnu.org/licenses/fdl-1.2.html) and **not** the MIT license above.
+
 All files are under the MIT license unless otherwise specified.

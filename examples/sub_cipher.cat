@@ -1,5 +1,4 @@
 # based on the python answer in rosetta code
-# TODO: licensing
 
 from string import printable
 import random
