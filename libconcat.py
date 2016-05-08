@@ -2,7 +2,7 @@ import builtins
 import operator
 import importlib
 import inspect
-# import traceback
+import functools
 
 
 class Stack(list):
@@ -122,22 +122,15 @@ def str():
     stack.append(builtins.str(stack.pop()))
 
 
-# The following function is taken from Python's documentation
-# (see functools.reduce), modified to use the stack.
-# The required copyright notice:
-# Copyright © 2001-2016 Python Software Foundation; All Rights Reserved
-# The required license agreement: PSF_AGREEMENT.md
-# TODO: use python's reduce using technique for sorted implementation
 def reduce():  # iterable, initializer, function
-    func, initializer, it = stack.pop(), stack.pop(), iter(stack.pop())
+    func, initializer, it = stack.pop(), stack.pop(), stack.pop()
 
-    if initializer is None:
-        stack.append(next(it))
-    else:
-        stack.append(initializer)
-    for element in it:
-        stack.append(element)
+    def reduce_func(a, b):
+        global stack
+        stack += [a, b]
         func()
+        return stack.pop()
+    stack.append(functools.reduce(reduce_func, it, initializer))
 
 
 def add():
