@@ -18,7 +18,7 @@ def decode:  # plaintext key
 dup2 _r _r swap encode  # encoded # original EXAMPLE_KEY
 dup r_ dup _r decode  # encoded decoded # original EXAMPLE_KEY
 r_ r_  # encoded decoded EXAMPLE_KEY original
-swap 4 roll 4 roll
+swap 3 roll 3 roll
 4 tolist """The original is: {}
 Encoding it with the key: {}
 Gives: {}

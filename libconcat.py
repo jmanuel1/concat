@@ -168,7 +168,8 @@ def nip2():
 
 def roll():
     n = stack.pop()
-    stack[-(n):] = stack[-n+1:] + stack[-(n):-n+1]
+    # NOTE: this is meant to roll n+1 elements
+    stack[-(n+1):] = stack[-n:] + stack[-(n+1):-n]
 
 
 def pop():
