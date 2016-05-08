@@ -144,43 +144,47 @@ def p_from_import_stmt(p):  # noqa
 
 
 def p_expression(p):  # noqa
-    # TODO: factor out the tailing expressions
-    """expression : implicit_string_push
-                  | bin_bool_func
-                  | unary_bool_func
-                  | func_compose
-                  | implicit_number_push
-                  | push_primary
-                  | push_plus
-                  | empty_expression
-                  | attributeref
-                  | subscription
-                  | none
+    """expression : word expression
+                  | word"""
+    p[0] = p[1] + p[2] if len(p) == 3 else p[1]
+
+
+def p_word(p):  # noqa
+    """word : implicit_string_push
+            | bin_bool_func
+            | unary_bool_func
+            | func_compose
+            | implicit_number_push
+            | push_primary
+            | push_plus
+            | attributeref
+            | subscription
+            | none
     """
     p[0] = p[1]
 
 
 def p_none(p):  # noqa
-    """none : NONE expression"""
-    p[0] = ast.parse('stack.append(None)').body + p[2]
+    """none : NONE"""
+    p[0] = ast.parse('stack.append(None)').body
 
 
 def p_attributeref(p):  # noqa
-    """attributeref : DOT NAME expression"""
+    """attributeref : DOT NAME"""
     p[0] = ast.parse(
-        'ConvertedObject(stack.pop()).{}()'.format(p[2])).body + p[3]
+        'ConvertedObject(stack.pop()).{}()'.format(p[2])).body
 
 
 def p_implicit_number_push(p):  # noqa
-    """implicit_number_push : NUMBER expression"""
-    p[0] = [ast.Expr(_push(ast.Num(int(p[1]))))] + p[2]
+    """implicit_number_push : NUMBER"""
+    p[0] = [ast.Expr(_push(ast.Num(int(p[1]))))]
 
 
 def p_push_primary(p):  # noqa
-    """push_primary : DOLLARSIGN primary expression"""
+    """push_primary : DOLLARSIGN primary"""
     if not isinstance(p[2], ast.Name):
         p[2] = ast.Lambda(_empty_arg_list, _combine_exprs(p[2]))
-    p[0] = [ast.Expr(_push(p[2]))] + p[3]
+    p[0] = [ast.Expr(_push(p[2]))]
 
 
 def p_primary(p):  # noqa
@@ -191,7 +195,7 @@ def p_primary(p):  # noqa
 
 
 def p_subscription(p):  # noqa
-    """subscription : LSQB expression RSQB expression"""
+    """subscription : LSQB expression RSQB"""
     # change expression to pop index to python subscription
     expr = _combine_exprs(p[2])
     expr.elts.append(_parse_expr('stack.pop()'))
@@ -201,7 +205,7 @@ def p_subscription(p):  # noqa
             _parse_expr('stack.append'),
             [ast.Subscript(
                 _parse_expr('stack.pop()'),
-                ast.Index(index), ast.Load())], []))] + p[4]
+                ast.Index(index), ast.Load())], []))]
 
 
 def p_atom(p):  # noqa
@@ -225,34 +229,29 @@ def p_parenth_form(p):  # noqa
 
 
 def p_push_plus(p):  # noqa
-    """push_plus : DOLLARSIGN PLUS expression"""
-    p[0] = ast.parse('stack.append(add)').body + p[3]
+    """push_plus : DOLLARSIGN PLUS"""
+    p[0] = ast.parse('stack.append(add)').body
 
 
 def p_implicit_string_push(p):  # noqa
-    """implicit_string_push : STRING expression"""
-    p[0] = [ast.Expr(_push(_str_to_node(p[1])))] + p[2]
+    """implicit_string_push : STRING"""
+    p[0] = [ast.Expr(_push(_str_to_node(p[1])))]
 
 
 def p_bin_bool_func(p):  # noqa
-    """bin_bool_func : BIN_BOOL_FUNC expression"""
+    """bin_bool_func : BIN_BOOL_FUNC"""
     p[0] = ast.parse(
-        'stack[-2:] = [stack[-2] {} stack[-1]]'.format(p[1])).body + p[2]
+        'stack[-2:] = [stack[-2] {} stack[-1]]'.format(p[1])).body
 
 
 def p_unary_bool_func(p):  # noqa
-    """unary_bool_func : UNARY_BOOL_FUNC expression"""
-    p[0] = ast.parse('stack.append(not stack.pop())').body + p[2]
+    """unary_bool_func : UNARY_BOOL_FUNC"""
+    p[0] = ast.parse('stack.append(not stack.pop())').body
 
 
 def p_func_compose(p):  # noqa
-    """func_compose : NAME expression"""
-    p[0] = [ast.Expr(ast.Call(ast.Name(p[1], ast.Load()), [], []))] + p[2]
-
-
-def p_empty_expression(p):  # noqa
-    """empty_expression : empty"""
-    p[0] = []
+    """func_compose : NAME"""
+    p[0] = [ast.Expr(ast.Call(ast.Name(p[1], ast.Load()), [], []))]
 
 
 def _libconcat_ref(name):
