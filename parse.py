@@ -8,6 +8,13 @@ import ast
 
 
 debug_on = False
+_empty_arg_list = ast.arguments(
+    args=[],
+    vararg=None,
+    kwonlyargs=[],
+    kwarg=None,
+    defaults=[],
+    kw_defaults=[])
 # note to self: remove shift/reduce conflicts if parsing is incorrect;
 # reduce/reduce is almost always bad
 
@@ -64,13 +71,7 @@ def p_compound_stmt(p):  # noqa
 
 def p_funcdef(p):  # noqa
     """funcdef : DEF funcname COLON suite"""
-    p[0] = ast.FunctionDef(p[2], ast.arguments(
-        args=[],
-        vararg=None,
-        kwonlyargs=[],
-        kwarg=None,
-        defaults=[],
-        kw_defaults=[]), p[4], [], None)
+    p[0] = ast.FunctionDef(p[2], _empty_arg_list, p[4], [], None)
 
 
 def p_funcname(p):  # noqa
@@ -126,38 +127,48 @@ def p_semi_stmt_list(p):  # noqa
 
 def p_simple_stmt(p):  # noqa
     """simple_stmt : expression
-                   | import_stmt"""
+                   | import_stmt
+                   | from_import_stmt"""
     p[0] = p[1]
 
 
-def p_import_stmt(p):
+def p_import_stmt(p):  # noqa
     """import_stmt : IMPORT NAME"""
-    p[0] = ast.parse('{} = import_and_convert("{}")'.format(p[2], p[2])).body
+    p[0] = _import_module_code(p[2])
+
+
+def p_from_import_stmt(p):  # noqa
+    """from_import_stmt : FROM NAME IMPORT NAME"""
+    p[0] = _import_module_code(
+        p[2]) + ast.parse('{0} = {1}.{0}'.format(p[4], p[2])).body
 
 
 def p_expression(p):  # noqa
+    # TODO: factor out the tailing expressions
     """expression : implicit_string_push
                   | bin_bool_func
                   | unary_bool_func
                   | func_compose
                   | implicit_number_push
-                  | push_func
+                  | push_primary
                   | push_plus
                   | empty_expression
                   | attributeref
+                  | subscription
                   | none
     """
     p[0] = p[1]
 
 
-def p_none(p):
+def p_none(p):  # noqa
     """none : NONE expression"""
     p[0] = ast.parse('stack.append(None)').body + p[2]
 
 
-def p_attributeref(p):
-    """attributeref : NAME DOT NAME expression"""
-    p[0] = ast.parse('{}.{}()'.format(p[1], p[3])).body + p[4]
+def p_attributeref(p):  # noqa
+    """attributeref : DOT NAME expression"""
+    p[0] = ast.parse(
+        'ConvertedObject(stack.pop()).{}()'.format(p[2])).body + p[3]
 
 
 def p_implicit_number_push(p):  # noqa
@@ -165,9 +176,52 @@ def p_implicit_number_push(p):  # noqa
     p[0] = [ast.Expr(_push(ast.Num(int(p[1]))))] + p[2]
 
 
-def p_push_func(p):  # noqa
-    """push_func : DOLLARSIGN NAME expression"""
-    p[0] = [ast.Expr(_push(ast.Name(p[2], ast.Load())))] + p[3]
+def p_push_primary(p):  # noqa
+    """push_primary : DOLLARSIGN primary expression"""
+    if not isinstance(p[2], ast.Name):
+        p[2] = ast.Lambda(_empty_arg_list, _combine_exprs(p[2]))
+    p[0] = [ast.Expr(_push(p[2]))] + p[3]
+
+
+def p_primary(p):  # noqa
+    """primary : atom
+               | subscription
+    """
+    p[0] = p[1]
+
+
+def p_subscription(p):  # noqa
+    """subscription : LSQB expression RSQB expression"""
+    # change expression to pop index to python subscription
+    expr = _combine_exprs(p[2])
+    expr.elts.append(_parse_expr('stack.pop()'))
+    index = ast.Subscript(expr, ast.Index(_parse_expr('-1')), ast.Load())
+    p[0] = [ast.Expr(
+        ast.Call(
+            _parse_expr('stack.append'),
+            [ast.Subscript(
+                _parse_expr('stack.pop()'),
+                ast.Index(index), ast.Load())], []))] + p[4]
+
+
+def p_atom(p):  # noqa
+    """atom : NAME
+            | enclosure
+    """
+    if isinstance(p[1], str):
+        p[0] = ast.Name(p[1], ast.Load())
+    else:
+        p[0] = p[1]
+
+
+def p_enclosure(p):  # noqa
+    """enclosure : parenth_form"""
+    p[0] = p[1]
+
+
+def p_parenth_form(p):  # noqa
+    """parenth_form : LPAR expression RPAR"""
+    p[0] = p[2]
 
 
 def p_push_plus(p):  # noqa
@@ -205,6 +259,11 @@ def _libconcat_ref(name):
     return ast.Name(name, ast.Load())
 
 
+def _combine_exprs(exprs):
+    # put into tuple
+    return ast.Tuple(list(map(lambda e: e.value, exprs)), ast.Load())
+
+
 def _libconcat_call(name):
     return ast.Call(_libconcat_ref(name), [], [])
 
@@ -214,6 +273,10 @@ def _push(expr):
         ast.Attribute(_libconcat_ref('stack'), 'append', ast.Load()),
         [expr],
         [])
+
+
+def _parse_expr(expr):
+    return ast.parse(expr).body[0].value
 
 
 def p_empty(p):  # noqa
@@ -231,7 +294,11 @@ def _identifier_to_name(id):
 
 
 def _str_to_node(string):
-    return ast.Str(string.strip('\'"'))
+    return _parse_expr(string)
+
+
+def _import_module_code(name):
+    return ast.parse('{0} = import_and_convert("{0}")'.format(name)).body
 
 
 def parse(string, debug):

@@ -34,8 +34,9 @@ args = arg_parser.parse_args()
 ast_ = parse.parse(args.file.read(), args.debug)
 args.file.close()
 ast.fix_missing_locations(ast_)
-with open('debug.out', 'w') as f:
+with open('debug.py', 'w') as f:
     f.write(astunparse.unparse(ast_))
+with open('ast.out', 'w') as f:
     f.write('\n------------ AST DUMP ------------\n')
     f.write(astunparse.dump(ast_))
 prog = compile(ast_, filename, 'exec')

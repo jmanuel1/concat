@@ -2,19 +2,24 @@ import builtins
 import operator
 import importlib
 import inspect
+# import traceback
 
 
 class Stack(list):
 
-    def __init__(self, debug=False):
+    def __init__(self, name, debug=False):
         self.debug = debug
+        self._name = name
 
     def _debug(self):
         if self.debug:
-            builtins.print('DEBUG:', repr(self))
+            builtins.print('DEBUG', self._name, ':', repr(self))
 
     def append(self, item):
         super().append(item)
+        # if item is None:
+        #     builtins.print('ITEM PUSHED:', item)
+        #     builtins.print(''.join(traceback.format_stack()))
         self._debug()
 
     def pop(self):
@@ -33,15 +38,63 @@ class ConvertedModule:
 
     def __getattr__(self, key):
         attr = getattr(self.m, key)
-        nargs = len(inspect.signature(attr).parameters)
+        try:
+            nargs = len(inspect.signature(attr).parameters)
+        except TypeError:
+            # not a callable
+            return attr
+        except ValueError:
+            # no signature
+            module = self._get_std_module_override(self.m.__name__)
+
+            def method():
+                getattr(module, key)(stack)
+            return method
 
         def method():
             args = stack[len(stack) - nargs:]
             stack[len(stack) - nargs:] = [attr(*args)]
         return method
 
-stack = Stack(debug=False)
-stash = []
+    def _get_std_module_override(self, name):
+        return importlib.import_module('stdoverrides.{}_'.format(name))
+
+
+class ConvertedObject:
+    def __init__(self, obj):
+        self.obj = obj
+
+    def __getattr__(self, key):
+        if isinstance(self.obj, ConvertedModule):
+            return getattr(self.obj, key)
+
+        attr = getattr(self.obj, key)
+        try:
+            nargs = len(inspect.signature(attr).parameters)
+        except TypeError:
+            # not a callable
+            return attr
+        except ValueError:
+            # no signature
+            # builtins.print('OVERRIDE')
+            typ = self._get_builtin_type_override(type(self.obj).__name__)
+
+            def method():
+                getattr(typ(self.obj), key)(stack)
+            # builtins.print('END OVERRIDE')
+            return method
+
+        def method():
+            args = stack[len(stack) - nargs:]
+            stack[len(stack) - nargs:] = [attr(*args)]
+        return method
+
+    def _get_builtin_type_override(self, name):
+        import stdoverrides.builtintypes as bto
+        return getattr(bto, name)
+
+stack = Stack('stack', debug=False)
+stash = Stack('stash', debug=False)
 
 
 def bytes():
@@ -74,6 +127,7 @@ def str():
 # The required copyright notice:
 # Copyright © 2001-2016 Python Software Foundation; All Rights Reserved
 # The required license agreement: PSF_AGREEMENT.md
+# TODO: use python's reduce using technique for sorted implementation
 def reduce():  # iterable, initializer, function
     func, initializer, it = stack.pop(), stack.pop(), iter(stack.pop())
 
@@ -92,16 +146,29 @@ def add():
 
 def map():  # iter func
     result = []
-    for item in stack[-2]:
+    func, it = stack.pop(), stack.pop()
+    for item in it:
         stack.append(item)
-        stack[-2]()
+        func()
         result.append(stack.pop())
-    stack[-2:] = [result]
+    stack.append(result)
+
+
+def dup():
+    stack.append(stack[-1])
+
+
+def nip():
+    stack[-2:-1] = []
+
+
+def nip2():
+    stack[-3:-1] = []
 
 
 def roll():
     n = stack.pop()
-    stack[-(n+1):] = stack[-n:] + stack[-(n+1):-n]
+    stack[-(n):] = stack[-n+1:] + stack[-(n):-n+1]
 
 
 def pop():
@@ -136,5 +203,19 @@ def input():
 def swap():
     stack[-2:] = [stack[-1], stack[-2]]
 
+
+def sorted():
+    reverse, key, iterable = stack.pop(), stack.pop(), stack.pop()
+
+    def new_key(el):
+        stack.append(el)
+        key()
+        return stack.pop()
+    stack.append(builtins.sorted(iterable, key=new_key, reverse=reverse))
+
+
+def dup2():
+    global stack
+    stack += stack[-2:]
 
 __all__ = dir()
