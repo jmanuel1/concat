@@ -46,6 +46,7 @@ def p_module_statment(p):  # noqa
         p[0] = ast.Module(body=[p[1]] + p[2].body)
     elif isinstance(p[1], list):
         p[0] = ast.Module(body=p[1] + p[2].body)
+    _set_line_info(p)
 
 
 def p_module_encoding(p):  # noqa
@@ -55,6 +56,7 @@ def p_module_encoding(p):  # noqa
         [ast.ImportFrom('libconcat', [ast.alias('*', None)], 0)] +
         (ast.parse('stack.debug = True').body if debug_on else []) +
         p[2].body)
+    _set_line_info(p)
 
 
 def p_statement(p):  # noqa
@@ -72,6 +74,7 @@ def p_compound_stmt(p):  # noqa
 def p_funcdef(p):  # noqa
     """funcdef : DEF funcname COLON suite"""
     p[0] = ast.FunctionDef(p[2], _empty_arg_list, p[4], [], None)
+    _set_line_info(p)
 
 
 def p_funcname(p):  # noqa
@@ -135,12 +138,14 @@ def p_simple_stmt(p):  # noqa
 def p_import_stmt(p):  # noqa
     """import_stmt : IMPORT NAME"""
     p[0] = _import_module_code(p[2])
+    _set_line_info(p)
 
 
 def p_from_import_stmt(p):  # noqa
     """from_import_stmt : FROM NAME IMPORT NAME"""
     p[0] = _import_module_code(
         p[2]) + ast.parse('{0} = {1}.{0}'.format(p[4], p[2])).body
+    _set_line_info(p)
 
 
 def p_expression(p):  # noqa
@@ -167,17 +172,20 @@ def p_word(p):  # noqa
 def p_none(p):  # noqa
     """none : NONE"""
     p[0] = ast.parse('stack.append(None)').body
+    _set_line_info(p)
 
 
 def p_attributeref(p):  # noqa
     """attributeref : DOT NAME"""
     p[0] = ast.parse(
         'ConvertedObject(stack.pop()).{}()'.format(p[2])).body
+    _set_line_info(p)
 
 
 def p_implicit_number_push(p):  # noqa
     """implicit_number_push : NUMBER"""
     p[0] = [ast.Expr(_push(ast.Num(int(p[1]))))]
+    _set_line_info(p)
 
 
 def p_push_primary(p):  # noqa
@@ -185,6 +193,7 @@ def p_push_primary(p):  # noqa
     if not isinstance(p[2], ast.Name):
         p[2] = ast.Lambda(_empty_arg_list, _combine_exprs(p[2]))
     p[0] = [ast.Expr(_push(p[2]))]
+    _set_line_info(p)
 
 
 def p_primary(p):  # noqa
@@ -206,6 +215,7 @@ def p_subscription(p):  # noqa
             [ast.Subscript(
                 _parse_expr('stack.pop()'),
                 ast.Index(index), ast.Load())], []))]
+    _set_line_info(p)
 
 
 def p_atom(p):  # noqa
@@ -214,6 +224,7 @@ def p_atom(p):  # noqa
     """
     if isinstance(p[1], str):
         p[0] = ast.Name(p[1], ast.Load())
+        _set_line_info(p)
     else:
         p[0] = p[1]
 
@@ -231,27 +242,36 @@ def p_parenth_form(p):  # noqa
 def p_push_plus(p):  # noqa
     """push_plus : DOLLARSIGN PLUS"""
     p[0] = ast.parse('stack.append(add)').body
+    _set_line_info(p)
 
 
 def p_implicit_string_push(p):  # noqa
     """implicit_string_push : STRING"""
     p[0] = [ast.Expr(_push(_str_to_node(p[1])))]
+    _set_line_info(p)
 
 
 def p_bin_bool_func(p):  # noqa
     """bin_bool_func : BIN_BOOL_FUNC"""
     p[0] = ast.parse(
         'stack[-2:] = [stack[-2] {} stack[-1]]'.format(p[1])).body
+    _set_line_info(p)
 
 
 def p_unary_bool_func(p):  # noqa
     """unary_bool_func : UNARY_BOOL_FUNC"""
     p[0] = ast.parse('stack.append(not stack.pop())').body
+    _set_line_info(p)
 
 
 def p_func_compose(p):  # noqa
     """func_compose : NAME"""
     p[0] = [ast.Expr(ast.Call(ast.Name(p[1], ast.Load()), [], []))]
+    _set_line_info(p)
+
+    # import astunparse
+    # print(astunparse.dump(p[0]))
+    # print('line', p[0][0].lineno, 'col', p[0][0].col_offset)
 
 
 def _libconcat_ref(name):
@@ -298,6 +318,13 @@ def _str_to_node(string):
 
 def _import_module_code(name):
     return ast.parse('{0} = import_and_convert("{0}")'.format(name)).body
+
+
+def _set_line_info(p):
+    node = p[0][0] if isinstance(p[0], list) else p[0]
+    # print(p.lineno(1), p.lexpos(1))
+    node.lineno = p.lineno(1)
+    # print(node)
 
 
 def parse(string, debug):

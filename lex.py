@@ -5,7 +5,8 @@ import io
 import token
 
 tokens = tuple(token.tok_name.values()) + \
-    ('DOLLARSIGN', 'DEF', 'BIN_BOOL_FUNC', 'UNARY_BOOL_FUNC', 'IMPORT', 'NONE', 'FROM')
+    ('DOLLARSIGN', 'DEF', 'BIN_BOOL_FUNC',
+     'UNARY_BOOL_FUNC', 'IMPORT', 'NONE', 'FROM')
 
 
 class Lexer:
@@ -18,6 +19,8 @@ class Lexer:
         """Initialize the Lexer object with the data to tokenize."""
         self.data = data
         self.tokens = None
+        self.lineno = 1
+        self.lexpos = 0
 
     def token(self):
         """Return the next token as a Token object."""
@@ -35,9 +38,11 @@ class Lexer:
         _, tok.value, tok.start, tok.end, _ = token_
         tok.type = token.tok_name[token_.exact_type]
         if tok.type in {'NL', 'COMMENT'}:
+            self._update_position(tok)
             return self.token()
         elif tok.type == 'ERRORTOKEN':
             if tok.value == ' ':
+                self._update_position(tok)
                 return self.token()
             elif tok.value == '$':
                 tok.type = 'DOLLARSIGN'
@@ -47,7 +52,15 @@ class Lexer:
             tok.type = 'BIN_BOOL_FUNC'
         elif tok.value == 'not':
             tok.type = 'UNARY_BOOL_FUNC'
+
+        self._update_position(tok)
         return tok
+
+    def _update_position(self, tok):
+        self.lexpos += len(tok.value)
+        if tok.type in {'NEWLINE', 'NL'}:
+            self.lineno += 1
+        tok.lineno, tok.lexpos = self.lineno, self.lexpos
 
 
 class Token:
