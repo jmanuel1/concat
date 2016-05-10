@@ -99,3 +99,7 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+# files made by ply
+parser.out
+parsetab.py
