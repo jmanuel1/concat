@@ -1,8 +1,8 @@
 """Concat parser."""
 
 
-import lex
-from lex import tokens  # noqa
+import concat.lex as lex
+from concat.lex import tokens  # noqa
 import ply.yacc
 import ast
 
@@ -53,7 +53,7 @@ def p_module_encoding(p):  # noqa
     """module_encoding : ENCODING module"""
     global debug_on
     p[0] = ast.Module(
-        [ast.ImportFrom('libconcat', [ast.alias('*', None)], 0)] +
+        [ast.ImportFrom('concat.libconcat', [ast.alias('*', None)], 0)] +
         (ast.parse('stack.debug = True').body if debug_on else []) +
         p[2].body)
     _set_line_info(p)

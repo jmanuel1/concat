@@ -1,0 +1,34 @@
+Concat
+======
+
+An experimental concatenative Python-based programming language.
+
+Examples are in the examples directory. To see the spec, go to
+[http://jmanuel1.github.io/concat-spec/](http://jmanuel1.github.io/concat-spec/).
+
+
+Building and uploading (on Windows)
+---------------------
+
+Change the version number in `setup.py`. **Upload will fail if you try to push
+an existing version.**
+
+Delete the `dist` directory, if it exists.
+
+    rmdir dist /S
+
+Build source and pure Python-3 distributions.
+
+    py -3 setup.py sdist
+    py -3 setup.py bdist_wheel
+
+Upload.
+
+    twine upload dist/* [-r pypitest]
+
+
+Related work
+------------
+
+For a similar idea that is more mature, check out
+[Nustack](https://github.com/BookOwl/nustack).

@@ -1,7 +1,7 @@
 """The Concat Implementation."""
 
 
-import parse
+import concat.parse as parse
 import argparse
 import sys
 import ast
