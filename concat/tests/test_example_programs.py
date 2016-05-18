@@ -10,7 +10,7 @@ import os
 import sys
 import os.path
 
-env = TestFileEnvironment('./test-output')  # TODO: git-ignore this dir
+env = TestFileEnvironment('./test-output')
 example_dir = './concat/examples'
 examples = [os.path.join(example_dir, x)
             for x in os.listdir(example_dir) if x.endswith('.cat')]
