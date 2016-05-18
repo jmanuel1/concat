@@ -19,5 +19,7 @@ setup(
     ],
     keywords='concatenative',
     packages=find_packages(),
-    install_requires=['ply>=3.7,<4', 'astunparse>=1.3.0,<2']
+    install_requires=['ply>=3.7,<4', 'astunparse>=1.3.0,<2'],
+    test_suite='nose.collector',
+    tests_require=['nose', 'scripttest']
 )

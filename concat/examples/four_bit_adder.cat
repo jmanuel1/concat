@@ -1,3 +1,5 @@
+# IN: '0100\n1110'
+# OUT: '10010'
 """4-bit half adder (rosetta code)."""pop
 
 # python has not
