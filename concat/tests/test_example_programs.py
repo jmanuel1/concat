@@ -1,8 +1,7 @@
 """
 Example tests: make sure all examples work.
 
-This must be run from project root!
-TODO: automatically find project directory
+NOTE: This must be run from project root!
 """
 
 from scripttest import TestFileEnvironment
@@ -11,7 +10,7 @@ import os
 import sys
 import os.path
 
-env = TestFileEnvironment('./test-output')
+env = TestFileEnvironment('./test-output')  # TODO: git-ignore this dir
 example_dir = './concat/examples'
 examples = [os.path.join(example_dir, x)
             for x in os.listdir(example_dir) if x.endswith('.cat')]
