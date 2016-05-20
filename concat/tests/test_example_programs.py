@@ -10,7 +10,7 @@ import os
 import sys
 import os.path
 
-env = TestFileEnvironment('./test-output')
+env = TestFileEnvironment('./test-output', cwd='.')
 example_dir = './concat/examples'
 examples = [os.path.join(example_dir, x)
             for x in os.listdir(example_dir) if x.endswith('.cat')]
@@ -39,7 +39,9 @@ class TestExamplePrograms(unittest.TestCase):
                     raise Exception(
                         'No output specified for file {}'.format(name))
                 out = eval(out[len(out_start):].strip())
-                actual = env.run(sys.executable, '../concat/__main__.py',
-                                 os.path.join('..', name), stdin=inp.encode(),
+                actual = env.run(sys.executable, '-m', 'coverage', 'run',
+                                 '-m',
+                                 'concat',
+                                 name, stdin=inp.encode(),
                                  expect_stderr=True)
                 self.assertEqual(actual.stdout, out)

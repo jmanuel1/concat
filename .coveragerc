@@ -1,0 +1,4 @@
+[run]
+parallel = True
+# TODO: try append option instead?
+# TODO: ignore tests
