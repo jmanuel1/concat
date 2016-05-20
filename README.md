@@ -37,6 +37,9 @@ Combine the coverage data:
 
     coverage combine
 
+**Nota Bene**: If you have `concat` installed globally, make sure to create and
+enter a `virtualenv` before testing, so you don't end up running the installed
+version.
 
 Related work
 ------------
