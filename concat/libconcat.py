@@ -57,7 +57,7 @@ class ConvertedModule:
         return method
 
     def _get_std_module_override(self, name):
-        return importlib.import_module('stdoverrides.{}_'.format(name))
+        return importlib.import_module('concat.stdoverrides.{}_'.format(name))
 
 
 class ConvertedObject:
@@ -90,7 +90,7 @@ class ConvertedObject:
         return method
 
     def _get_builtin_type_override(self, name):
-        import stdoverrides.builtintypes as bto
+        import concat.stdoverrides.builtintypes as bto
         return getattr(bto, name)
 
 stack = Stack('stack', debug=False)
