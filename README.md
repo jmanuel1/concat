@@ -26,6 +26,17 @@ Upload.
 
     twine upload dist/* [-r pypitest]
 
+Testing
+-------
+
+Run the tests under `coverage.py`:
+
+    coverage run setup.py test
+
+Combine the coverage data:
+
+    coverage combine
+
 
 Related work
 ------------
