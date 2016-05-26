@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='concat',
-    version='0.1.1',
+    version='0.1.0.dev1',
     description='An experimental concatenative Python-based programming language',  # noqa
     long_description=open('README.md').read(),
     url='https://github.com/jmanuel1/concat',

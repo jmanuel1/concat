@@ -31,6 +31,7 @@ Testing
 
 Run the tests under `coverage.py`:
 
+    pip install coverage
     coverage run setup.py test
 
 Combine the coverage data:
