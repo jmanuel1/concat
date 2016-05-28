@@ -1,4 +1,7 @@
 [run]
 parallel = True
-# TODO: try append option instead?
-# TODO: ignore tests
+# ignore tests, setup.py, parsetab
+omit =
+  concat/tests/*
+  setup.py
+  concat/parsetab.py
