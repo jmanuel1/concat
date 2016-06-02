@@ -5,6 +5,7 @@ import concat.lex as lex
 from concat.lex import tokens  # noqa
 import ply.yacc
 import ast
+import importlib
 
 
 debug_on = False
@@ -145,6 +146,17 @@ def p_from_import_stmt(p):  # noqa
     """from_import_stmt : FROM NAME IMPORT NAME"""
     p[0] = _import_module_code(
         p[2]) + ast.parse('{0} = {1}.{0}'.format(p[4], p[2])).body
+    _set_line_info(p)
+
+
+def p_from_import_star(p):  # noqa
+    """from_import_stmt : FROM NAME IMPORT STAR"""
+    p[0] = _import_module_code(p[2])
+    module = importlib.import_module(p[2])
+    # Match Python behavior
+    public_names = getattr(module, '__all__', None) or filter(lambda n: not n[0] == '_', dir(module))
+    assignments = '\n'.join(map(lambda n: '{0} = {1}.{0}'.format(n, p[2]), public_names))
+    p[0] += ast.parse(assignments).body
     _set_line_info(p)
 
 

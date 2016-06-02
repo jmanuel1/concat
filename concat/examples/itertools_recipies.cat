@@ -1,0 +1,16 @@
+# TODO: get all examples to work
+# Python's itertools recipes
+from itertools import *  # mostly automatically turned into a concat interface
+import collections
+
+def take: swap islice list
+def tabulate: count map
+
+def consume:  # (iterator, n)
+    $(pop
+    0 collections.deque)
+    $(dup pick  # iterator n n iterator
+    3 roll islice
+    None next) dup None is if
+    pop # get rid of None
+# ...
