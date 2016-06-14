@@ -321,9 +321,10 @@ def _import_module_code(name):
 
 
 def _set_line_info(p):
-    node = p[0][0] if isinstance(p[0], list) else p[0]
+    nodes = p[0] if isinstance(p[0], list) else [p[0]]
     # print(p.lineno(1), p.lexpos(1))
-    node.lineno = p.lineno(1)
+    for node in nodes:
+        node.lineno = p.lineno(1)
     # print(node)
 
 
