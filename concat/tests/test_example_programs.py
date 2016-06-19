@@ -22,13 +22,20 @@ class TestExamplePrograms(unittest.TestCase):
     def test_examples(self):
         """Test each example.
 
-        Each file must start with '# IN: ' followed by the standard input as a
-        string literal, a newline, and '# OUT: ' followed by the expected
-        standard output.
+        Ignored files must begin with '# IGNORE'.
+
+        Tested files each must start with '# IN: ' followed by the standard
+        input as a string literal, a newline, and '# OUT: ' followed by the
+        expected standard output.
         """
         for name in examples:
             with open(name) as spec, self.subTest(example=name):
                 inp = spec.readline()
+
+                # Ignore the file?
+                if inp.startswith('# IGNORE'):
+                    continue
+
                 in_start, out_start = '# IN: ', '# OUT:'
                 if not inp.startswith(in_start):
                     raise Exception(

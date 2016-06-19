@@ -1,7 +1,8 @@
 [run]
 parallel = True
-# ignore tests, setup.py, parsetab
+# ignore tests, setup.py, parsetab, .eggs
 omit =
   concat/tests/*
   setup.py
   concat/parsetab.py
+  .eggs/*

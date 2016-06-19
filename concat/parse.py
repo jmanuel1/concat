@@ -339,16 +339,17 @@ def _set_line_info(p):
     # print(node)
 
 
-def parse(string, debug):
+def parse(string, debug=0):
     """Parse a string in the Concat language."""
     global debug_on
     debug_on = debug
-    return ply.yacc.parse(string, lexer=lex.lexer, debug=0)
+    return ply.yacc.parse(string, lexer=lex.lexer, debug=debug)
 
 
 ply.yacc.yacc()
 
 if __name__ == '__main__':
+    import astunparse
     while True:
-        tree = parse(input('Enter input >'))
-        print(ast.dump(tree))
+        tree = parse(input('Enter input >') + '\n')
+        print(astunparse.dump(tree))
