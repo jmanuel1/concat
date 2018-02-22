@@ -4,6 +4,8 @@ Python-Concat Interface
 Into Python from Concat
 -----------------------
 
+### Function interface
+
 Concat code may call a function that was written in Python.
 
 * If that function is decorated with `@ConcatFunction`, it will be treated as a
@@ -18,11 +20,20 @@ better for its simplicity. It could be simplified further by requiring Python
 functions to be called with some special function, but the current system
 avoids that.
 
+### Object interface
+
+Before entering Python code, non-callable objects are replaced with the result
+of the `pythonify` function. This function calls the `_pythonify_` method.
+Concat classes override the method as they see fit. In `ConcatObject`, the
+method returns `self`.
+
 Into Concat from Python
 -----------------------
 
-Python code may call a Concat function by passing a stack and stash (both lists) to it. The
-function will modify that stack. For example,
+### Function interface
+
+Python code may call a Concat function by passing a stack and stash (both
+lists) to it. The function will modify that stack. For example,
 
 ```python
 from libconcat import pop
@@ -31,3 +42,12 @@ stack = [1, 2, 5, 'Three, sir!']
 pop(stack, [])
 print(stack)  # [1, 2, 5]
 ```
+
+### Object interface
+
+Before entering Concat code, non-callable objects should be wrapped in the
+`concatify` function. The function looks up the target class in the
+`concatify.table` dictionary using the original class as a key. The result is
+`<target class>._concatify_(<original object>)`. In `ConcatObject`, the
+`_concatify_` method returns `self`. If there is no matching key in the
+dictionary, the object is wrapped by `ConcatifiedObject`.
