@@ -6,6 +6,7 @@ from concat.lex import tokens  # noqa
 import ply.yacc
 import ast
 import importlib
+import astunparse
 
 
 debug_on = False
@@ -54,7 +55,8 @@ def p_module_encoding(p):  # noqa
     """module_encoding : ENCODING module"""
     global debug_on
     p[0] = ast.Module(
-        [ast.ImportFrom('concat.libconcat', [ast.alias('*', None)], 0)] +
+        [ast.ImportFrom('concat.libconcat', [ast.alias('*', None)], 0),
+            ast.Import([ast.alias('concat.stdlib.builtins', None)])] +
         (ast.parse('stack.debug = True').body if debug_on else []) +
         p[2].body)
     _set_line_info(p)
@@ -74,7 +76,17 @@ def p_compound_stmt(p):  # noqa
 
 def p_funcdef(p):  # noqa
     """funcdef : DEF funcname COLON suite"""
-    p[0] = ast.FunctionDef(p[2], _empty_arg_list, p[4], [], None)
+    arg_list = ast.arguments(
+        args=[ast.arg(arg='stack', annotation=None),
+              ast.arg(arg='stash', annotation=None)],
+        vararg=None,
+        kwonlyargs=[],
+        kwarg=None,
+        defaults=[],
+        kw_defaults=[])
+    p[0] = ast.FunctionDef(p[2], arg_list, p[4],
+                           [ast.Name(id='ConcatFunction', ctx=ast.Load())],
+                           None)
     _set_line_info(p)
 
 
@@ -137,15 +149,24 @@ def p_simple_stmt(p):  # noqa
 
 
 def p_import_stmt(p):  # noqa
-    """import_stmt : IMPORT NAME"""
+    """import_stmt : IMPORT module_name"""
     p[0] = _import_module_code(p[2])
     _set_line_info(p)
+
+
+def p_module_name(p):  # noqa
+    """module_name : NAME
+                   | NAME DOT module_name"""
+    if len(p) == 2:
+        p[0] = p[1]
+        return
+    p[0] = p[1] + '.' + p[3]
 
 
 def p_from_import_stmt(p):  # noqa
     """from_import_stmt : FROM NAME IMPORT NAME"""
     p[0] = _import_module_code(
-        p[2]) + ast.parse('{0} = {1}.{0}'.format(p[4], p[2])).body
+        p[2]) + ast.parse('{0} = concatify({1}.{0})'.format(p[4], p[2])).body
     _set_line_info(p)
 
 
@@ -154,8 +175,11 @@ def p_from_import_star(p):  # noqa
     p[0] = _import_module_code(p[2])
     module = importlib.import_module(p[2])
     # Match Python behavior
-    public_names = getattr(module, '__all__', None) or filter(lambda n: not n[0] == '_', dir(module))
-    assignments = '\n'.join(map(lambda n: '{0} = {1}.{0}'.format(n, p[2]), public_names))
+    public_names = getattr(module, '__all__', None) or \
+        filter(lambda n: not n[0] == '_', dir(module))
+    assignments = '\n'.join(
+        map(lambda n: '{0} = concatify({1}.{0})'.format(n, p[2]), public_names)
+        )
     p[0] += ast.parse(assignments).body
     _set_line_info(p)
 
@@ -177,33 +201,60 @@ def p_word(p):  # noqa
             | attributeref
             | subscription
             | none
+            | implicit_dict_push
     """
     p[0] = p[1]
 
 
+def p_implicit_dict_push(p):  # noqa
+    """implicit_dict_push : LBRACE RBRACE"""
+    # for now, this only supports an empty dict
+    p[0] = ast.parse('stack.append(concatify({}))').body
+
+
 def p_none(p):  # noqa
     """none : NONE"""
-    p[0] = ast.parse('stack.append(None)').body
+    p[0] = ast.parse('stack.append(concatify(None))').body
     _set_line_info(p)
 
 
 def p_attributeref(p):  # noqa
     """attributeref : DOT NAME"""
     p[0] = ast.parse(
-        'ConvertedObject(stack.pop()).{}()'.format(p[2])).body
+        '_call(stack.pop().{}, stack, stash)'.format(p[2])).body
     _set_line_info(p)
 
 
 def p_implicit_number_push(p):  # noqa
     """implicit_number_push : NUMBER"""
-    p[0] = [ast.Expr(_push(ast.Num(int(p[1]))))]
+    p[0] = ast.parse('stack.append(concatify({}))'.format(int(p[1]))).body
     _set_line_info(p)
 
 
 def p_push_primary(p):  # noqa
     """push_primary : DOLLARSIGN primary"""
-    if not isinstance(p[2], ast.Name):
-        p[2] = ast.Lambda(_empty_arg_list, _combine_exprs(p[2]))
+    arg_list = ast.arguments(
+        args=[ast.arg(arg='stack', annotation=None),
+              ast.arg(arg='stash', annotation=None)],
+        vararg=None,
+        kwonlyargs=[],
+        kwarg=None,
+        defaults=[],
+        kw_defaults=[])
+    # print(p[2])
+    if isinstance(p[2], ast.Name):
+        pass
+    # TODO: not a very good check
+    elif 'stack.pop().' in astunparse.unparse(p[2][0]):
+        # we are pushing an attributeref
+        # get rid of the _call to leave the stack.pop().<attr> and concatify it
+        p[2] = ast.Call(func=ast.Name(id='concatify', ctx=ast.Load()),
+                        args=p[2][0].value.args[0:1], keywords=[])
+    else:
+        # print(p[2])
+        p[2] = ast.Call(func=ast.Name(id='ConcatFunction', ctx=ast.Load()),
+                        args=[ast.Lambda(arg_list, _combine_exprs(p[2]))],
+                        keywords=[])
     p[0] = [ast.Expr(_push(p[2]))]
     _set_line_info(p)
 
@@ -211,6 +262,7 @@ def p_push_primary(p):  # noqa
 def p_primary(p):  # noqa
     """primary : atom
                | subscription
+               | attributeref
     """
     p[0] = p[1]
 
@@ -259,7 +311,7 @@ def p_push_plus(p):  # noqa
 
 def p_implicit_string_push(p):  # noqa
     """implicit_string_push : STRING"""
-    p[0] = [ast.Expr(_push(_str_to_node(p[1])))]
+    p[0] = ast.parse('stack.append(concatify({}))'.format(p[1])).body
     _set_line_info(p)
 
 
@@ -278,12 +330,8 @@ def p_unary_bool_func(p):  # noqa
 
 def p_func_compose(p):  # noqa
     """func_compose : NAME"""
-    p[0] = [ast.Expr(ast.Call(ast.Name(p[1], ast.Load()), [], []))]
+    p[0] = ast.parse('_call({}, stack, stash)'.format(p[1])).body
     _set_line_info(p)
-
-    # import astunparse
-    # print(astunparse.dump(p[0]))
-    # print('line', p[0][0].lineno, 'col', p[0][0].col_offset)
 
 
 def _libconcat_ref(name):
@@ -329,7 +377,7 @@ def _str_to_node(string):
 
 
 def _import_module_code(name):
-    return ast.parse('{0} = import_and_convert("{0}")'.format(name)).body
+    return ast.parse('import {0}; {0} = concatify({0})'.format(name)).body
 
 
 def _set_line_info(p):
@@ -350,7 +398,7 @@ def parse(string, debug=0):
 ply.yacc.yacc()
 
 if __name__ == '__main__':
-    import astunparse
+
     while True:
         tree = parse(input('Enter input >') + '\n')
         print(astunparse.dump(tree))

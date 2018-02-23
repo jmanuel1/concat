@@ -4,9 +4,10 @@
 
 from string import printable
 import random
+import concat.stdlib.random
 
-334344 2 $random.seed  # set seed for reproducibility
-$printable $(pop $random.random) $False sorted ''.join  # EXAMPLE_KEY
+334344 2 2 tolist {} $random.seed pop  # set seed for reproducibility
+$printable $(pop $concat$.stdlib$.random.random) $False sorted ''.join  # EXAMPLE_KEY
 
 def encode:  # plaintext key
     swap $(over [$printable.index]) map ''.join nip

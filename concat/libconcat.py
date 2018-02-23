@@ -1,8 +1,7 @@
 import builtins
 import operator
-import importlib
-import inspect
 import functools
+import collections
 
 
 class Stack(list):
@@ -32,184 +31,195 @@ class Stack(list):
         self._debug()
 
 
-class ConvertedModule:
-    def __init__(self, m):
-        self.m = m
+class ConcatFunction(collections.Callable):
 
-    def __getattr__(self, key):
-        attr = getattr(self.m, key)
-        try:
-            nargs = len(inspect.signature(attr).parameters)
-        except TypeError:
-            # not a callable
-            return attr
-        except ValueError:
-            # no signature
-            module = self._get_std_module_override(self.m.__name__)
+    def __init__(self, func):
+        self.func = func
 
-            def method():
-                getattr(module, key)(stack)
-            return method
-
-        def method():
-            args = stack[len(stack) - nargs:]
-            stack[len(stack) - nargs:] = [attr(*args)]
-        return method
-
-    def _get_std_module_override(self, name):
-        return importlib.import_module('concat.stdoverrides.{}_'.format(name))
+    def __call__(self, stack, stash):
+        func = self.func
+        func(stack, stash)
 
 
-class ConvertedObject:
-    def __init__(self, obj):
-        self.obj = obj
+class ConcatObject:
 
-    def __getattr__(self, key):
-        if isinstance(self.obj, ConvertedModule):
-            return getattr(self.obj, key)
+    def __getattribute__(self, attr):
+        value = object.__getattribute__(self, attr)
+        is_concat_function = callable(value) and (attr in {'__init__'} or
+                                                  not (attr.startswith('_') and
+                                                       attr.endswith('_')))
+        if is_concat_function:
+            # if value is callable and not a Python or Concat magic method
+            # but __init__ is allowed
+            return ConcatFunction(lambda stack, stash: value(stack, stash))
+        return value
 
-        attr = getattr(self.obj, key)
-        try:
-            nargs = len(inspect.signature(attr).parameters)
-        except TypeError:
-            # not a callable
-            return attr
-        except ValueError:
-            # no signature
-            # builtins.print('OVERRIDE')
-            typ = self._get_builtin_type_override(type(self.obj).__name__)
+    def _pythonify_(self):
+        return self
 
-            def method():
-                getattr(typ(self.obj), key)(stack)
-            # builtins.print('END OVERRIDE')
-            return method
-
-        def method():
-            args = stack[len(stack) - nargs:]
-            stack[len(stack) - nargs:] = [attr(*args)]
-        return method
-
-    def _get_builtin_type_override(self, name):
-        import concat.stdoverrides.builtintypes as bto
-        return getattr(bto, name)
 
 stack = Stack('stack', debug=False)
 stash = Stack('stash', debug=False)
 
 
-def bytes():
+def _call(func, stack, stash):
+    if isinstance(func, ConcatFunction):
+        func(stack, stash)
+    else:
+        kwargs, args = stack.pop(), stack.pop()
+        # These objects are about to enter Python, pythonify them
+        args = (pythonify(arg) for arg in args)
+        kwargs = {pythonify(key): pythonify(value)
+                  for key, value in kwargs.items()}
+        # Concatify the result
+        stack.append(concatify(func(*args, **kwargs)))
+
+
+def pythonify(obj):
+    if isinstance(obj, ConcatObject):
+        return obj._pythonify_()
+    return obj
+
+
+def concatify(obj):
+    if type(obj) in concatify.table:
+        concat_class = concatify.table[type(obj)]
+        return concat_class._concatify_(obj)
+    return obj
+
+
+concatify.table = {}
+
+
+@ConcatFunction
+def bytes(stack, stash):
     errors, encoding, string = [stack.pop() for _ in range(3)]
     if errors is None:
-        stack.append(builtins.bytes(string, encoding))
+        stack.append(builtins.bytes(string, builtins.str(encoding)))
     else:
-        stack.append(builtins.bytes(string, encoding, errors))
+        stack.append(builtins.bytes(string, builtins.str(encoding), errors))
 
 
-def unlist():
+@ConcatFunction
+def unlist(stack, stash):
     stack[-1:] = stack[-1]
 
 
-def tolist():
+@ConcatFunction
+def tolist(stack, stash):
     n = stack.pop()
     stack[-n:] = [stack[-n:]]
 
 
-def print():
+@ConcatFunction
+def print(stack, stash):
     builtins.print(stack.pop(), end='')
 
 
-def str():
+@ConcatFunction
+def str(stack, stash):
     stack.append(builtins.str(stack.pop()))
 
 
-def reduce():  # iterable, initializer, function
+@ConcatFunction
+def reduce(stack, stash):  # iterable, initializer, function
     func, initializer, it = stack.pop(), stack.pop(), stack.pop()
 
     def reduce_func(a, b):
-        global stack
+        nonlocal stack
         stack += [a, b]
-        func()
+        func(stack, stash)
         return stack.pop()
     stack.append(functools.reduce(reduce_func, it, initializer))
 
 
-def add():
+@ConcatFunction
+def add(stack, stash):
     stack[-2:] = [operator.add(stack[-2], stack[-1])]
 
 
-def map():  # iter func
+@ConcatFunction
+def map(stack, stash):  # iter func
     result = []
     func, it = stack.pop(), stack.pop()
     for item in it:
         stack.append(item)
-        func()
+        func(stack, stash)
         result.append(stack.pop())
     stack.append(result)
 
 
-def dup():
+@ConcatFunction
+def dup(stack, stash):
     stack.append(stack[-1])
 
 
-def nip():
+@ConcatFunction
+def nip(stack, stash):
     stack[-2:-1] = []
 
 
-def nip2():
+@ConcatFunction
+def nip2(stack, stash):
     stack[-3:-1] = []
 
 
-def roll():
+@ConcatFunction
+def roll(stack, stash):
     n = stack.pop()
     # NOTE: this is meant to roll n+1 elements
     stack[-(n+1):] = stack[-n:] + stack[-(n+1):-n]
 
 
-def pop():
+@ConcatFunction
+def pop(stack, stash):
     stack.pop()
 
 
-def over():  # a b
+@ConcatFunction
+def over(stack, stash):  # a b
     stack.append(stack[-2])
 
 
-def import_and_convert(module):
-    m = importlib.import_module(module)
-    return ConvertedModule(m)
-
-
-def _r():
+@ConcatFunction
+def _r(stack, stash):
     stash.append(stack.pop())
 
 
-def r_():
+@ConcatFunction
+def r_(stack, stash):
     stack.append(stash.pop())
 
 
-def int():
+@ConcatFunction
+def int(stack, stash):
     stack.append(builtins.int(stack.pop()))
 
 
-def input():
+@ConcatFunction
+def input(stack, stash):
     stack.append(builtins.input(stack.pop()))
 
 
-def swap():
+@ConcatFunction
+def swap(stack, stash):
     stack[-2:] = [stack[-1], stack[-2]]
 
 
-def sorted():
+@ConcatFunction
+def sorted(stack, stash):
     reverse, key, iterable = stack.pop(), stack.pop(), stack.pop()
 
     def new_key(el):
         stack.append(el)
-        key()
+        key(stack, stash)
         return stack.pop()
     stack.append(builtins.sorted(iterable, key=new_key, reverse=reverse))
 
 
-def dup2():
-    global stack
+@ConcatFunction
+def dup2(stack, stash):
     stack += stack[-2:]
+
 
 __all__ = dir()

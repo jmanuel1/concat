@@ -8,6 +8,8 @@ import textwrap
 class TestStatements(unittest.TestCase):
     """Test the AST generated for a simple statement."""
 
+    # TODO: test only parser acceptance, since a python AST is generated this
+    # is really semantics
     def test_from_import_star(self):
         """Test for 'from module import *'."""
         expected = textwrap.dedent("""

@@ -25,7 +25,7 @@ avoids that.
 Before entering Python code, non-callable objects are replaced with the result
 of the `pythonify` function. This function calls the `_pythonify_` method.
 Concat classes override the method as they see fit. In `ConcatObject`, the
-method returns `self`.
+method returns `self`. If the object is not a Concat object, it is left untouched.
 
 Into Concat from Python
 -----------------------
@@ -48,6 +48,5 @@ print(stack)  # [1, 2, 5]
 Before entering Concat code, non-callable objects should be wrapped in the
 `concatify` function. The function looks up the target class in the
 `concatify.table` dictionary using the original class as a key. The result is
-`<target class>._concatify_(<original object>)`. In `ConcatObject`, the
-`_concatify_` method returns `self`. If there is no matching key in the
-dictionary, the object is wrapped by `ConcatifiedObject`.
+`<target class>._concatify_(<original object>)`. If there is no matching key in the
+dictionary, the object is left untouched.
