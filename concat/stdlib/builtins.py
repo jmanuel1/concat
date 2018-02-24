@@ -7,7 +7,7 @@ class str(libconcat.ConcatObject):
 
     # @libconcat.ConcatFunction
     def __init__(self, stack, stash):
-        self._string = builtins.str(stack.pop())
+        self._string = builtins.str(libconcat.pythonify(stack.pop()))
         stack.append(self)
 
     def _pythonify_(self):
@@ -19,30 +19,49 @@ class str(libconcat.ConcatObject):
 
     # @libconcat.ConcatFunction
     def join(self, stack, stash):
-        # TODO: pythonify the sequence itself
-        seq = [libconcat.pythonify(item) for item in stack.pop()]
+        seq = libconcat.pythonify(stack.pop())
         stack.append(type(self)._concatify_(self._string.join(seq)))
 
     # @libconcat.ConcatFunction
     def index(self, stack, stash):
-        stack.append(libconcat.concatify(self._string.index(stack.pop())))
+        substr = libconcat.pythonify(stack.pop())
+        stack.append(libconcat.concatify(self._string.index(substr)))
 
     # @libconcat.ConcatFunction
     def format(self, stack, stash):
-        stack.append(type(self)._concatify_(self._string.format(*stack.pop())))
+        args = libconcat.pythonify(stack.pop())
+        stack.append(type(self)._concatify_(self._string.format(*args)))
 
-    def __str__(self):
-        return self._string
+    def __str__(self, stack, stash):
+        """This function returns a Concat string."""
+        stack.append(type(self)._concatify_(self._string))
 
-    def __add__(self, other):
-        return self._string + other
+    def __add__(self, stack, stash):
+        other = libconcat.pythonify(stack.pop())
+        stack.append(type(self)._concatify_(self._string + other))
 
-    def __iter__(self):
-        return iter(self._string)
+    def __iter__(self, stack, stash):
+        stack.append(libconcat.concatify(iter(self._string)))
 
-    def __getitem__(self, key):
+    def __getitem__(self, stack, stash):
         # print(key, type(key))
-        return type(self)._concatify_(self._string[key])
+        key = libconcat.pythonify(stack.pop())
+        stack.append(type(self)._concatify_(self._string[key]))
+
+
+class list(libconcat.ConcatObject):
+
+    def __init__(self, stack, stash):
+        self._list = builtins.list(libconcat.pythonify(stack.pop()))
+        stack.append(self)
+
+    def _pythonify_(self):
+        return [libconcat.pythonify(obj) for obj in self._list]
+
+    @classmethod
+    def _concatify_(cls, obj):
+        return cls([obj], [])
 
 
 libconcat.concatify.table[builtins.str] = str
+libconcat.concatify.table[builtins.list] = list

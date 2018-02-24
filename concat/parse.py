@@ -273,12 +273,8 @@ def p_subscription(p):  # noqa
     expr = _combine_exprs(p[2])
     expr.elts.append(_parse_expr('stack.pop()'))
     index = ast.Subscript(expr, ast.Index(_parse_expr('-1')), ast.Load())
-    p[0] = [ast.Expr(
-        ast.Call(
-            _parse_expr('stack.append'),
-            [ast.Subscript(
-                _parse_expr('stack.pop()'),
-                ast.Index(index), ast.Load())], []))]
+    p[0] = [ast.Expr(ast.Call(_parse_expr('stack.append'), [index], [])),
+            ast.Expr(_parse_expr('_call(_getitem, stack, stash)'))]
     _set_line_info(p)
 
 

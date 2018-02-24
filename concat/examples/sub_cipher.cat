@@ -10,13 +10,12 @@ import concat.stdlib.random
 $printable $(pop $concat$.stdlib$.random.random) $False sorted ''.join  # EXAMPLE_KEY
 
 def encode:  # plaintext key
-    swap $(over [$printable.index]) map ''.join nip
+    swap $(over _r [$printable.index] r_ swap) map ''.join nip
 
-def decode:  # plaintext key
-    swap  # key plaintext
-    $($printable [  # key char -- result
-        swap dup _r .index
-    ] r_ swap) map ''.join nip
+def decode:  # encoded_text key
+    swap  # key encoded_text
+    $(  # key char
+        over .index _r $printable [r_]) map ''.join nip
 
 "A simple example."  # EXAMPLE_KEY original
 dup2 _r _r swap encode  # encoded # original EXAMPLE_KEY

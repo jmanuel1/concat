@@ -50,3 +50,7 @@ Before entering Concat code, non-callable objects should be wrapped in the
 `concatify.table` dictionary using the original class as a key. The result is
 `<target class>._concatify_(<original object>)`. If there is no matching key in the
 dictionary, the object is left untouched.
+
+#### Concat Objects
+
+All Concat objects are instances of `ConcatObject`. Upon attribute access, methods become `ConcatFunction`s (unless they are `_concatify_` or `_pythonify_`, in which they are left as Python functions) and other attributes are left untouched.

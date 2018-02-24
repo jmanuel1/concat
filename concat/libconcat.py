@@ -1,5 +1,4 @@
 import builtins
-import operator
 import functools
 import collections
 
@@ -12,7 +11,8 @@ class Stack(list):
 
     def _debug(self):
         if self.debug:
-            builtins.print('DEBUG', self._name, ':', repr(self))
+            builtins.print('DEBUG', self._name, ':',
+                           repr([pythonify(obj) for obj in self]))
 
     def append(self, item):
         super().append(item)
@@ -45,12 +45,10 @@ class ConcatObject:
 
     def __getattribute__(self, attr):
         value = object.__getattribute__(self, attr)
-        is_concat_function = callable(value) and (attr in {'__init__'} or
-                                                  not (attr.startswith('_') and
-                                                       attr.endswith('_')))
+        is_concat_function = callable(value) and attr not in {'_pythonify_',
+                                                              '_concatify_'}
         if is_concat_function:
-            # if value is callable and not a Python or Concat magic method
-            # but __init__ is allowed
+            # if value is callable and not a Python-Concat interface method
             return ConcatFunction(lambda stack, stash: value(stack, stash))
         return value
 
@@ -68,7 +66,7 @@ def _call(func, stack, stash):
     else:
         kwargs, args = stack.pop(), stack.pop()
         # These objects are about to enter Python, pythonify them
-        args = (pythonify(arg) for arg in args)
+        args = pythonify(args)
         kwargs = {pythonify(key): pythonify(value)
                   for key, value in kwargs.items()}
         # Concatify the result
@@ -92,28 +90,36 @@ concatify.table = {}
 
 
 @ConcatFunction
+def _getitem(stack, stash):
+    key, obj = stack.pop(), stack.pop()
+    stack.append(key)
+    _call(obj.__getitem__, stack, stash)
+
+
+@ConcatFunction
 def bytes(stack, stash):
-    errors, encoding, string = [stack.pop() for _ in range(3)]
+    errors, encoding, string = [pythonify(stack.pop()) for _ in range(3)]
     if errors is None:
-        stack.append(builtins.bytes(string, builtins.str(encoding)))
+        stack.append(concatify(builtins.bytes(string, encoding)))
     else:
-        stack.append(builtins.bytes(string, builtins.str(encoding), errors))
+        stack.append(
+            concatify(builtins.bytes(string, encoding, errors)))
 
 
 @ConcatFunction
 def unlist(stack, stash):
-    stack[-1:] = stack[-1]
+    stack[-1:] = pythonify(stack[-1])
 
 
 @ConcatFunction
 def tolist(stack, stash):
     n = stack.pop()
-    stack[-n:] = [stack[-n:]]
+    stack[-n:] = [concatify(stack[-n:])]
 
 
 @ConcatFunction
 def print(stack, stash):
-    builtins.print(stack.pop(), end='')
+    builtins.print(pythonify(stack.pop()), end='')
 
 
 @ConcatFunction
@@ -130,23 +136,30 @@ def reduce(stack, stash):  # iterable, initializer, function
         stack += [a, b]
         func(stack, stash)
         return stack.pop()
-    stack.append(functools.reduce(reduce_func, it, initializer))
+    stack.append(
+        concatify(functools.reduce(reduce_func, pythonify(it), initializer)))
 
 
 @ConcatFunction
 def add(stack, stash):
-    stack[-2:] = [operator.add(stack[-2], stack[-1])]
+    b, a = stack.pop(), stack.pop()
+    stack.append(b)
+    a.__add__(stack, stash)
 
 
 @ConcatFunction
 def map(stack, stash):  # iter func
     result = []
     func, it = stack.pop(), stack.pop()
-    for item in it:
-        stack.append(item)
+    for item in pythonify(it):
+        stack.append(concatify(item))
         func(stack, stash)
         result.append(stack.pop())
-    stack.append(result)
+    stack.append(concatify(result))
+
+
+@ConcatFunction
+def ident(stack, stash): pass
 
 
 @ConcatFunction
@@ -193,12 +206,12 @@ def r_(stack, stash):
 
 @ConcatFunction
 def int(stack, stash):
-    stack.append(builtins.int(stack.pop()))
+    stack.append(concatify(builtins.int(pythonify(stack.pop()))))
 
 
 @ConcatFunction
 def input(stack, stash):
-    stack.append(builtins.input(stack.pop()))
+    stack.append(concatify(builtins.input(pythonify(stack.pop()))))
 
 
 @ConcatFunction
@@ -208,7 +221,7 @@ def swap(stack, stash):
 
 @ConcatFunction
 def sorted(stack, stash):
-    reverse, key, iterable = stack.pop(), stack.pop(), stack.pop()
+    reverse, key, iterable = [pythonify(stack.pop()) for _ in range(3)]
 
     def new_key(el):
         stack.append(el)
