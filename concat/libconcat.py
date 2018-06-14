@@ -43,6 +43,9 @@ class ConcatFunction(collections.Callable):
 
 class ConcatObject:
 
+    def __init__(self, stack, stash):
+        stack.append(self)
+
     def __getattribute__(self, attr):
         value = object.__getattribute__(self, attr)
         is_concat_function = callable(value) and attr not in {'_pythonify_',
