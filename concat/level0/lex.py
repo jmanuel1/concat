@@ -15,14 +15,14 @@ class Lexer:
     Use token() to get the next token.
     """
 
-    def input(self, data):
+    def input(self, data: str) -> None:
         """Initialize the Lexer object with the data to tokenize."""
         self.data = data
         self.tokens = None
         self.lineno = 1
         self.lexpos = 0
 
-    def token(self):
+    def token(self) -> 'Token':
         """Return the next token as a Token object."""
         import token
 
