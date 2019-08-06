@@ -72,11 +72,14 @@ class Token:
     self.end - ending position of token in source, as (line, col)
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Create the Token object."""
-        self.type = self.value = self.start = self.end = None
+        self.type: str = ''
+        self.value = ''
+        self.start = (0, 0)
+        self.end = (0, 0)
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Convert to a string.
 
         A nice representation is returned, not a valid expression.
