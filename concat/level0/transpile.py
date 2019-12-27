@@ -12,6 +12,7 @@ Visser (2001): ACM SIGPLAN Notices 36(11):270-282 November 2001 DOI:
 
 import abc
 import ast
+import functools
 from typing import Tuple, Union, TypeVar, Generic, Iterable, Dict, Callable
 from typing_extensions import Protocol
 import concat.level0.parse
@@ -122,6 +123,14 @@ class One(Visitor[InternalNode[NodeType1], ReturnType1]):
             except VisitFailureException:
                 continue
         raise VisitFailureException
+
+
+# Beyond Visser's combinators
+
+def alt(*visitors):
+    return functools.reduce(Choice, visitors)
+
+
 T = TypeVar('T')
 
 
@@ -170,3 +179,54 @@ def level_0_extension(
         return import_node
 
     visitors['import-statement'] = import_statement_visitor
+
+    visitors['word'] = alt(
+        visitors.ref_visitor('push-word'),
+        visitors.ref_visitor('quote-word'),
+        visitors.ref_visitor('literal-word'),
+        visitors.ref_visitor('name-word'),
+        visitors.ref_visitor('attribute-word')
+    )
+
+    # Converts a QuoteWordNode to a Python expression which is a sequence.
+    @FunctionalVisitor
+    def quote_word_visitor(node: concat.level0.parse.Node):
+        if not isinstance(node, concat.level0.parse.QuoteWordNode):
+            raise VisitFailureException
+        children = All(visitors.ref_visitor('word')).visit(node)
+        py_node = ast.List(elts=children, ctx=ast.Load())
+        py_node.lineno, py_node.col_offset = node.location
+        return py_node
+
+    visitors['quote-word'] = quote_word_visitor
+
+    # Converts a PushWordNode to a Python call to stack.append
+    @FunctionalVisitor
+    def push_word_visitor(node: concat.level0.parse.Node) -> ast.Call:
+        if not isinstance(node, concat.level0.parse.PushWordNode):
+            raise VisitFailureException
+        child = visitors.ref_visitor('word').visit(node.children[0])
+        load = ast.Load()
+        stack = ast.Name(id='stack', ctx=load)
+        append_method = ast.Attribute(value=stack, attr='append', ctx=load)
+        py_node = ast.Call(func=append_method, expr=[child], keywords=[])
+        py_node.lineno, py_node.col_offset = node.location
+        return py_node
+
+    visitors['push-word'] = push_word_visitor
+
+    visitors['literal-word'] = Choice(
+        visitors.ref_visitor('number-word'),
+        visitors.ref_visitor('string-word')
+    )
+
+    # Converts a NumberWordNode to a ast.Num
+    @FunctionalVisitor
+    def number_word_visitor(node: concat.level0.parse.Node) -> ast.Num:
+        if not isinstance(node, concat.level0.parse.NumberWordNode):
+            raise VisitFailureException
+        py_node = ast.Num(n=node.value)
+        py_node.lineno, py_node.col_offset = node.location
+        return py_node
+
+    visitors['number-word'] = number_word_visitor

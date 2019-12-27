@@ -41,3 +41,16 @@ class TestSubVisitors(unittest.TestCase):
             message = '{} was not accepted by the statement visitor'.format(node)
             self.fail(msg=message)
         self.assertIsInstance(py_node, ast.stmt, msg='Python node is not a module')
+
+    def test_word_visitor(self) -> None:
+        number = Token()
+        number.start = (0, 0)
+        number.value = '6'
+        # use a concrete class
+        node = parse.NumberWordNode(number)
+        try:
+            py_node = self.__visitors['word'].visit(node)
+        except concat.level0.transpile.VisitFailureException:
+            message = '{} was not accepted by the word visitor'.format(node)
+            self.fail(msg=message)
+        self.assertIsInstance(py_node, ast.expr, msg='Python node is not a expression')
