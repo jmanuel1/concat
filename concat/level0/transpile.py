@@ -230,3 +230,14 @@ def level_0_extension(
         return py_node
 
     visitors['number-word'] = number_word_visitor
+
+    # Converts a StringWordNode to a ast.Str
+    @FunctionalVisitor
+    def string_word_visitor(node: concat.level0.parse.Node) -> ast.Str:
+        if not isinstance(node, concat.level0.parse.StringWordNode):
+            raise VisitFailureException
+        py_node = ast.Str(s=node.value)
+        py_node.lineno, py_node.col_offset = node.location
+        return py_node
+
+    visitors['string-word'] = string_word_visitor
