@@ -66,3 +66,15 @@ class TestSubVisitors(unittest.TestCase):
             message = '{} was not accepted by the string-word visitor'.format(node)
             self.fail(msg=message)
         self.assertIsInstance(py_node, ast.Str, msg='Python node is not a string')
+
+    def test_attribute_word_visitor(self) -> None:
+        name = Token()
+        name.start = (0, 0)
+        name.value = 'attr'
+        node = parse.AttributeWordNode(name)
+        try:
+            py_node = self.__visitors['attribute-word'].visit(node)
+        except concat.level0.transpile.VisitFailureException:
+            message = '{} was not accepted by the attribute-word visitor'.format(node)
+            self.fail(msg=message)
+        self.assertIsInstance(py_node, ast.Attribute, msg='Python node is not a attribute')
