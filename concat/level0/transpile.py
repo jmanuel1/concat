@@ -12,6 +12,7 @@ Visser (2001): ACM SIGPLAN Notices 36(11):270-282 November 2001 DOI:
 
 import abc
 from typing import Tuple, Union, TypeVar, Generic, Iterable
+from typing_extensions import Protocol
 
 
 NodeType1 = TypeVar('NodeType1')
@@ -19,6 +20,11 @@ NodeType2 = TypeVar('NodeType2')
 NodeType3 = TypeVar('NodeType3')
 ReturnType1 = TypeVar('ReturnType1')
 ReturnType2 = TypeVar('ReturnType2')
+
+
+class InternalNode(Protocol[NodeType1]):
+
+    children: Iterable[NodeType1]
 
 
 class VisitFailureException(Exception):
@@ -73,3 +79,32 @@ class Choice(Visitor[NodeType1, Union[ReturnType1, ReturnType2]]):
             return self.__visitor1.visit(node)
         except VisitFailureException:
             return self.__visitor2.visit(node)
+
+
+# Traversal combinators
+
+class All(Visitor[InternalNode[NodeType1], Iterable[ReturnType1]]):
+    """Visser's every-child traversal combinator."""
+
+    def __init__(self, visitor: Visitor[NodeType1, ReturnType1]):
+        super().__init__()
+        self.__visitor = visitor
+
+    def visit(self, node: InternalNode[NodeType1]) -> Iterable[ReturnType1]:
+        return (self.__visitor.visit(child) for child in node.children)
+
+
+class One(Visitor[InternalNode[NodeType1], ReturnType1]):
+    """Visser's combinator that tries visiting each child until success."""
+
+    def __init__(self, visitor: Visitor[NodeType1, ReturnType1]):
+        super().__init__()
+        self.__visitor = visitor
+
+    def visit(self, node: InternalNode[NodeType1]) -> ReturnType1:
+        for child in node.children:
+            try:
+                return self.__visitor.visit(child)
+            except VisitFailureException:
+                continue
+        raise VisitFailureException
