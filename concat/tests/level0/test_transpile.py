@@ -21,3 +21,23 @@ class TestTopLevelVisitor(unittest.TestCase):
             message = '{} was not accepted by the top level visitor'.format(node)
             self.fail(msg=message)
         self.assertIsInstance(py_node, ast.Module, msg='Python node is not a module')
+
+
+class TestSubVisitors(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.__visitors = concat.level0.transpile.VisitorDict[
+            concat.level0.parse.Node, ast.AST]()
+        self.__visitors.extend_with(concat.level0.transpile.level_0_extension)
+
+    def test_statement_visitor(self) -> None:
+        module = Token()
+        module.value = 'ast'
+        # use a concrete class
+        node = parse.ImportStatementNode(module, (0, 0))
+        try:
+            py_node = self.__visitors['statement'].visit(node)
+        except concat.level0.transpile.VisitFailureException:
+            message = '{} was not accepted by the statement visitor'.format(node)
+            self.fail(msg=message)
+        self.assertIsInstance(py_node, ast.stmt, msg='Python node is not a module')

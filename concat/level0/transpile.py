@@ -157,3 +157,16 @@ def level_0_extension(
         return module
 
     visitors['top-level'] = top_level_visitor
+
+    visitors['statement'] = visitors.ref_visitor('import-statement')
+
+    # Converts an ImportStatementNode to a Python import statement node
+    @FunctionalVisitor
+    def import_statement_visitor(node: concat.level0.parse.Node) -> ast.Import:
+        if not isinstance(node, concat.level0.parse.ImportStatementNode):
+            raise VisitFailureException
+        import_node = ast.Import([ast.alias(node.value, None)])
+        import_node.lineno, import_node.col_offset = node.location
+        return import_node
+
+    visitors['import-statement'] = import_statement_visitor
