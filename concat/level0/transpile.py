@@ -13,6 +13,7 @@ Visser (2001): ACM SIGPLAN Notices 36(11):270-282 November 2001 DOI:
 import abc
 import ast
 import functools
+# import astunparse # TODO: install astunparse
 from typing import Tuple, Union, TypeVar, Generic, Iterable, Dict, Callable
 from typing_extensions import Protocol
 import concat.level0.parse
@@ -153,6 +154,11 @@ class VisitorDict(Dict[str, Visitor[NodeType1, ReturnType1]]):
 def level_0_extension(
     visitors: VisitorDict[concat.level0.parse.Node, ast.AST]
 ) -> None:
+    def statementfy(node):
+        if isinstance(node, ast.expr):
+            return ast.Expr(value=node)
+        return node
+
     # Converts a TopLevelNode to the top level of a Python module
     @FunctionalVisitor
     def top_level_visitor(
@@ -160,9 +166,17 @@ def level_0_extension(
     ) -> ast.Module:
         statement = visitors.ref_visitor('statement')
         word = visitors.ref_visitor('word')
-        body = All(Choice(statement, word)).visit(node)
-        module = ast.Module(body=body)
+        body = list(All(Choice(statement, word)).visit(node))
+        statements = [statementfy(child) for child in body]
+        module = ast.Module(body=statements)
         ast.fix_missing_locations(module)
+        # debugging output
+        # with open('debug.py', 'w') as f:
+        #     f.write(astunparse.unparse(module))
+        with open('ast.out', 'w') as f:
+            f.write('------------ AST DUMP ------------\n')
+            # f.write(astunparse.dump(module))
+            f.write(ast.dump(module))
         return module
 
     visitors['top-level'] = top_level_visitor
