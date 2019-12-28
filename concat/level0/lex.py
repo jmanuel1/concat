@@ -3,6 +3,8 @@ import tokenize
 import sys
 import io
 import token
+from typing import Optional
+
 
 tokens = tuple(token.tok_name.values()) + \
     ('DOLLARSIGN', 'DEF', 'BIN_BOOL_FUNC',
@@ -22,7 +24,7 @@ class Lexer:
         self.lineno = 1
         self.lexpos = 0
 
-    def token(self) -> 'Token':
+    def token(self) -> Optional['Token']:
         """Return the next token as a Token object."""
         import token
 
