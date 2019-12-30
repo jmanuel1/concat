@@ -29,14 +29,14 @@ tokenization phase.
 from typing import (
     Iterable, TypeVar, Any, Sequence, Tuple, Dict, Generator, List, Callable)
 from concat.level0.lex import Token
-import parsy  # type: ignore
+import parsy
 
 
-# QUESTION: Subclass ast.AST?
 class Node:
 
-    def __init__(self) -> None:
+    def __init__(self):
         self.location = (0, 0)
+        self.children: Iterable[Node]
 
 
 class TopLevelNode(Node):
@@ -54,7 +54,7 @@ class StatementNode(Node):
 
 class ImportStatementNode(StatementNode):
 
-    def __init__(self, module, location):
+    def __init__(self, module: Token, location: Tuple[int, int]):
         super().__init__()
         self.location = location
         self.children = []
@@ -134,32 +134,27 @@ class ParserDict(Dict[str, parsy.Parser]):
         extension(self)
 
     def parse(self, tokens: Sequence[Token]) -> Node:
-        return self['top-level'].parse(tokens)
+        return self['top-level'].parse(list(tokens))
 
     def token(self, typ: str) -> parsy.Parser:
         description = '{} token'.format(typ)
         return parsy.test_item(lambda token: token.type == typ, description)
 
     def ref_parser(self, name: str) -> parsy.Parser:
-        # QUESTION: Could I use parsy.generate for simpler code?
-        @parsy.Parser
-        def parser(stream, index):
-            try:
-                result, remainder = self[name].parse_partial(stream[index:])
-                # calc new index from remainder
-                newIndex = len(stream) - len(remainder)
-                return parsy.Result.success(newIndex, result)
-            except parsy.ParseError as e:
-                return parsy.Result.failure(e.index, e.expected)
+        @parsy.generate(name.replace('-', ' '))
+        def parser():
+            return (yield self[name])
         return parser
 
 
 def level_0_extension(parsers: ParserDict) -> None:
     # This parses the top level of a file.
-    # top level = ENCODING, (word | (statement, NEWLINE))*, [ NEWLINE ], ENDMARKER ;
-    @parsy.generate
+    # top level =
+    #   ENCODING, (word | (statement, NEWLINE))*, [ NEWLINE ], ENDMARKER ;
+    @parsy.generate('top level')
     def top_level_parser() -> Generator[parsy.Parser, Any, TopLevelNode]:
         encoding = yield parsers.token('ENCODING')
+        # NOTE: no need to use ref_parser because we are already in a function
         statement = parsers.ref_parser('statement') << parsers.token('NEWLINE')
         word = parsers.ref_parser('word')
         children = yield (statement | word).many()
@@ -174,10 +169,14 @@ def level_0_extension(parsers: ParserDict) -> None:
     # statement = import statement ;
     parsers['statement'] = parsers.ref_parser('import-statement')
 
+    ImportStatementParserGenerator = Generator[
+        parsy.Parser, Any, ImportStatementNode
+    ]
+
     # Parses a simple import statement.
     # import statement = IMPORT, NAME
-    @parsy.generate
-    def import_statement_parser() -> Generator[parsy.Parser, Any, ImportStatementNode]:
+    @parsy.generate('import statement')
+    def import_statement_parser() -> ImportStatementParserGenerator:
         keyword = yield parsers.token('IMPORT')
         name = yield parsers.token('NAME')
         return ImportStatementNode(name, keyword.start)
@@ -196,7 +195,8 @@ def level_0_extension(parsers: ParserDict) -> None:
         parsers.ref_parser('name-word'),
         parsers.ref_parser('attribute-word')
     )
-    parsers['literal-word'] = parsers.ref_parser('number-word') | parsers.ref_parser('string-word')
+    parsers['literal-word'] = parsers.ref_parser(
+        'number-word') | parsers.ref_parser('string-word')
 
     parsers['name-word'] = parsers.token('NAME').map(NameWordNode)
 
@@ -206,7 +206,7 @@ def level_0_extension(parsers: ParserDict) -> None:
 
     # This parses a quotation.
     # quote word = LPAR, word*, RPAR ;
-    @parsy.generate
+    @parsy.generate('quote word')
     def quote_word_parser() -> Generator[parsy.Parser, Any, QuoteWordNode]:
         lpar = yield parsers.token('LPAR')
         children = yield parsers.ref_parser('word').many()
@@ -223,4 +223,6 @@ def level_0_extension(parsers: ParserDict) -> None:
 
     # Parsers an attribute word.
     # attribute word = DOT, NAME ;
-    parsers['attribute-word'] = parsers.token('DOT') >> parsers.token('NAME').map(AttributeWordNode)
+    dot = parsers.token('DOT')
+    name = parsers.token('NAME')
+    parsers['attribute-word'] = dot >> name.map(AttributeWordNode)
