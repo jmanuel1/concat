@@ -12,7 +12,7 @@ def _run(
     prog: types.CodeType,
     globals: Optional[Dict[str, object]] = None
 ) -> None:
-    exec(prog, globals or {})
+    exec(prog, {} if globals is None else globals)
 
 
 def execute(

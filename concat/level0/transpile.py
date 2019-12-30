@@ -154,9 +154,13 @@ class VisitorDict(Dict[str, Visitor[NodeType1, ReturnType1]]):
 def level_0_extension(
     visitors: VisitorDict[concat.level0.parse.Node, ast.AST]
 ) -> None:
-    def statementfy(node):
+    def statementfy(node: Union[ast.expr, ast.stmt]) -> ast.stmt:
         if isinstance(node, ast.expr):
-            return ast.Expr(value=node)
+            load = ast.Load()
+            stack = ast.Name(id='stack', ctx=load)
+            stash = ast.Name(id='stash', ctx=load)
+            call_node = ast.Call(func=node, args=[stack, stash], keywords=[])
+            return ast.Expr(value=call_node)
         return node
 
     # Converts a TopLevelNode to the top level of a Python module
@@ -164,11 +168,12 @@ def level_0_extension(
     def top_level_visitor(
         node: concat.level0.parse.TopLevelNode
     ) -> ast.Module:
+        preamble = ast.parse("import concat.level0.stdlib.importlib;stack,stash=[],[]").body
         statement = visitors.ref_visitor('statement')
         word = visitors.ref_visitor('word')
         body = list(All(Choice(statement, word)).visit(node))
         statements = [statementfy(child) for child in body]
-        module = ast.Module(body=statements)
+        module = ast.Module(body=preamble + statements)
         ast.fix_missing_locations(module)
         # debugging output
         # with open('debug.py', 'w') as f:
@@ -183,14 +188,24 @@ def level_0_extension(
 
     visitors['statement'] = visitors.ref_visitor('import-statement')
 
+    def wrap_in_statement(statments: Iterable[ast.stmt]) -> ast.stmt:
+        return ast.If(test=ast.NameConstant(True), body=list(statments), orelse=[])
+
     # Converts an ImportStatementNode to a Python import statement node
     @FunctionalVisitor
-    def import_statement_visitor(node: concat.level0.parse.Node) -> ast.Import:
+    def import_statement_visitor(node: concat.level0.parse.Node) -> ast.stmt:
         if not isinstance(node, concat.level0.parse.ImportStatementNode):
             raise VisitFailureException
         import_node = ast.Import([ast.alias(node.value, None)])
+        # reassign the import to a module type that is self-pushing
+        # name_store = ast.Name(id=node.value, ctx=ast.Store())
+        class_store = ast.Attribute(value=ast.Name(id=node.value, ctx=ast.Load()), attr='__class__', ctx=ast.Store())
+        module_type = ast.parse('concat.level0.stdlib.importlib.Module', mode='eval').body
+        # call = ast.Call(func=func, args=[name_load], keywords=[])
+        assign = ast.Assign(targets=[class_store], value=module_type)
         import_node.lineno, import_node.col_offset = node.location
-        return import_node
+        assign.lineno, assign.col_offset = node.location
+        return wrap_in_statement([import_node, assign])
 
     visitors['import-statement'] = import_statement_visitor
 
