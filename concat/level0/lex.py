@@ -2,13 +2,10 @@
 import tokenize
 import sys
 import io
-import token
-from typing import Optional
+from typing import Optional, Iterator
 
 
-tokens = tuple(token.tok_name.values()) + \
-    ('DOLLARSIGN', 'DEF', 'BIN_BOOL_FUNC',
-     'UNARY_BOOL_FUNC', 'IMPORT', 'NONE', 'FROM')
+__all__ = ['Lexer', 'Token', 'lexer']
 
 
 class Lexer:
@@ -20,7 +17,7 @@ class Lexer:
     def input(self, data: str) -> None:
         """Initialize the Lexer object with the data to tokenize."""
         self.data = data
-        self.tokens = None
+        self.tokens: Optional[Iterator[tokenize.TokenInfo]] = None
         self.lineno = 1
         self.lexpos = 0
 
@@ -58,11 +55,10 @@ class Lexer:
         self._update_position(tok)
         return tok
 
-    def _update_position(self, tok):
+    def _update_position(self, tok: 'Token') -> None:
         self.lexpos += len(tok.value)
         if tok.type in {'NEWLINE', 'NL'}:
             self.lineno += 1
-        tok.lineno, tok.lexpos = self.lineno, self.lexpos
 
 
 class Token:
@@ -89,7 +85,7 @@ class Token:
         return '({}, {}, start {})'.format(
             repr(self.type), repr(self.value), repr(self.start))
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return a tuple representation as a valid expression."""
         return '({}, {}, {}, {})'.format(
             repr(self.type),
@@ -97,11 +93,12 @@ class Token:
             repr(self.start),
             repr(self.end))
 
+
 lexer = Lexer()
 
 if __name__ == '__main__':
     lexer.input(sys.stdin.read())
-    token = lexer.token()
-    while token is not None:
-        print(repr(token))
-        token = lexer.token()
+    token_ = lexer.token()
+    while token_ is not None:
+        print(repr(token_))
+        token_ = lexer.token()
