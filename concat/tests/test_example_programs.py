@@ -16,7 +16,7 @@ examples = [os.path.join(example_dir, x)
             for x in os.listdir(example_dir) if x.endswith('.cat')]
 
 
-@unittest.skip("broken and not in level 0")
+# @unittest.skip("broken and not in level 0")
 class TestExamplePrograms(unittest.TestCase):
     """Test all the examples in concat/examples for correctness."""
 
