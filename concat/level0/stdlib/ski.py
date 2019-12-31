@@ -10,6 +10,14 @@ def s(stack, stash):
     stack.append(Quotation([C, B]))
     stack.append(C)
     A(stack, stash)
+
+
+def k(stack, stash):
+    """$B $A -- A"""
+    A, B = stack.pop(), stack.pop()
+    A(stack, stash)
+
+
 def i(stack, stash):
     """$A -- A"""
     A = stack.pop()
