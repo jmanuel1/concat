@@ -15,3 +15,8 @@ class TestCombinators(unittest.TestCase):
         stack = [self.__test_function]
         concat.level0.stdlib.ski.i(stack, [])
         self.assertEqual(['test'], stack, msg='i has incorrect stack effect')
+
+    def test_s(self) -> None:
+        stack = ['c', 'b', self.__test_function]
+        concat.level0.stdlib.ski.s(stack, [])
+        self.assertEqual([['c', 'b'], 'c', 'test'], stack, msg='s has incorrect stack effect')
