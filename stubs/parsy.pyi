@@ -37,7 +37,12 @@ def test_item(func: Callable[[T], bool], description: str) -> Parser[T, T]:
     ...
 
 
-def generate(desc: str) -> Callable[[Callable[[], Generator[Parser[T, U], U, V]]], Parser[T, V]]:
+ParserGeneratingFunction = Callable[[], Generator[Parser[T, U], U, V]]
+
+
+def generate(
+    desc: str
+) -> Callable[[ParserGeneratingFunction[T, U, V]], Parser[T, V]]:
     ...
 
 

@@ -15,14 +15,18 @@ from typing import List, cast
 class TestIntoPythonFromConcat(unittest.TestCase):
     """Test the Python-Concat interface going into Python from Concat."""
 
-    def test_python_function(self):
+    def test_python_function(self) -> None:
         """Python function call test (from Concat).
 
         Test that a normal Python is treated as if it had the stack effect
         kwargs args -- func(*args, **kwargs) when called with py_call."""
-        stack, stash = [Quotation([]), Quotation([0]), bool], []
+        stack = [Quotation([]), Quotation([0]), bool]
+        stash: List[object] = []
         concat.level0.stdlib.pyinterop.py_call(stack, stash)
-        self.assertEqual(stack, [False], msg='py_call has incorrect stack effect')
+        message = 'py_call has incorrect stack effect'
+        self.assertEqual(stack, [False], msg=message)
+
+
 class TestIntoConcatFromPython(unittest.TestCase):
     """Test the Python-Concat interface going into Concat from Python."""
 

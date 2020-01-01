@@ -4,7 +4,7 @@ Example tests: make sure all examples work.
 NOTE: This must be run from project root!
 """
 
-from scripttest import TestFileEnvironment
+from scripttest import TestFileEnvironment   # type: ignore
 import unittest
 import os
 import sys

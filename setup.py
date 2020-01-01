@@ -1,5 +1,5 @@
 """Setup script for concat."""
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages  # type: ignore
 
 setup(
     name='concat',
@@ -18,7 +18,7 @@ setup(
         'Programming Language :: Python :: 3.5',
     ],
     keywords='concatenative',
-    packages=find_packages(),
+    packages=find_packages(),  # type: ignore
     install_requires=['astunparse>=1.3.0,<2', 'parsy>=1.3.0,<2'],
     test_suite='nose.collector',
     tests_require=['nose', 'scripttest']
