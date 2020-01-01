@@ -291,3 +291,13 @@ def level_0_extension(
         return attribute
 
     visitors['attribute-word'] = attribute_word_visitor
+
+    # Converts a NameWordNode to a Python expression which is just that name
+    @FunctionalVisitor
+    def name_word_visitor(node: concat.level0.parse.Node) -> ast.Name:
+        if not isinstance(node, concat.level0.parse.NameWordNode):
+            raise VisitFailureException
+        name = node.value
+        return ast.Name(id=name, ctx=ast.Load())
+
+    visitors['name-word'] = name_word_visitor
