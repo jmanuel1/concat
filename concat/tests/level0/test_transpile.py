@@ -40,7 +40,7 @@ class TestSubVisitors(unittest.TestCase):
         except concat.level0.transpile.VisitFailureException:
             message = '{} was not accepted by the statement visitor'.format(node)
             self.fail(msg=message)
-        self.assertIsInstance(py_node, ast.stmt, msg='Python node is not a module')
+        self.assertIsInstance(py_node, ast.stmt, msg='Python node is not a statement')
 
     def test_word_visitor(self) -> None:
         number = Token()
