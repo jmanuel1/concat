@@ -1,10 +1,7 @@
 """Python-Concat interface tests.
 
 Tests that the boundary between Python and Concat is correct."""
-import concat.libconcat as libconcat
 import unittest
-import unittest.mock as mock
-import concat.stdlib.builtins as builtins
 from concat.level0.stdlib.types import Quotation
 import concat.level0.stdlib.pyinterop
 import concat.level0.lex
