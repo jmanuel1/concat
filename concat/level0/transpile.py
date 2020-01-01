@@ -13,8 +13,8 @@ Visser (2001): ACM SIGPLAN Notices 36(11):270-282 November 2001 DOI:
 import abc
 import ast
 import functools
-# import astunparse # TODO: install astunparse
-from typing import Tuple, Union, TypeVar, Generic, Iterable, Dict, Callable
+import astunparse  # type: ignore
+from typing import Tuple, Union, TypeVar, Generic, Iterable, Dict, Callable, cast
 from typing_extensions import Protocol
 import concat.level0.parse
 
@@ -168,28 +168,32 @@ def level_0_extension(
     def top_level_visitor(
         node: concat.level0.parse.TopLevelNode
     ) -> ast.Module:
-        preamble = ast.parse("import concat.level0.stdlib.importlib;stack,stash=[],[]").body
+        # TODO: Use the globals dict in execute instead of a preamble here?
+        preamble = ast.parse(
+            "import concat.level0.stdlib.importlib;from concat.level0.stdlib.pyinterop import py_call;stack,stash=[],[];\ndef push(val):return lambda stack,_:stack.append(val)").body
         statement = visitors.ref_visitor('statement')
         word = visitors.ref_visitor('word')
         body = list(All(Choice(statement, word)).visit(node))
-        statements = [statementfy(child) for child in body]
+        statements = [statementfy(
+            cast(Union[ast.stmt, ast.expr], child)) for child in body]
         module = ast.Module(body=preamble + statements)
         ast.fix_missing_locations(module)
         # debugging output
-        # with open('debug.py', 'w') as f:
-        #     f.write(astunparse.unparse(module))
+        with open('debug.py', 'w') as f:
+            f.write(astunparse.unparse(module))
         with open('ast.out', 'w') as f:
             f.write('------------ AST DUMP ------------\n')
-            # f.write(astunparse.dump(module))
-            f.write(ast.dump(module))
+            f.write(astunparse.dump(module))
         return module
 
-    visitors['top-level'] = top_level_visitor
+    visitors['top-level'] = cast(Visitor[concat.level0.parse.Node,
+                                         ast.AST], top_level_visitor)
 
     visitors['statement'] = visitors.ref_visitor('import-statement')
 
     def wrap_in_statement(statments: Iterable[ast.stmt]) -> ast.stmt:
-        return ast.If(test=ast.NameConstant(True), body=list(statments), orelse=[])
+        true = ast.NameConstant(True)
+        return ast.If(test=true, body=list(statments), orelse=[])
 
     # Converts an ImportStatementNode to a Python import statement node
     @FunctionalVisitor
@@ -198,10 +202,11 @@ def level_0_extension(
             raise VisitFailureException
         import_node = ast.Import([ast.alias(node.value, None)])
         # reassign the import to a module type that is self-pushing
-        # name_store = ast.Name(id=node.value, ctx=ast.Store())
-        class_store = ast.Attribute(value=ast.Name(id=node.value, ctx=ast.Load()), attr='__class__', ctx=ast.Store())
-        module_type = ast.parse('concat.level0.stdlib.importlib.Module', mode='eval').body
-        # call = ast.Call(func=func, args=[name_load], keywords=[])
+        class_store = ast.Attribute(value=ast.Name(
+            id=node.value, ctx=ast.Load()), attr='__class__', ctx=ast.Store())
+        module_type = cast(
+            ast.Expression,
+            ast.parse('concat.level0.stdlib.importlib.Module', mode='eval')).body
         assign = ast.Assign(targets=[class_store], value=module_type)
         import_node.lineno, import_node.col_offset = node.location
         assign.lineno, assign.col_offset = node.location
@@ -222,7 +227,7 @@ def level_0_extension(
     def quote_word_visitor(node: concat.level0.parse.Node):
         if not isinstance(node, concat.level0.parse.QuoteWordNode):
             raise VisitFailureException
-        children = All(visitors.ref_visitor('word')).visit(node)
+        children = list(All(visitors.ref_visitor('word')).visit(node))
         py_node = ast.List(elts=children, ctx=ast.Load())
         py_node.lineno, py_node.col_offset = node.location
         return py_node
@@ -234,12 +239,12 @@ def level_0_extension(
     def push_word_visitor(node: concat.level0.parse.Node) -> ast.Call:
         if not isinstance(node, concat.level0.parse.PushWordNode):
             raise VisitFailureException
-        child = visitors.ref_visitor('word').visit(node.children[0])
+        child = visitors.ref_visitor('word').visit(list(node.children)[0])
         load = ast.Load()
-        stack = ast.Name(id='stack', ctx=load)
-        append_method = ast.Attribute(value=stack, attr='append', ctx=load)
-        py_node = ast.Call(func=append_method, expr=[child], keywords=[])
+        push_func = ast.Name(id='push', ctx=load)
+        py_node = ast.Call(func=push_func, args=[child], keywords=[])
         py_node.lineno, py_node.col_offset = node.location
+        print(astunparse.dump(py_node))
         return py_node
 
     visitors['push-word'] = push_word_visitor
