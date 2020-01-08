@@ -33,6 +33,10 @@ class Parser(Generic[T, U]):
         ...
 
 
+class ParseError(Exception):
+    ...
+
+
 def test_item(func: Callable[[T], bool], description: str) -> Parser[T, T]:
     ...
 

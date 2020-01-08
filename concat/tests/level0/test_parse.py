@@ -2,7 +2,7 @@ import concat.level0.parse as parse
 from concat.level0.lex import Token
 import unittest
 from typing import Tuple, Iterable
-import parsy  # type: ignore
+import parsy
 
 
 TokenTuple = Tuple[str, str, Tuple[int, int], Tuple[int, int]]
