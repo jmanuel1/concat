@@ -25,6 +25,8 @@ class Lexer:
         token = self.__level_0_lexer.token()
         if token and token.type == 'NAME' and token.value == 'NotImplemented':
             token.type = 'NOTIMPL'
+        if token and token.type == 'NAME' and token.value == 'Ellipsis':
+            token.type = 'ELLIPSIS'
         return token
 
 

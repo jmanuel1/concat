@@ -21,6 +21,13 @@ class TestSmallExamples(unittest.TestCase):
             ('NOTIMPL', 'NotImplemented', (1, 0), (1, 14)),
             ('NEWLINE', '\n', (1, 14), (1, 15)),
             ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        '... Ellipsis\n': (
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('ELLIPSIS', '...', (1, 0), (1, 3)),
+            ('ELLIPSIS', 'Ellipsis', (1, 4), (1, 12)),
+            ('NEWLINE', '\n', (1, 12), (1, 13)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
         )
     }
 
