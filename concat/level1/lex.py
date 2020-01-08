@@ -22,7 +22,10 @@ class Lexer:
 
     def token(self) -> Optional[concat.level0.lex.Token]:
         """Return the next token as a Token object."""
-        return self.__level_0_lexer.token()
+        token = self.__level_0_lexer.token()
+        if token and token.type == 'NAME' and token.value == 'NotImplemented':
+            token.type = 'NOTIMPL'
+        return token
 
 
 lexer = Lexer()

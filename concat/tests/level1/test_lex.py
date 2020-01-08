@@ -4,6 +4,7 @@ import unittest
 from typing import Tuple
 
 
+# TODO: Put token handling helpers in their own module.
 TokenTuple = Tuple[str, str, Tuple[int, int], Tuple[int, int]]
 
 
@@ -13,6 +14,12 @@ class TestSmallExamples(unittest.TestCase):
             ('ENCODING', 'utf-8', (0, 0), (0, 0)),
             ('NONE', 'None', (1, 0), (1, 4)),
             ('NEWLINE', '\n', (1, 4), (1, 5)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'NotImplemented\n': (  # newline is important
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('NOTIMPL', 'NotImplemented', (1, 0), (1, 14)),
+            ('NEWLINE', '\n', (1, 14), (1, 15)),
             ('ENDMARKER', '', (2, 0), (2, 0))
         )
     }
@@ -32,12 +39,15 @@ class TestSmallExamples(unittest.TestCase):
                 self.assertTrue(
                     all(map(self._matches_token, expectationPairs)))
 
-    def _matches_token(self, pair: Tuple[concat.level0.lex.Token, TokenTuple]) -> bool:
+    def _matches_token(
+        self,
+        pair: Tuple[concat.level0.lex.Token, TokenTuple]
+    ) -> bool:
         token, tokTuple = pair
 
         return (
-            token.type == tokTuple[0] and
-            token.value == tokTuple[1] and
-            token.start == tokTuple[2] and
-            token.end == tokTuple[3]
+            token.type == tokTuple[0]
+            and token.value == tokTuple[1]
+            and token.start == tokTuple[2]
+            and token.end == tokTuple[3]
         )
