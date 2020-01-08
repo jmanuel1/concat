@@ -5,6 +5,10 @@ import concat.level0.lex
 import concat.level0.parse
 import concat.level0.transpile
 import concat.level0.execute
+import concat.level1.lex
+import concat.level1.parse
+import concat.level1.transpile
+import concat.level1.execute
 import argparse
 import sys
 import ast
@@ -33,7 +37,7 @@ if __name__ == '__main__':
                             default=False, help='turn stack debugging on')
     args = arg_parser.parse_args()
 
-    lexer = concat.level0.lex.Lexer()
+    lexer = concat.level1.lex.Lexer()
     lexer.input(args.file.read())
     args.file.close()
     tokens = []
@@ -44,8 +48,10 @@ if __name__ == '__main__':
         tokens.append(token)
     parser = concat.level0.parse.ParserDict()
     parser.extend_with(concat.level0.parse.level_0_extension)
+    parser.extend_with(concat.level1.parse.level_1_extension)
     concat_ast = parser.parse(tokens)
     transpiler = concat.level0.transpile.VisitorDict[concat.level0.parse.Node, ast.AST]()
     transpiler.extend_with(concat.level0.transpile.level_0_extension)
+    transpiler.extend_with(concat.level1.transpile.level_1_extension)
     python_ast = cast(ast.Module, transpiler.visit(concat_ast))
-    concat.level0.execute.execute(filename, python_ast, {})
+    concat.level1.execute.execute(filename, python_ast, {})
