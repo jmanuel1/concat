@@ -47,7 +47,7 @@ class TestExamplePrograms(unittest.TestCase):
                     raise Exception(
                         'No output specified for file {}'.format(name))
                 out = eval(out[len(out_start):].strip())
-                # TODO: recover from scripttest's AssertionErrors
+                # scripttest fails loudly if concat exits with a nonzero code
                 actual = env.run(sys.executable, '-m', 'coverage', 'run',
                                  '-m',
                                  'concat',
