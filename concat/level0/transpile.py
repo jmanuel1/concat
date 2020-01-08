@@ -168,15 +168,12 @@ def level_0_extension(
     def top_level_visitor(
         node: concat.level0.parse.TopLevelNode
     ) -> ast.Module:
-        # TODO: Use the globals dict in execute instead of a preamble here?
-        preamble = ast.parse(
-            "import concat.level0.stdlib.importlib;from concat.level0.stdlib.pyinterop import py_call;stack,stash=[],[];\ndef push(val):return lambda stack,_:stack.append(val)").body
         statement = visitors.ref_visitor('statement')
         word = visitors.ref_visitor('word')
         body = list(All(Choice(statement, word)).visit(node))
         statements = [statementfy(
             cast(Union[ast.stmt, ast.expr], child)) for child in body]
-        module = ast.Module(body=preamble + statements)
+        module = ast.Module(body=statements)
         ast.fix_missing_locations(module)
         # debugging output
         with open('debug.py', 'w') as f:
