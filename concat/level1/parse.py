@@ -20,9 +20,16 @@ class NotImplWordNode(concat.level0.parse.WordNode):
         self.children = []
 
 
+class EllipsisWordNode(concat.level0.parse.WordNode):
+
+    def __init__(self, ellipsis: Token):
+        self.location = ellipsis.start
+        self.children = []
+
+
 def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['literal-word'] |= parsers.ref_parser(
-        'none-word') | parsers.ref_parser('not-impl-word')
+        'none-word') | parsers.ref_parser('not-impl-word') | parsers.ref_parser('ellipsis-word')
 
     # This parses a none word.
     # none word = NONE ;
@@ -31,3 +38,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     # This parses a not-impl word.
     # not-impl word = NOTIMPL ;
     parsers['not-impl-word'] = parsers.token('NOTIMPL').map(NotImplWordNode)
+
+    # This parses an ellipsis word.
+    # ellipsis word = ELLIPSIS ;
+    parsers['ellipsis-word'] = parsers.token('ELLIPSIS').map(EllipsisWordNode)
