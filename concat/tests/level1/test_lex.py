@@ -1,7 +1,7 @@
 import concat.level1.lex as lex
 import concat.level0.lex
 import unittest
-from typing import Tuple
+from typing import Tuple, Dict, Sequence
 
 
 # TODO: Put token handling helpers in their own module.
@@ -9,7 +9,7 @@ TokenTuple = Tuple[str, str, Tuple[int, int], Tuple[int, int]]
 
 
 class TestSmallExamples(unittest.TestCase):
-    examples = {
+    examples: Dict[str, Sequence[TokenTuple]] = {
         'None\n': (  # newline is important
             ('ENCODING', 'utf-8', (0, 0), (0, 0)),
             ('NONE', 'None', (1, 0), (1, 4)),
@@ -28,11 +28,29 @@ class TestSmallExamples(unittest.TestCase):
             ('ELLIPSIS', 'Ellipsis', (1, 4), (1, 12)),
             ('NEWLINE', '\n', (1, 12), (1, 13)),
             ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        '[9]\n': (
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('LSQB', '[', (1, 0), (1, 1)),
+            ('NUMBER', '9', (1, 1), (1, 2)),
+            ('RSQB', ']', (1, 2), (1, 3)),
+            ('NEWLINE', '\n', (1, 3), (1, 4)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        '[7:8]\n': (
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('LSQB', '[', (1, 0), (1, 1)),
+            ('NUMBER', '7', (1, 1), (1, 2)),
+            ('COLON', ':', (1, 2), (1, 3)),
+            ('NUMBER', '8', (1, 3), (1, 4)),
+            ('RSQB', ']', (1, 4), (1, 5)),
+            ('NEWLINE', '\n', (1, 5), (1, 6)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
         )
     }
 
     def test_examples(self) -> None:
-        for example in type(self).examples:
+        for example in self.examples:
             with self.subTest(example=example):
                 tokens = []
                 lex.lexer.input(example)
@@ -42,7 +60,7 @@ class TestSmallExamples(unittest.TestCase):
                         break
                     tokens.append(token)
 
-                expectationPairs = zip(tokens, type(self).examples[example])
+                expectationPairs = zip(tokens, self.examples[example])
                 self.assertTrue(
                     all(map(self._matches_token, expectationPairs)))
 

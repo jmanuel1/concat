@@ -5,6 +5,7 @@ This parser is designed to extend the level zero parser.
 from concat.level0.lex import Token
 import concat.level0.parse
 from typing import Iterable, List
+import parsy
 
 
 class NoneWordNode(concat.level0.parse.WordNode):
@@ -39,6 +40,15 @@ class SubscriptionWordNode(concat.level0.parse.WordNode):
             self.location = self.children[0].location
 
 
+class SliceWordNode(concat.level0.parse.WordNode):
+    def __init__(self, children_pair: Iterable[Iterable[concat.level0.parse.WordNode]]):
+        super().__init__()
+        self.left_children, self.right_children = children_pair
+        self.children = list(self.left_children) + list(self.right_children)
+        if self.children:
+            self.location = self.children[0]
+
+
 def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['literal-word'] |= (
         parsers.ref_parser('none-word')
@@ -63,3 +73,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     # This parses a subscription word.
     # subscription word = LSQB, word*, RSQB ;
     parsers['subscription-word'] = parsers.token('LSQB') >> parsers.ref_parser('word').many().map(SubscriptionWordNode) << parsers.token('RSQB')
+
+    # This parses a lice word.
+    # slice word = LSQB, word*, COLON, word*, RSQB ;
+    parsers['slice-word'] = parsy.seq((parsers.token('LSQB') >> parsers.ref_parser('word').many() << parsers.token('COLON')), (parsers.ref_parser('word').many() << parsers.token('RSQB'))).map(SliceWordNode)

@@ -49,6 +49,16 @@ class TestSmallExamples(unittest.TestCase):
             ('RSQB', ']', (1, 2), (1, 3)),
             ('NEWLINE', '\n', (1, 3), (1, 4)),
             ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        '[7:8]\n': to_tokens(
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('LSQB', '[', (1, 0), (1, 1)),
+            ('NUMBER', '7', (1, 1), (1, 2)),
+            ('COLON', ':', (1, 2), (1, 3)),
+            ('NUMBER', '8', (1, 3), (1, 4)),
+            ('RSQB', ']', (1, 4), (1, 5)),
+            ('NEWLINE', '\n', (1, 5), (1, 6)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
         )
     }
 
