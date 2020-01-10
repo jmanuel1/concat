@@ -41,6 +41,14 @@ class TestSmallExamples(unittest.TestCase):
             ('ELLIPSIS', 'Ellipsis', (1, 4), (1, 12)),
             ('NEWLINE', '\n', (1, 12), (1, 13)),
             ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        '[9]\n': to_tokens(
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('LSQB', '[', (1, 0), (1, 1)),
+            ('NUMBER', '9', (1, 1), (1, 2)),
+            ('RSQB', ']', (1, 2), (1, 3)),
+            ('NEWLINE', '\n', (1, 3), (1, 4)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
         )
     }
 
