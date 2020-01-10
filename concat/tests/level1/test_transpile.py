@@ -30,3 +30,20 @@ class TestSubVisitors(unittest.TestCase):
         value = cast(ast.NameConstant, cast(ast.Call, py_node).args[0]).value
         self.assertIs(value, None,
                       msg='Python None node does not contain `None`')
+
+    def test_not_impl_word_visitor(self) -> None:
+        not_impl = Token()
+        not_impl.start = (0, 0)
+        node = concat.level1.parse.NotImplWordNode(not_impl)
+        try:
+            py_node = self.__visitors['not-impl-word'].visit(node)
+        except concat.level0.transpile.VisitFailureException:
+            message_template = '{} was not accepted by the not-impl-word '
+            'visitor'
+            message = message_template.format(node)
+            self.fail(msg=message)
+        self.assertIsInstance(
+            py_node, ast.Call, msg='Python node is not a call')
+        identifier = cast(ast.Name, cast(ast.Call, py_node).args[0]).id
+        message = 'Python Name node does not contain "NotImplemented"'
+        self.assertEqual(identifier, 'NotImplemented', msg=message)

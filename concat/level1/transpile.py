@@ -37,3 +37,18 @@ def level_1_extension(
         return py_node
 
     visitors['none-word'] = none_word_visitor
+
+    # Converts a NotImplWordNode to the Python expression
+    # `push(NotImplemented)`.
+    @FunctionalVisitor
+    def not_impl_word_visitor(node: concat.level0.parse.Node):
+        if not isinstance(node, concat.level1.parse.NotImplWordNode):
+            raise VisitFailureException
+        load = ast.Load()
+        not_impl = ast.Name(id='NotImplemented', ctx=load)
+        push_func = ast.Name(id='push', ctx=load)
+        py_node = ast.Call(func=push_func, args=[not_impl], keywords=[])
+        py_node.lineno, py_node.col_offset = node.location
+        return py_node
+
+    visitors['not-impl-word'] = not_impl_word_visitor
