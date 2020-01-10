@@ -19,6 +19,6 @@ class TestExecute(unittest.TestCase):
         module = ast.Module(body=[])
         globals: Dict[str, object] = {}
         concat.level1.execute.execute('<test>', module, globals)
-        for name in ['to_int', 'to_bool', 'to_complex', 'len']:
-            message = 'preamble did not add {}'.format(name)
+        for name in ['to_int', 'to_bool', 'to_complex', 'len', 'getitem']:
+            message = 'preamble did not add "{}"'.format(name)
             self.assertIn(name, globals, msg=message)
