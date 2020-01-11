@@ -12,6 +12,7 @@ def _do_preamble(globals: Dict[str, object]) -> None:
     globals['to_complex'] = concat.level1.stdlib.pyinterop.to_complex
     globals['len'] = concat.level1.stdlib.pyinterop.len
     globals['getitem'] = concat.level1.stdlib.pyinterop.getitem
+    globals['to_float'] = concat.level1.stdlib.pyinterop.to_float
 
 
 def execute(
