@@ -25,8 +25,11 @@ class Lexer:
         token = self.__level_0_lexer.token()
         if token and token.type == 'NAME' and token.value == 'NotImplemented':
             token.type = 'NOTIMPL'
-        if token and token.type == 'NAME' and token.value == 'Ellipsis':
+        elif token and token.type == 'NAME' and token.value == 'Ellipsis':
             token.type = 'ELLIPSIS'
+        # this eval could become unsafe we ever wanted sandboxing or something
+        elif token and token.type == 'STRING' and isinstance(eval(token.value), bytes):
+            token.type = 'BYTES'
         return token
 
 

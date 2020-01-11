@@ -46,6 +46,12 @@ class TestSmallExamples(unittest.TestCase):
             ('RSQB', ']', (1, 4), (1, 5)),
             ('NEWLINE', '\n', (1, 5), (1, 6)),
             ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        "b'bytes'\n": (
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('BYTES', "b'bytes'", (1, 0), (1, 8)),
+            ('NEWLINE', '\n', (1, 8), (1, 9)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
         )
     }
 
