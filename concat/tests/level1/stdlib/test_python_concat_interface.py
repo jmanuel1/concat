@@ -3,7 +3,7 @@
 Tests that the boundary between Python and Concat is correct."""
 import unittest
 import concat.level1.stdlib.pyinterop
-from typing import List
+from typing import List, cast
 
 
 class TestObjectFactories(unittest.TestCase):
@@ -24,3 +24,12 @@ class TestObjectFactories(unittest.TestCase):
         concat.level1.stdlib.pyinterop.to_bool(stack, stash)
         message = 'to_bool has incorrect stack effect'
         self.assertEqual(stack, [True], msg=message)
+
+    def test_to_float(self) -> None:
+        """Test that to_float works."""
+        stack: List[object] = [10]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.to_float(stack, stash)
+        message = 'to_float has incorrect stack effect'
+        self.assertIsInstance(stack[0], float, msg='to_float does not push a float')
+        self.assertAlmostEqual(cast(float, stack[0]), 10.0, 0, msg=message)
