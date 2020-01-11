@@ -41,10 +41,10 @@ class SubscriptionWordNode(concat.level0.parse.WordNode):
 
 
 class SliceWordNode(concat.level0.parse.WordNode):
-    def __init__(self, children_pair: Iterable[Iterable[concat.level0.parse.WordNode]]):
+    def __init__(self, children: Iterable[Iterable[concat.level0.parse.WordNode]]):
         super().__init__()
-        self.left_children, self.right_children = children_pair
-        self.children = list(self.left_children) + list(self.right_children)
+        self.start_children, self.stop_children, self.step_children = children
+        self.children = [*self.start_children, *self.stop_children, *self.step_children]
         if self.children:
             self.location = self.children[0]
 
@@ -74,6 +74,20 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     # subscription word = LSQB, word*, RSQB ;
     parsers['subscription-word'] = parsers.token('LSQB') >> parsers.ref_parser('word').many().map(SubscriptionWordNode) << parsers.token('RSQB')
 
-    # This parses a lice word.
-    # slice word = LSQB, word*, COLON, word*, RSQB ;
-    parsers['slice-word'] = parsy.seq((parsers.token('LSQB') >> parsers.ref_parser('word').many() << parsers.token('COLON')), (parsers.ref_parser('word').many() << parsers.token('RSQB'))).map(SliceWordNode)
+    # This parses a slice word.
+    # slice word = LSQB, word*, COLON, word*, [ COLON, word* ], RSQB ;
+    @parsy.generate('slice word')
+    def slice_word_parser():
+        yield parsers.token('LSQB')
+        start = yield parsers.ref_parser('word').many()
+        yield parsers.token('COLON')
+        stop = yield parsers.ref_parser('word').many()
+        none = concat.level0.lex.Token()
+        none.type = 'NONE'
+        step = [NoneWordNode(none)]
+        if (yield parsers.token('COLON').optional()):
+            step = yield parsers['word'].many()
+        yield parsers.token('RSQB')
+        return SliceWordNode([start, stop, step])
+
+    parsers['slice-word'] = slice_word_parser
