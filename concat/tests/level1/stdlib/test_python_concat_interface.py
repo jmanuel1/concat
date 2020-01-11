@@ -14,5 +14,13 @@ class TestObjectFactories(unittest.TestCase):
         stack = [10, '89']
         stash: List[object] = []
         concat.level1.stdlib.pyinterop.to_int(stack, stash)
-        message = 'py_call has incorrect stack effect'
+        message = 'to_int has incorrect stack effect'
         self.assertEqual(stack, [89], msg=message)
+
+    def test_to_bool(self) -> None:
+        """Test that to_bool works."""
+        stack: List[object] = [10]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.to_bool(stack, stash)
+        message = 'to_bool has incorrect stack effect'
+        self.assertEqual(stack, [True], msg=message)

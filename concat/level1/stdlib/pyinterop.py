@@ -11,3 +11,8 @@ def to_int(stack: List[object], stash: List[object]) -> None:
         stack.append(int(x))  # type: ignore
     else:
         stack.append(int(x, base=base))  # type: ignore
+
+
+def to_bool(stack: List[object], stash: List[object]) -> None:
+    """x -- bool(x)"""
+    stack.append(bool(stack.pop()))
