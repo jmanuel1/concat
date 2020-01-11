@@ -49,6 +49,17 @@ class SliceWordNode(concat.level0.parse.WordNode):
             self.location = self.children[0]
 
 
+class OperatorWordNode(concat.level0.parse.WordNode):
+    pass
+
+
+class MinusWordNode(OperatorWordNode):
+    def __init__(self, minus: concat.level0.lex.Token):
+        super().__init__()
+        self.children = []
+        self.location = minus.start
+
+
 def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['literal-word'] |= (
         parsers.ref_parser('none-word')
@@ -68,7 +79,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     # ellipsis word = ELLIPSIS ;
     parsers['ellipsis-word'] = parsers.token('ELLIPSIS').map(EllipsisWordNode)
 
-    parsers['word'] |= parsers.ref_parser('subscription-word') | parsers.ref_parser('slice-word')
+    parsers['word'] |= parsers.ref_parser('subscription-word') | parsers.ref_parser('slice-word') | parsers.ref_parser('operator-word')
 
     # This parses a subscription word.
     # subscription word = LSQB, word*, RSQB ;
@@ -91,3 +102,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         return SliceWordNode([start, stop, step])
 
     parsers['slice-word'] = slice_word_parser
+
+    parsers['operator-word'] = parsers.ref_parser('minus-word')
+
+    parsers['minus-word'] = parsers.token('MINUS').map(MinusWordNode)
