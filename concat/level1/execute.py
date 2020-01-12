@@ -13,6 +13,10 @@ def _do_preamble(globals: Dict[str, object]) -> None:
     globals['len'] = concat.level1.stdlib.pyinterop.len
     globals['getitem'] = concat.level1.stdlib.pyinterop.getitem
     globals['to_float'] = concat.level1.stdlib.pyinterop.to_float
+    globals['decode_bytes'] = concat.level1.stdlib.pyinterop.decode_bytes
+    globals['to_tuple'] = concat.level1.stdlib.pyinterop.to_tuple
+    globals['to_bytes'] = concat.level1.stdlib.pyinterop.to_bytes
+    globals['to_list'] = concat.level1.stdlib.pyinterop.to_list
 
 
 def execute(
