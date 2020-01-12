@@ -19,6 +19,8 @@ from typing_extensions import Protocol
 import concat.level0.parse
 
 
+# TODO: move all visitor combinator implementation to new module
+
 NodeType1 = TypeVar('NodeType1')
 NodeType1_contra = TypeVar('NodeType1_contra', contravariant=True)
 NodeType2 = TypeVar('NodeType2')
@@ -42,6 +44,12 @@ class Visitor(abc.ABC, Generic[NodeType1_contra, ReturnType1_co]):
     @abc.abstractmethod
     def visit(self, node: NodeType1_contra) -> ReturnType1_co:
         pass
+
+    def then(self, other: 'Visitor[NodeType1_contra, ReturnType2]') -> 'Visitor[NodeType1_contra, ReturnType2]':
+        @FunctionalVisitor
+        def visitor(node: NodeType1_contra) -> ReturnType2:
+            return Sequence(self, other).visit(node)[1]
+        return visitor
 
 
 class FunctionalVisitor(Visitor[NodeType1, ReturnType1]):
