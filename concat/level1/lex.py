@@ -23,14 +23,22 @@ class Lexer:
     def token(self) -> Optional[concat.level0.lex.Token]:
         """Return the next token as a Token object."""
         token = self.__level_0_lexer.token()
-        if token and token.type == 'NAME' and token.value == 'NotImplemented':
-            token.type = 'NOTIMPL'
-        elif token and token.type == 'NAME' and token.value == 'Ellipsis':
-            token.type = 'ELLIPSIS'
+        if token is None:
+            return None
+        if token.type == 'NAME':
+            if token.value == 'NotImplemented':
+                token.type = 'NOTIMPL'
+            elif token.value == 'Ellipsis':
+                token.type = 'ELLIPSIS'
+            elif token.value == 'del':
+                token.type = 'DEL'
         # this eval could become unsafe we ever wanted sandboxing or something
-        elif token and token.type == 'STRING' and isinstance(eval(token.value), bytes):
+        elif token.type == 'STRING' and self.__is_bytes_literal(token.value):
             token.type = 'BYTES'
         return token
+
+    def __is_bytes_literal(self, literal: str) -> bool:
+        return isinstance(eval(literal), bytes)
 
 
 lexer = Lexer()
