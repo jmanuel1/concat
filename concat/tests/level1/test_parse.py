@@ -11,17 +11,20 @@ TokenTuple = Tuple[str, str, Tuple[int, int], Tuple[int, int]]
 
 
 def to_token(tupl: TokenTuple) -> Token:
+    """Make a Token object out of tuple."""
     token = Token()
     token.type, token.value, token.start, token.end = tupl
     return token
 
 
 def to_tokens(*tokTuples: TokenTuple) -> Iterable[Token]:
+    """Make an iterable of Token objects out of the arguments of tuples."""
     for tupl in tokTuples:
         yield to_token(tupl)
 
 
 class TestSmallExamples(unittest.TestCase):
+    """Test that parser recognizes small example programs (token sequences)."""
     examples = {
         'None\n': to_tokens(  # newline is important
             ('ENCODING', 'utf-8', (0, 0), (0, 0)),
@@ -70,6 +73,12 @@ class TestSmallExamples(unittest.TestCase):
             ('MINUS', '-', (1, 7), (1, 8)),
             ('RSQB', ']', (1, 8), (1, 9)),
             ('NEWLINE', '\n', (1, 9), (1, 10)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        "b'bytes'\n": to_tokens(
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('BYTES', "b'bytes'", (1, 0), (1, 8)),
+            ('NEWLINE', '\n', (1, 8), (1, 9)),
             ('ENDMARKER', '', (2, 0), (2, 0))
         )
     }

@@ -60,11 +60,18 @@ class MinusWordNode(OperatorWordNode):
         self.location = minus.start
 
 
+class BytesWordNode(concat.level0.parse.WordNode):
+    def __init__(self, bytes: concat.level0.lex.Token):
+        super().__init__()
+        self.children = []
+        self.location = bytes.start
+        self.value = eval(bytes.value)
 def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
-    parsers['literal-word'] |= (
-        parsers.ref_parser('none-word')
-        | parsers.ref_parser('not-impl-word')
-        | parsers.ref_parser('ellipsis-word')
+    parsers['literal-word'] |= parsy.alt(
+        parsers.ref_parser('none-word'),
+        parsers.ref_parser('not-impl-word'),
+        parsers.ref_parser('ellipsis-word'),
+        parsers.ref_parser('bytes-word'),
     )
 
     # This parses a none word.
@@ -106,3 +113,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['operator-word'] = parsers.ref_parser('minus-word')
 
     parsers['minus-word'] = parsers.token('MINUS').map(MinusWordNode)
+
+    # This parses a bytes word.
+    # bytes word = BYTES ;
+    parsers['bytes-word'] = parsers.token('BYTES').map(BytesWordNode)
