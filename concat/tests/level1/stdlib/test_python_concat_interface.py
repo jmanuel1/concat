@@ -127,3 +127,35 @@ class TestBuiltinAnalogs(unittest.TestCase):
         concat.level1.stdlib.pyinterop.len(stack, stash)
         message = 'len has incorrect stack effect'
         self.assertEqual(stack, [2], msg=message)
+
+    def test_ord(self) -> None:
+        """Test that ord works."""
+        stack: List[object] = ['a']
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.ord(stack, stash)
+        message = 'ord has incorrect stack effect'
+        self.assertEqual(stack, [ord('a')], msg=message)
+
+    def test_chr(self) -> None:
+        """Test that chr works."""
+        stack: List[object] = [ord('a')]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.chr(stack, stash)
+        message = 'chr has incorrect stack effect'
+        self.assertEqual(stack, ['a'], msg=message)
+
+    def test_encode_str(self) -> None:
+        """Test that encode_str works."""
+        stack: List[object] = [None, None, 'a']
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.encode_str(stack, stash)
+        message = 'encode_str has incorrect stack effect'
+        self.assertEqual(stack, [b'a'], msg=message)
+
+    def test_decode_bytes(self) -> None:
+        """Test that decode_bytes works."""
+        stack: List[object] = [None, None, b'a']
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.decode_bytes(stack, stash)
+        message = 'decode_bytes has incorrect stack effect'
+        self.assertEqual(stack, ['a'], msg=message)

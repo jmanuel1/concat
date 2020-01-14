@@ -50,6 +50,25 @@ def to_str(stack: List[object], stash: List[object]) -> None:
         stack.append(str(object, encoding, errors))  # type: ignore
 
 
+def ord(stack: List[object], stash: List[object]) -> None:
+    """c -- ord(c)"""
+    stack.append(builtins.ord(cast(Union[str, bytes], stack.pop())))
+
+
+def chr(stack: List[object], stash: List[object]) -> None:
+    """i -- chr(i)"""
+    stack.append(builtins.chr(cast(int, stack.pop())))
+
+
+def encode_str(stack: List[object], stash: List[object]) -> None:
+    """errors encoding receiver -- receiver.encode(encoding, errors)"""
+    receiver, encoding, errors = (stack.pop() for _ in range(3))
+    encoding = 'utf-8' if encoding is None else encoding
+    errors = 'strict' if errors is None else errors
+    stack.append(cast(str, receiver).encode(
+        cast(str, encoding), cast(str, errors)))
+
+
 def to_bytes(stack: List[object], stash: List[object]) -> None:
     """errors encoding source -- bytes(source, encoding, errors)"""
     source, encoding, errors = (stack.pop() for _ in range(3))
@@ -61,6 +80,15 @@ def to_bytes(stack: List[object], stash: List[object]) -> None:
     else:
         stack.append(bytes(cast(str, source), cast(
             str, encoding), cast(str, errors)))
+
+
+def decode_bytes(stack: List[object], stash: List[object]) -> None:
+    """errors encoding receiver -- receiver.decode(encoding, errors)"""
+    receiver, encoding, errors = (stack.pop() for _ in range(3))
+    encoding = 'utf-8' if encoding is None else encoding
+    errors = 'strict' if errors is None else errors
+    stack.append(cast(bytes, receiver).decode(
+        cast(str, encoding), cast(str, errors)))
 
 
 def to_tuple(stack: List[object], stash: List[object]) -> None:
