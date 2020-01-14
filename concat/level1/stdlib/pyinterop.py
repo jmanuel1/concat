@@ -3,6 +3,12 @@ from typing import List, cast, Sized, Sequence, Union, Iterable, Mapping
 import builtins
 
 
+__all__ = ['to_int', 'to_bool', 'to_float', 'to_complex', 'len',
+           'getitem', 'to_slice', 'to_str', 'ord', 'chr', 'encode_str',
+           'to_bytes', 'to_bytearray', 'to_set', 'to_list', 'to_tuple',
+           'decode_bytes', 'add_to_set', 'to_frozenset', 'to_dict']
+
+
 def to_int(stack: List[object], stash: List[object]) -> None:
     """base x -- int(x, base=base)"""
     x, base = stack.pop(), stack.pop()
@@ -36,6 +42,15 @@ def to_complex(stack: List[object], stash: List[object]) -> None:
 def len(stack: List[object], stash: List[object]) -> None:
     """s -- len(s)"""
     stack.append(builtins.len(cast(Sized, stack.pop())))
+
+
+def getitem(stack: List[object], stash: List[object]) -> None:
+    """a i -- a[i]"""
+    i = cast(Union[int, slice], stack.pop())
+    a = cast(Sequence[object], stack.pop())
+    stack.append(a[i])
+
+
 def to_slice(stack: List[object], stash: List[object]) -> None:
     """step stop start -- slice(start, stop, step)"""
     stack.append(slice(stack.pop(), stack.pop(), stack.pop()))
