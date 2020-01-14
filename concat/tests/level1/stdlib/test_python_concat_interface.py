@@ -159,3 +159,11 @@ class TestBuiltinAnalogs(unittest.TestCase):
         concat.level1.stdlib.pyinterop.decode_bytes(stack, stash)
         message = 'decode_bytes has incorrect stack effect'
         self.assertEqual(stack, ['a'], msg=message)
+
+    def test_add_to_set(self) -> None:
+        """Test that add_to_set works."""
+        stack: List[object] = [None, {None, b'a'}]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.add_to_set(stack, stash)
+        message = 'add_to_set has incorrect stack effect'
+        self.assertEqual(stack, [], msg=message)

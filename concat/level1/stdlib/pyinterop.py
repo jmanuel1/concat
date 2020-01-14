@@ -125,6 +125,12 @@ def to_set(stack: List[object], stash: List[object]) -> None:
         stack.append(set(cast(Iterable[object], iterable)))
 
 
+def add_to_set(stack: List[object], stash: List[object]) -> None:
+    """elem receiver -- receiver.add(elem)"""
+    receiver, elem = (stack.pop() for _ in range(2))
+    cast(set, receiver).add(elem)
+
+
 def to_frozenset(stack: List[object], stash: List[object]) -> None:
     """iterable -- frozenset(iterable)"""
     iterable = stack.pop()
