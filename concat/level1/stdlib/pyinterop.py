@@ -1,5 +1,6 @@
 """Concat-Python interoperation helpers."""
-from typing import List
+from typing import List, cast, Sized, Sequence, Union, Iterable, Mapping
+import builtins
 
 
 def to_int(stack: List[object], stash: List[object]) -> None:
@@ -32,6 +33,9 @@ def to_complex(stack: List[object], stash: List[object]) -> None:
         stack.append(complex(real, imag))  # type: ignore
 
 
+def len(stack: List[object], stash: List[object]) -> None:
+    """s -- len(s)"""
+    stack.append(builtins.len(cast(Sized, stack.pop())))
 def to_slice(stack: List[object], stash: List[object]) -> None:
     """step stop start -- slice(start, stop, step)"""
     stack.append(slice(stack.pop(), stack.pop(), stack.pop()))
@@ -82,3 +86,30 @@ def to_bytearray(stack: List[object], stash: List[object]) -> None:
     else:
         stack.append(bytearray(cast(str, source), cast(
             str, encoding), cast(str, errors)))
+
+
+def to_set(stack: List[object], stash: List[object]) -> None:
+    """iterable -- set(iterable)"""
+    iterable = stack.pop()
+    if iterable is None:
+        stack.append(set())
+    else:
+        stack.append(set(cast(Iterable[object], iterable)))
+
+
+def to_frozenset(stack: List[object], stash: List[object]) -> None:
+    """iterable -- frozenset(iterable)"""
+    iterable = stack.pop()
+    if iterable is None:
+        stack.append(frozenset())
+    else:
+        stack.append(frozenset(cast(Iterable[object], iterable)))
+
+
+def to_dict(stack: List[object], stash: List[object]) -> None:
+    """iterable -- dict(iterable)"""
+    iterable = stack.pop()
+    if iterable is None:
+        stack.append({})
+    else:
+        stack.append(dict(cast(Union[Mapping, Iterable], iterable)))

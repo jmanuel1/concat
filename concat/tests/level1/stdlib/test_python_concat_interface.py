@@ -93,3 +93,37 @@ class TestObjectFactories(unittest.TestCase):
         concat.level1.stdlib.pyinterop.to_bytearray(stack, stash)
         message = 'to_list has incorrect stack effect'
         self.assertEqual(stack, [bytearray(5)], msg=message)
+
+    def test_to_set(self) -> None:
+        """Test that to_set works."""
+        stack: List[object] = [[None, None, 5]]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.to_set(stack, stash)
+        message = 'to_set has incorrect stack effect'
+        self.assertEqual(stack, [{None, 5}], msg=message)
+
+    def test_to_frozenset(self) -> None:
+        """Test that to_frozenset works."""
+        stack: List[object] = [[None, None, 5]]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.to_frozenset(stack, stash)
+        message = 'to_frozenset has incorrect stack effect'
+        self.assertEqual(stack, [frozenset({None, 5})], msg=message)
+
+    def test_to_dict(self) -> None:
+        """Test that to_dict works."""
+        stack: List[object] = [[(None, None), (5, True)]]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.to_dict(stack, stash)
+        message = 'to_dict has incorrect stack effect'
+        self.assertEqual(stack, [{None: None, 5: True}], msg=message)
+
+
+class TestBuiltinAnalogs(unittest.TestCase):
+    def test_len(self) -> None:
+        """Test that len works."""
+        stack: List[object] = [[10, 20]]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.len(stack, stash)
+        message = 'len has incorrect stack effect'
+        self.assertEqual(stack, [2], msg=message)
