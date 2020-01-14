@@ -44,3 +44,41 @@ def to_str(stack: List[object], stash: List[object]) -> None:
         stack.append(str(object))
     else:
         stack.append(str(object, encoding, errors))  # type: ignore
+
+
+def to_bytes(stack: List[object], stash: List[object]) -> None:
+    """errors encoding source -- bytes(source, encoding, errors)"""
+    source, encoding, errors = (stack.pop() for _ in range(3))
+    if errors is None:
+        if encoding is None:
+            stack.append(bytes(source))  # type: ignore
+        else:
+            stack.append(bytes(cast(str, source), cast(str, encoding)))
+    else:
+        stack.append(bytes(cast(str, source), cast(
+            str, encoding), cast(str, errors)))
+
+
+def to_tuple(stack: List[object], stash: List[object]) -> None:
+    """iterable -- tuple(iterable)"""
+    iterable = cast(Iterable[object], stack.pop())
+    stack.append(tuple(() if iterable is None else iterable))
+
+
+def to_list(stack: List[object], stash: List[object]) -> None:
+    """iterable -- list(iterable)"""
+    iterable = cast(Iterable[object], stack.pop())
+    stack.append(list([] if iterable is None else iterable))
+
+
+def to_bytearray(stack: List[object], stash: List[object]) -> None:
+    """errors encoding source -- bytearray(source, encoding, errors)"""
+    source, encoding, errors = (stack.pop() for _ in range(3))
+    if errors is None:
+        if encoding is None:
+            stack.append(bytearray(source))  # type: ignore
+        else:
+            stack.append(bytearray(cast(str, source), cast(str, encoding)))
+    else:
+        stack.append(bytearray(cast(str, source), cast(
+            str, encoding), cast(str, errors)))

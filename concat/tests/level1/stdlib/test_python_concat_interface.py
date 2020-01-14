@@ -61,3 +61,35 @@ class TestObjectFactories(unittest.TestCase):
         concat.level1.stdlib.pyinterop.to_str(stack, stash)
         message = 'to_str has incorrect stack effect'
         self.assertEqual(stack, ['5'], msg=message)
+
+    def test_to_bytes(self) -> None:
+        """Test that to_bytes works."""
+        stack: List[object] = [None, None, 5]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.to_bytes(stack, stash)
+        message = 'to_bytes has incorrect stack effect'
+        self.assertEqual(stack, [bytes(5)], msg=message)
+
+    def test_to_tuple(self) -> None:
+        """Test that to_tuple works."""
+        stack: List[object] = [[None, None, 5]]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.to_tuple(stack, stash)
+        message = 'to_tuple has incorrect stack effect'
+        self.assertEqual(stack, [(None, None, 5)], msg=message)
+
+    def test_to_list(self) -> None:
+        """Test that to_list works."""
+        stack: List[object] = [[None, None, 5]]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.to_list(stack, stash)
+        message = 'to_list has incorrect stack effect'
+        self.assertEqual(stack, [[None, None, 5]], msg=message)
+
+    def test_to_bytearray(self) -> None:
+        """Test that to_bytearray works."""
+        stack: List[object] = [None, None, 5]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.to_bytearray(stack, stash)
+        message = 'to_list has incorrect stack effect'
+        self.assertEqual(stack, [bytearray(5)], msg=message)
