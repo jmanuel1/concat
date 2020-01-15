@@ -4,7 +4,7 @@ This parser is designed to extend the level zero parser.
 """
 from concat.level0.lex import Token
 import concat.level0.parse
-from typing import Iterable, List
+from typing import Iterable, List, Tuple, Sequence
 import parsy
 
 
@@ -41,10 +41,14 @@ class SubscriptionWordNode(concat.level0.parse.WordNode):
 
 
 class SliceWordNode(concat.level0.parse.WordNode):
-    def __init__(self, children: Iterable[Iterable[concat.level0.parse.WordNode]]):
+    def __init__(
+        self,
+        children: Iterable[Iterable[concat.level0.parse.WordNode]]
+    ):
         super().__init__()
         self.start_children, self.stop_children, self.step_children = children
-        self.children = [*self.start_children, *self.stop_children, *self.step_children]
+        self.children = [*self.start_children,
+                         *self.stop_children, *self.step_children]
         if self.children:
             self.location = self.children[0]
 
@@ -66,12 +70,23 @@ class BytesWordNode(concat.level0.parse.WordNode):
         self.children = []
         self.location = bytes.start
         self.value = eval(bytes.value)
+class TupleWordNode(concat.level0.parse.WordNode):
+    def __init__(self, element_words: Iterable[Iterable[concat.level0.parse.WordNode]], location: Tuple[int, int]):
+        super().__init__()
+        self.tuple_children = element_words
+        self.children = []
+        self.location = location
+        for children in self.tuple_children:
+            self.children += list(children)
+
+
 def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['literal-word'] |= parsy.alt(
         parsers.ref_parser('none-word'),
         parsers.ref_parser('not-impl-word'),
         parsers.ref_parser('ellipsis-word'),
         parsers.ref_parser('bytes-word'),
+        parsers.ref_parser('tuple-word'),
     )
 
     # This parses a none word.
@@ -117,3 +132,27 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     # This parses a bytes word.
     # bytes word = BYTES ;
     parsers['bytes-word'] = parsers.token('BYTES').map(BytesWordNode)
+
+    # This parses a tuple word.
+    # tuple word = LPAR, ([ word* ], COMMA | word+, (COMMA, word+)+, [ COMMA ]), RPAR ;
+    @parsy.generate('tuple word')
+    def tuple_word_parser():
+        # TODO: reflect the grammar in the code better
+        location = (yield parsers.token('LPAR')).start
+        element_words = []
+        element_words.append((yield parsers['word'].many()))
+        yield parsers.token('COMMA')
+        if (yield parsers.token('RPAR').optional()):
+            # 0 or 1-length tuple
+            length = 1 if element_words[0] else 0
+            return TupleWordNode(element_words[0:length], location)
+        # >= 2-length tuples; there must be no 'empty words'
+        if not element_words[0]:
+            yield parsy.fail('word before first comma in tuple longer than 1')
+        element_words.append((yield parsers['word'].at_least(1)))
+        element_words += (yield (parsers.token('COMMA') >> parsers['word'].at_least(1)).many())
+        yield parsers.token('COMMA').optional()
+        yield parsers.token('RPAR')
+        return TupleWordNode(element_words, location)
+
+    parsers['tuple-word'] = tuple_word_parser
