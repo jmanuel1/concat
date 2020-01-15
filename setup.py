@@ -1,9 +1,10 @@
 """Setup script for concat."""
 from setuptools import setup, find_packages  # type: ignore
+import concat
 
 setup(
     name='concat',
-    version='0.1.2.dev1',
+    version=concat.version,
     description='An experimental concatenative Python-based programming language',  # noqa
     long_description=open('README.md').read(),
     url='https://github.com/jmanuel1/concat',
