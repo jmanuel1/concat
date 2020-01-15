@@ -26,12 +26,9 @@ class Lexer:
         if token is None:
             return None
         if token.type == 'NAME':
-            if token.value == 'NotImplemented':
-                token.type = 'NOTIMPL'
-            elif token.value == 'Ellipsis':
-                token.type = 'ELLIPSIS'
-            elif token.value == 'del':
-                token.type = 'DEL'
+            type_map = {'NotImplemented': 'NOTIMPL',
+                        'Ellipsis': 'ELLIPSIS', 'del': 'DEL', 'yield': 'YIELD', 'async': 'ASYNC'}
+            token.type = type_map.get(token.value, token.type)
         # this eval could become unsafe we ever wanted sandboxing or something
         elif token.type == 'STRING' and self.__is_bytes_literal(token.value):
             token.type = 'BYTES'
