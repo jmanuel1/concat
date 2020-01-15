@@ -2,6 +2,7 @@
 import concat.level0.execute
 import concat.level1.stdlib.pyinterop
 import concat.level1.stdlib.pyinterop.user_defined_function
+import concat.level1.stdlib.pyinterop.method
 from typing import Dict
 import ast
 
@@ -24,6 +25,7 @@ def _do_preamble(globals: Dict[str, object]) -> None:
     globals['to_frozenset'] = concat.level1.stdlib.pyinterop.to_frozenset
     globals['to_dict'] = concat.level1.stdlib.pyinterop.to_dict
     globals['user_defined_function'] = concat.level1.stdlib.pyinterop.user_defined_function
+    globals['method'] = concat.level1.stdlib.pyinterop.method
 
 
 def execute(
