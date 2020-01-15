@@ -1,6 +1,7 @@
 """This module takes the transpiler/compiler output and executes it."""
 import concat.level0.execute
 import concat.level1.stdlib.pyinterop
+import concat.level1.stdlib.pyinterop.user_defined_function
 from typing import Dict
 import ast
 
@@ -22,6 +23,7 @@ def _do_preamble(globals: Dict[str, object]) -> None:
     globals['add_to_set'] = concat.level1.stdlib.pyinterop.add_to_set
     globals['to_frozenset'] = concat.level1.stdlib.pyinterop.to_frozenset
     globals['to_dict'] = concat.level1.stdlib.pyinterop.to_dict
+    globals['user_defined_function'] = concat.level1.stdlib.pyinterop.user_defined_function
 
 
 def execute(
