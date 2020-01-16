@@ -5,31 +5,27 @@ This parser is designed to extend the level zero parser.
 from concat.level0.lex import Token
 import concat.level0.parse
 from typing import Iterable, List, Tuple, Sequence
+import abc
 import parsy
 
 
-class NoneWordNode(concat.level0.parse.WordNode):
-
-    def __init__(self, none: Token):
+class SingletonWordNode(abc.ABC, concat.level0.parse.WordNode):
+    def __init__(self, token: Token):
         super().__init__()
-        self.location = none.start
+        self.location = token.start
         self.children = []
 
 
-class NotImplWordNode(concat.level0.parse.WordNode):
-
-    def __init__(self, not_impl: Token):
-        super().__init__()
-        self.location = not_impl.start
-        self.children = []
+class NoneWordNode(SingletonWordNode):
+    pass
 
 
-class EllipsisWordNode(concat.level0.parse.WordNode):
+class NotImplWordNode(SingletonWordNode):
+    pass
 
-    def __init__(self, ellipsis: Token):
-        super().__init__()
-        self.location = ellipsis.start
-        self.children = []
+
+class EllipsisWordNode(SingletonWordNode):
+    pass
 
 
 class SubscriptionWordNode(concat.level0.parse.WordNode):
