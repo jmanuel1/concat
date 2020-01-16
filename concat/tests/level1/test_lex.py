@@ -106,6 +106,13 @@ class TestSmallExamples(unittest.TestCase):
             ('NUMBER', '5', (1, 15), (1, 16)),
             ('NEWLINE', '\n', (1, 16), (1, 17)),
             ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'word await\n': (
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('NAME', 'word', (1, 0), (1, 4)),
+            ('AWAIT', 'await', (1, 5), (1, 10)),
+            ('NEWLINE', '\n', (1, 10), (1, 11)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
         )
     }
 
