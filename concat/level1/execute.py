@@ -3,6 +3,8 @@ import concat.level0.execute
 import concat.level1.stdlib.pyinterop
 import concat.level1.stdlib.pyinterop.user_defined_function
 import concat.level1.stdlib.pyinterop.method
+import concat.level1.stdlib.pyinterop.coroutine
+import concat.level1.stdlib.pyinterop.math
 from typing import Dict
 import ast
 
@@ -26,6 +28,10 @@ def _do_preamble(globals: Dict[str, object]) -> None:
     globals['to_dict'] = concat.level1.stdlib.pyinterop.to_dict
     globals['user_defined_function'] = concat.level1.stdlib.pyinterop.user_defined_function
     globals['method'] = concat.level1.stdlib.pyinterop.method
+    globals['with_async'] = concat.level1.stdlib.pyinterop.with_async
+    globals['for_async'] = concat.level1.stdlib.pyinterop.for_async
+    globals['coroutine'] = concat.level1.stdlib.pyinterop.coroutine
+    globals['math'] = concat.level1.stdlib.pyinterop.math
 
 
 def execute(
