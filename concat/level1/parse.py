@@ -76,6 +76,16 @@ class TupleWordNode(concat.level0.parse.WordNode):
             self.children += list(children)
 
 
+class ListWordNode(concat.level0.parse.WordNode):
+    def __init__(self, element_words: Iterable[Iterable[concat.level0.parse.WordNode]], location: Tuple[int, int]):
+        super().__init__()
+        self.list_children = element_words
+        self.children = []
+        self.location = location
+        for children in self.list_children:
+            self.children += list(children)
+
+
 def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['literal-word'] |= parsy.alt(
         parsers.ref_parser('none-word'),
@@ -83,6 +93,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         parsers.ref_parser('ellipsis-word'),
         parsers.ref_parser('bytes-word'),
         parsers.ref_parser('tuple-word'),
+        parsers.ref_parser('list-word'),
     )
 
     # This parses a none word.
@@ -152,3 +163,27 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         return TupleWordNode(element_words, location)
 
     parsers['tuple-word'] = tuple_word_parser
+
+    # This parses a list word.
+    # list word = LSQB, ([ word* ], COMMA | word+, (COMMA, word+)+, [ COMMA ]), RSQB ;
+    @parsy.generate('list word')
+    def list_word_parser():
+        # TODO: reflect the grammar in the code better
+        location = (yield parsers.token('LSQB')).start
+        element_words = []
+        element_words.append((yield parsers['word'].many()))
+        yield parsers.token('COMMA')
+        if (yield parsers.token('RSQB').optional()):
+            # 0 or 1-length list
+            length = 1 if element_words[0] else 0
+            return ListWordNode(element_words[0:length], location)
+        # >= 2-length lists; there must be no 'empty words'
+        if not element_words[0]:
+            yield parsy.fail('word before first comma in list longer than 1')
+        element_words.append((yield parsers['word'].at_least(1)))
+        element_words += (yield (parsers.token('COMMA') >> parsers['word'].at_least(1)).many())
+        yield parsers.token('COMMA').optional()
+        yield parsers.token('RSQB')
+        return ListWordNode(element_words, location)
+
+    parsers['list-word'] = list_word_parser

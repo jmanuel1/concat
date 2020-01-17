@@ -90,6 +90,14 @@ class TestSmallExamples(unittest.TestCase):
             ('NEWLINE', '\n', (1, 4), (1, 5)),
             ('ENDMARKER', '', (2, 0), (2, 0))
         ),
+        '[,]\n': to_tokens(
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('LSQB', '[', (1, 0), (1, 1)),
+            ('COMMA', ',', (1, 1), (1, 2)),
+            ('RSQB', ']', (1, 2), (1, 3)),
+            ('NEWLINE', '\n', (1, 3), (1, 4)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
         '(1,2,3)\n': to_tokens(
             ('ENCODING', 'utf-8', (0, 0), (0, 0)),
             ('LPAR', '(', (1, 0), (1, 1)),
