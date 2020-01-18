@@ -66,6 +66,8 @@ class BytesWordNode(concat.level0.parse.WordNode):
         self.children = []
         self.location = bytes.start
         self.value = eval(bytes.value)
+
+
 class TupleWordNode(concat.level0.parse.WordNode):
     def __init__(self, element_words: Iterable[Iterable[concat.level0.parse.WordNode]], location: Tuple[int, int]):
         super().__init__()
@@ -84,6 +86,13 @@ class ListWordNode(concat.level0.parse.WordNode):
         self.location = location
         for children in self.list_children:
             self.children += list(children)
+
+
+class DelStatementNode(concat.level0.parse.StatementNode):
+    def __init__(self, targets: Sequence[concat.level0.parse.WordNode]):
+        super().__init__()
+        self.children = targets
+        self.location = targets[0].location
 
 
 def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
@@ -108,11 +117,13 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     # ellipsis word = ELLIPSIS ;
     parsers['ellipsis-word'] = parsers.token('ELLIPSIS').map(EllipsisWordNode)
 
-    parsers['word'] |= parsers.ref_parser('subscription-word') | parsers.ref_parser('slice-word') | parsers.ref_parser('operator-word')
+    parsers['word'] |= parsers.ref_parser(
+        'subscription-word') | parsers.ref_parser('slice-word') | parsers.ref_parser('operator-word')
 
     # This parses a subscription word.
     # subscription word = LSQB, word*, RSQB ;
-    parsers['subscription-word'] = parsers.token('LSQB') >> parsers.ref_parser('word').many().map(SubscriptionWordNode) << parsers.token('RSQB')
+    parsers['subscription-word'] = parsers.token('LSQB') >> parsers.ref_parser(
+        'word').many().map(SubscriptionWordNode) << parsers.token('RSQB')
 
     # This parses a slice word.
     # slice word = LSQB, word*, COLON, word*, [ COLON, word* ], RSQB ;
@@ -187,3 +198,27 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         return ListWordNode(element_words, location)
 
     parsers['list-word'] = list_word_parser
+
+    parsers['statement'] |= parsers.ref_parser('del-statement')
+
+    # Parsers a del statement.
+    # del statement = DEL, target words ;
+    # target words = target word, (COMMA, target word)*, [ COMMA ] ;
+    # target word = name word | LPAR, target words, RPAR | LSQB, target words, RQSB | attribute word | subscription word | slice word ;
+    parsers['del-statement'] = parsers.token(
+        'DEL') >> parsers.ref_parser('target-words').map(DelStatementNode)
+
+    # TODO: flatten
+    parsers['target-words'] = parsy.seq(parsers.ref_parser('target-word')) + (parsers.token(
+        'COMMA') >> parsers.ref_parser('target-word')).many() << parsers.token('COMMA').optional()  # type: ignore
+
+    parsers['target-word'] = parsy.alt(
+        parsers.ref_parser('name-word'),
+        parsers.token('LPAR') >> parsers.ref_parser(
+            'target-words') << parsers.token('RPAR'),
+        parsers.token('LSQB') >> parsers.ref_parser(
+            'target-words') << parsers.token('RSQB'),
+        parsers.ref_parser('attribute-word'),
+        parsers.ref_parser('subscription-word'),
+        parsers.ref_parser('slice-word')
+    )

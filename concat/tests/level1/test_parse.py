@@ -120,13 +120,21 @@ class TestSmallExamples(unittest.TestCase):
             ('RPAR', ')', (1, 5), (1, 6)),
             ('NEWLINE', '\n', (1, 6), (1, 7)),
             ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'del .attr\n': to_tokens(
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('DEL', 'del', (1, 0), (1, 3)),
+            ('DOT', '.', (1, 4), (1, 5)),
+            ('NAME', 'attr', (1, 5), (1, 9)),
+            ('NEWLINE', '\n', (1, 9), (1, 10)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
         )
     }
 
     def test_examples(self) -> None:
-        for example in type(self).examples:
+        for example in self.examples:
             with self.subTest(example=example):
-                tokens = type(self).examples[example]
+                tokens = self.examples[example]
                 parsers = concat.level0.parse.ParserDict()
                 parsers.extend_with(concat.level0.parse.level_0_extension)
                 parsers.extend_with(concat.level1.parse.level_1_extension)
