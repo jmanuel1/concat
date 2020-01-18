@@ -5,6 +5,8 @@ import concat.level1.stdlib.pyinterop.user_defined_function
 import concat.level1.stdlib.pyinterop.method
 import concat.level1.stdlib.pyinterop.coroutine
 import concat.level1.stdlib.pyinterop.math
+import concat.level1.stdlib.pyinterop.custom_class
+import concat.level1.stdlib.pyinterop.instance
 from typing import Dict
 import ast
 
@@ -32,6 +34,13 @@ def _do_preamble(globals: Dict[str, object]) -> None:
     globals['for_async'] = concat.level1.stdlib.pyinterop.for_async
     globals['coroutine'] = concat.level1.stdlib.pyinterop.coroutine
     globals['math'] = concat.level1.stdlib.pyinterop.math
+    globals['import_module'] = concat.level1.stdlib.pyinterop.import_module
+    globals['import_advanced'] = concat.level1.stdlib.pyinterop.import_advanced
+    globals['custom_class'] = concat.level1.stdlib.pyinterop.custom_class
+    globals['instance'] = concat.level1.stdlib.pyinterop.instance
+    globals['open'] = concat.level1.stdlib.pyinterop.open
+    globals['popen'] = concat.level1.stdlib.pyinterop.popen
+    globals['fdopen'] = concat.level1.stdlib.pyinterop.fdopen
 
 
 def execute(

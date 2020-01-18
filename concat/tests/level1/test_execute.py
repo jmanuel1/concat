@@ -9,7 +9,7 @@ class TestExecute(unittest.TestCase):
              'decode_bytes', 'to_tuple', 'to_bytes', 'to_list', 'to_bytearray',
              'to_set', 'add_to_set', 'to_frozenset', 'to_dict',
              'user_defined_function', 'method', 'with_async', 'for_async',
-             'coroutine', 'math']
+             'coroutine', 'math', 'import_module', 'import_advanced', 'custom_class', 'instance', 'open', 'popen', 'fdopen']
 
     def setUp(self) -> None:
         pass
