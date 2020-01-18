@@ -90,6 +90,33 @@ class TestSmallExamples(unittest.TestCase):
             ('NEWLINE', '\n', (1, 9), (1, 10)),
             ('ENDMARKER', '', (2, 0), (2, 0))
         ),
+        '{1,2,3,}\n': (
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('LBRACE', '{', (1, 0), (1, 1)),
+            ('NUMBER', '1', (1, 1), (1, 2)),
+            ('COMMA', ',', (1, 2), (1, 3)),
+            ('NUMBER', '2', (1, 3), (1, 4)),
+            ('COMMA', ',', (1, 4), (1, 5)),
+            ('NUMBER', '3', (1, 5), (1, 6)),
+            ('COMMA', ',', (1, 6), (1, 7)),
+            ('RBRACE', '}', (1, 7), (1, 8)),
+            ('NEWLINE', '\n', (1, 8), (1, 9)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        "{'a':1,'b':2}\n": (
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('LBRACE', '{', (1, 0), (1, 1)),
+            ('STRING', "'a'", (1, 1), (1, 4)),
+            ('COLON', ':', (1, 4), (1, 5)),
+            ('NUMBER', '1', (1, 5), (1, 6)),
+            ('COMMA', ',', (1, 6), (1, 7)),
+            ('STRING', "'b'", (1, 7), (1, 10)),
+            ('COLON', ':', (1, 10), (1, 11)),
+            ('NUMBER', '2', (1, 11), (1, 12)),
+            ('RBRACE', '}', (1, 12), (1, 13)),
+            ('NEWLINE', '\n', (1, 13), (1, 14)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
         'word yield\n': (
             ('ENCODING', 'utf-8', (0, 0), (0, 0)),
             ('NAME', 'word', (1, 0), (1, 4)),
@@ -114,6 +141,15 @@ class TestSmallExamples(unittest.TestCase):
             ('NEWLINE', '\n', (1, 10), (1, 11)),
             ('ENDMARKER', '', (2, 0), (2, 0))
         ),
+        'import a.submodule\n': (
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('IMPORT', 'import', (1, 0), (1, 6)),
+            ('NAME', 'a', (1, 7), (1, 8)),
+            ('DOT', '.', (1, 8), (1, 9)),
+            ('NAME', 'submodule', (1, 9), (1, 18)),
+            ('NEWLINE', '\n', (1, 18), (1, 19)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
         'import a as b\n': (
             ('ENCODING', 'utf-8', (0, 0), (0, 0)),
             ('IMPORT', 'import', (1, 0), (1, 6)),
@@ -121,6 +157,16 @@ class TestSmallExamples(unittest.TestCase):
             ('AS', 'as', (1, 9), (1, 11)),
             ('NAME', 'b', (1, 12), (1, 13)),
             ('NEWLINE', '\n', (1, 13), (1, 14)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'from .a import b\n': (
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('FROM', 'from', (1, 0), (1, 4)),
+            ('DOT', '.', (1, 5), (1, 6)),
+            ('NAME', 'a', (1, 6), (1, 7)),
+            ('IMPORT', 'import', (1, 8), (1, 14)),
+            ('NAME', 'b', (1, 15), (1, 16)),
+            ('NEWLINE', '\n', (1, 16), (1, 17)),
             ('ENDMARKER', '', (2, 0), (2, 0))
         ),
         'from .a import b as c\n': (
@@ -133,6 +179,15 @@ class TestSmallExamples(unittest.TestCase):
             ('AS', 'as', (1, 17), (1, 19)),
             ('NAME', 'c', (1, 20), (1, 21)),
             ('NEWLINE', '\n', (1, 21), (1, 22)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'from a import *\n': (
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('FROM', 'from', (1, 0), (1, 4)),
+            ('NAME', 'a', (1, 5), (1, 6)),
+            ('IMPORT', 'import', (1, 7), (1, 13)),
+            ('STAR', '*', (1, 14), (1, 15)),
+            ('NEWLINE', '\n', (1, 15), (1, 16)),
             ('ENDMARKER', '', (2, 0), (2, 0))
         ),
         'class A: pass\n': (
@@ -165,6 +220,28 @@ class TestSmallExamples(unittest.TestCase):
             ('COLON', ':', (1, 10), (1, 11)),
             ('NAME', 'pass', (1, 12), (1, 16)),
             ('NEWLINE', '\n', (1, 16), (1, 17)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'def test: pass\n': (
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('DEF', 'def', (1, 0), (1, 3)),
+            ('NAME', 'test', (1, 4), (1, 8)),
+            ('COLON', ':', (1, 8), (1, 9)),
+            ('NAME', 'pass', (1, 10), (1, 14)),
+            ('NEWLINE', '\n', (1, 14), (1, 15)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+            ),
+        'class A metaclass=$M: pass\n': (
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('CLASS', 'class', (1, 0), (1, 5)),
+            ('NAME', 'A', (1, 6), (1, 7)),
+            ('NAME', 'metaclass', (1, 8), (1, 17)),
+            ('EQUAL', '=', (1, 17), (1, 18)),
+            ('DOLLARSIGN', '$', (1, 18), (1, 19)),
+            ('NAME', 'M', (1, 19), (1, 20)),
+            ('COLON', ':', (1, 20), (1, 21)),
+            ('NAME', 'pass', (1, 22), (1, 26)),
+            ('NEWLINE', '\n', (1, 26), (1, 27)),
             ('ENDMARKER', '', (2, 0), (2, 0))
         )
     }
