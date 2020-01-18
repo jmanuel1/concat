@@ -134,6 +134,38 @@ class TestSmallExamples(unittest.TestCase):
             ('NAME', 'c', (1, 20), (1, 21)),
             ('NEWLINE', '\n', (1, 21), (1, 22)),
             ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'class A: pass\n': (
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('CLASS', 'class', (1, 0), (1, 5)),
+            ('NAME', 'A', (1, 6), (1, 7)),
+            ('COLON', ':', (1, 7), (1, 8)),
+            ('NAME', 'pass', (1, 9), (1, 13)),
+            ('NEWLINE', '\n', (1, 13), (1, 14)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'class A @decorator: pass\n': (
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('CLASS', 'class', (1, 0), (1, 5)),
+            ('NAME', 'A', (1, 6), (1, 7)),
+            ('AT', '@', (1, 8), (1, 9)),
+            ('NAME', 'decorator', (1, 9), (1, 18)),
+            ('COLON', ':', (1, 18), (1, 19)),
+            ('NAME', 'pass', (1, 20), (1, 24)),
+            ('NEWLINE', '\n', (1, 24), (1, 25)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'class A(B): pass\n': (
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('CLASS', 'class', (1, 0), (1, 5)),
+            ('NAME', 'A', (1, 6), (1, 7)),
+            ('LPAR', '(', (1, 7), (1, 8)),
+            ('NAME', 'B', (1, 8), (1, 9)),
+            ('RPAR', ')', (1, 9), (1, 10)),
+            ('COLON', ':', (1, 10), (1, 11)),
+            ('NAME', 'pass', (1, 12), (1, 16)),
+            ('NEWLINE', '\n', (1, 16), (1, 17)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
         )
     }
 
