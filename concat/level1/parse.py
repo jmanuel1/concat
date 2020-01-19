@@ -68,6 +68,15 @@ class BytesWordNode(concat.level0.parse.WordNode):
         self.value = eval(bytes.value)
 
 
+class IterableWordNode(abc.ABC, concat.level0.parse.WordNode):
+    def __init__(self, element_words: Iterable[Iterable[concat.level0.parse.WordNode]], location: Tuple[int, int]):
+        super().__init__()
+        self.children = []
+        self.location = location
+        for children in element_words:
+            self.children += list(children)
+
+
 class TupleWordNode(concat.level0.parse.WordNode):
     def __init__(self, element_words: Iterable[Iterable[concat.level0.parse.WordNode]], location: Tuple[int, int]):
         super().__init__()
@@ -88,6 +97,12 @@ class ListWordNode(concat.level0.parse.WordNode):
             self.children += list(children)
 
 
+class SetWordNode(IterableWordNode):
+    def __init__(self, element_words: Iterable[Iterable[concat.level0.parse.WordNode]], location: Tuple[int, int]):
+        super().__init__(element_words, location)
+        self.set_children = element_words
+
+
 class DelStatementNode(concat.level0.parse.StatementNode):
     def __init__(self, targets: Sequence[concat.level0.parse.WordNode]):
         super().__init__()
@@ -103,6 +118,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         parsers.ref_parser('bytes-word'),
         parsers.ref_parser('tuple-word'),
         parsers.ref_parser('list-word'),
+        parsers.ref_parser('set-word'),
     )
 
     # This parses a none word.
@@ -198,6 +214,35 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         return ListWordNode(element_words, location)
 
     parsers['list-word'] = list_word_parser
+
+    @parsy.generate('word list')
+    def word_list_parser():
+        element_words = []
+        element_words.append((yield parsers['word'].many()))
+        yield parsers.token('COMMA')
+        if (yield parsers.token('RPAR').optional()):
+            # 0 or 1-length tuple
+            length = 1 if element_words[0] else 0
+            return element_words[0:length]
+        # >= 2-length tuples; there must be no 'empty words'
+        if not element_words[0]:
+            yield parsy.fail('word before first comma in tuple longer than 1')
+        element_words.append((yield parsers['word'].at_least(1)))
+        element_words += (yield (parsers.token('COMMA') >> parsers['word'].at_least(1)).many())
+        yield parsers.token('COMMA').optional()
+        return element_words
+
+    # This parses a set word.
+    # list word = LBRACE, word list, RBRACE ;
+    # word list = ([ word* ], COMMA | word+, (COMMA, word+)+, [ COMMA ]) ;
+    @parsy.generate('set word')
+    def set_word_parser():
+        location = (yield parsers.token('LBRACE')).start
+        element_words = yield word_list_parser
+        yield parsers.token('RBRACE')
+        return SetWordNode(element_words, location)
+
+    parsers['set-word'] = set_word_parser
 
     parsers['statement'] |= parsers.ref_parser('del-statement')
 
