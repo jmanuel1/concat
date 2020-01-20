@@ -123,6 +123,12 @@ class DictWordNode(IterableWordNode):
             yield value
 
 
+class YieldWordNode(concat.level0.parse.WordNode):
+    def __init__(self, token: Token):
+        self.location = token.start
+        self.children = []
+
+
 def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['literal-word'] |= parsy.alt(
         parsers.ref_parser('none-word'),
@@ -147,8 +153,12 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     # ellipsis word = ELLIPSIS ;
     parsers['ellipsis-word'] = parsers.token('ELLIPSIS').map(EllipsisWordNode)
 
-    parsers['word'] |= parsers.ref_parser(
-        'subscription-word') | parsers.ref_parser('slice-word') | parsers.ref_parser('operator-word')
+    parsers['word'] |= parsy.alt(
+        parsers.ref_parser('subscription-word'),
+        parsers.ref_parser('slice-word'),
+        parsers.ref_parser('operator-word'),
+        parsers.ref_parser('yield-word'),
+    )
 
     # This parses a subscription word.
     # subscription word = LSQB, word*, RSQB ;
@@ -285,6 +295,8 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
 
     key_value_pair = parsy.seq(parsers.ref_parser('word').many(
     ) << parsers.token('COLON'), parsers.ref_parser('word').many())
+
+    parsers['yield-word'] = parsers.token('YIELD').map(YieldWordNode)
 
     parsers['statement'] |= parsers.ref_parser('del-statement')
 

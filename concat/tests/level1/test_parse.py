@@ -155,6 +155,13 @@ class TestSmallExamples(unittest.TestCase):
             ('RBRACE', '}', (1, 12), (1, 13)),
             ('NEWLINE', '\n', (1, 13), (1, 14)),
             ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'word yield\n': to_tokens(
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('NAME', 'word', (1, 0), (1, 4)),
+            ('YIELD', 'yield', (1, 5), (1, 10)),
+            ('NEWLINE', '\n', (1, 10), (1, 11)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
         )
     }
 
