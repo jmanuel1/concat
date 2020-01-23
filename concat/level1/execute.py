@@ -7,6 +7,7 @@ import concat.level1.stdlib.pyinterop.coroutine
 import concat.level1.stdlib.pyinterop.math
 import concat.level1.stdlib.pyinterop.custom_class
 import concat.level1.stdlib.pyinterop.instance
+import concat.level1.stdlib.compositional
 from typing import Dict
 import ast
 
@@ -41,6 +42,8 @@ def _do_preamble(globals: Dict[str, object]) -> None:
     globals['open'] = concat.level1.stdlib.pyinterop.open
     globals['popen'] = concat.level1.stdlib.pyinterop.popen
     globals['fdopen'] = concat.level1.stdlib.pyinterop.fdopen
+    globals['call'] = concat.level1.stdlib.pyinterop.call
+    globals['curry'] = concat.level1.stdlib.compositional.curry
 
 
 def execute(
