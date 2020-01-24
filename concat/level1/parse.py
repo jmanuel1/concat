@@ -4,7 +4,7 @@ This parser is designed to extend the level zero parser.
 """
 from concat.level0.lex import Token
 import concat.level0.parse
-from typing import Iterable, List, Tuple, Sequence
+from typing import Iterable, List, Tuple, Sequence, Optional, Union
 import abc
 import parsy
 
@@ -127,6 +127,17 @@ class YieldWordNode(concat.level0.parse.WordNode):
     def __init__(self, token: Token):
         self.location = token.start
         self.children = []
+
+
+class AsyncFuncdefStatementNode(concat.level0.parse.StatementNode):
+    def __init__(self, name: Token, decorators: Iterable[concat.level0.parse.WordNode], annotation: Optional[Iterable[concat.level0.parse.WordNode]], body: Iterable[Union[concat.level0.parse.WordNode, concat.level0.parse.StatementNode]], location: Tuple[int, int]):
+        self.location = location
+        self.name = name.value
+        self.decorators = decorators
+        self.annotation = annotation
+        self.body = body
+        self.children = [*self.decorators, *
+                         (self.annotation or []), *self.body]
 
 
 def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
@@ -298,7 +309,10 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
 
     parsers['yield-word'] = parsers.token('YIELD').map(YieldWordNode)
 
-    parsers['statement'] |= parsers.ref_parser('del-statement')
+    parsers['statement'] |= parsy.alt(
+        parsers.ref_parser('del-statement'),
+        parsers.ref_parser('async-funcdef-statement'),
+    )
 
     # Parsers a del statement.
     # del statement = DEL, target words ;
@@ -321,3 +335,21 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         parsers.ref_parser('subscription-word'),
         parsers.ref_parser('slice-word')
     )
+
+    # This parses an async function definition.
+    # async funcdef statement = ASYNC, DEF, NAME, decorator*, [ annotation ], COLON, suite ;
+    # decorator = AT, word ;
+    # annotation = RARROW, word* ;
+    # suite = word* | statement | NEWLINE, INDENT, (word | statement, NEWLINE)+, DEDENT ;
+    @parsy.generate('async funcdef statement')
+    def async_funcdef_statement_parser():
+        location = (yield parsers.token('ASYNC')).start
+        yield parsers.token('DEF')
+        name = yield parsers.token('NAME')
+        decorators = yield decorator.many()
+        annotation = yield annotation_parser.optional()
+        yield parsers.token('COLON')
+        body = yield suite
+        return AsyncFuncdefStatementNode(name, decorators, annotation, body, location)
+
+    parsers['async-funcdef-statement'] = async_funcdef_statement_parser

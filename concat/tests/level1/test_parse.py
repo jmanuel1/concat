@@ -162,6 +162,16 @@ class TestSmallExamples(unittest.TestCase):
             ('YIELD', 'yield', (1, 5), (1, 10)),
             ('NEWLINE', '\n', (1, 10), (1, 11)),
             ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'async def fun: 5\n': to_tokens(
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('ASYNC', 'async', (1, 0), (1, 5)),
+            ('DEF', 'def', (1, 6), (1, 9)),
+            ('NAME', 'fun', (1, 10), (1, 13)),
+            ('COLON', ':', (1, 13), (1, 14)),
+            ('NUMBER', '5', (1, 15), (1, 16)),
+            ('NEWLINE', '\n', (1, 16), (1, 17)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
         )
     }
 
