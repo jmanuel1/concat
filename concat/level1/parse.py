@@ -129,6 +129,12 @@ class YieldWordNode(concat.level0.parse.WordNode):
         self.children = []
 
 
+class AwaitWordNode(concat.level0.parse.WordNode):
+    def __init__(self, token: Token):
+        self.location = token.start
+        self.children = []
+
+
 class AsyncFuncdefStatementNode(concat.level0.parse.StatementNode):
     def __init__(self, name: Token, decorators: Iterable[concat.level0.parse.WordNode], annotation: Optional[Iterable[concat.level0.parse.WordNode]], body: Iterable[Union[concat.level0.parse.WordNode, concat.level0.parse.StatementNode]], location: Tuple[int, int]):
         self.location = location
@@ -169,6 +175,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         parsers.ref_parser('slice-word'),
         parsers.ref_parser('operator-word'),
         parsers.ref_parser('yield-word'),
+        parsers.ref_parser('await-word')
     )
 
     # This parses a subscription word.
@@ -308,6 +315,8 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     ) << parsers.token('COLON'), parsers.ref_parser('word').many())
 
     parsers['yield-word'] = parsers.token('YIELD').map(YieldWordNode)
+
+    parsers['await-word'] = parsers.token('AWAIT').map(AwaitWordNode)
 
     parsers['statement'] |= parsy.alt(
         parsers.ref_parser('del-statement'),
