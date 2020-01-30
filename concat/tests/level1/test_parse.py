@@ -228,6 +228,53 @@ class TestSmallExamples(unittest.TestCase):
             ('STAR', '*', (1, 14), (1, 15)),
             ('NEWLINE', '\n', (1, 15), (1, 16)),
             ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'class A: pass\n': to_tokens(
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('CLASS', 'class', (1, 0), (1, 5)),
+            ('NAME', 'A', (1, 6), (1, 7)),
+            ('COLON', ':', (1, 7), (1, 8)),
+            ('NAME', 'pass', (1, 9), (1, 13)),
+            ('NEWLINE', '\n', (1, 13), (1, 14)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'class A @decorator: pass\n': to_tokens(
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('CLASS', 'class', (1, 0), (1, 5)),
+            ('NAME', 'A', (1, 6), (1, 7)),
+            ('AT', '@', (1, 8), (1, 9)),
+            ('NAME', 'decorator', (1, 9), (1, 18)),
+            ('COLON', ':', (1, 18), (1, 19)),
+            ('NAME', 'pass', (1, 20), (1, 24)),
+            ('NEWLINE', '\n', (1, 24), (1, 25)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'class A($B,): pass\n': to_tokens(
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('CLASS', 'class', (1, 0), (1, 5)),
+            ('NAME', 'A', (1, 6), (1, 7)),
+            ('LPAR', '(', (1, 7), (1, 8)),
+            ('DOLLARSIGN', '$', (1, 8), (1, 9)),
+            ('NAME', 'B', (1, 9), (1, 10)),
+            ('COMMA', ',', (1, 10), (1, 11)),
+            ('RPAR', ')', (1, 11), (1, 12)),
+            ('COLON', ':', (1, 12), (1, 13)),
+            ('NAME', 'pass', (1, 14), (1, 18)),
+            ('NEWLINE', '\n', (1, 18), (1, 19)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'class A metaclass=$M: pass\n': to_tokens(
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('CLASS', 'class', (1, 0), (1, 5)),
+            ('NAME', 'A', (1, 6), (1, 7)),
+            ('NAME', 'metaclass', (1, 8), (1, 17)),
+            ('EQUAL', '=', (1, 17), (1, 18)),
+            ('DOLLARSIGN', '$', (1, 18), (1, 19)),
+            ('NAME', 'M', (1, 19), (1, 20)),
+            ('COLON', ':', (1, 20), (1, 21)),
+            ('NAME', 'pass', (1, 22), (1, 26)),
+            ('NEWLINE', '\n', (1, 26), (1, 27)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
         )
     }
 

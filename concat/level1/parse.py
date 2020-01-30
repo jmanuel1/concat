@@ -10,6 +10,12 @@ from typing import Iterable, List, Tuple, Sequence, Optional, Union
 import parsy
 
 
+# Typedefs
+WordsOrStatements = Iterable[
+    Union[concat.level0.parse.WordNode, concat.level0.parse.StatementNode]]
+Location = Tuple[int, int]
+
+
 class SingletonWordNode(abc.ABC, concat.level0.parse.WordNode):
     def __init__(self, token: Token):
         super().__init__()
@@ -166,6 +172,17 @@ class FromImportStatementNode(ImportStatementNode):
 class FromImportStarStatementNode(FromImportStatementNode):
     def __init__(self, module: str):
         super().__init__(module, '*')
+
+
+class ClassdefStatementNode(concat.level0.parse.StatementNode):
+    def __init__(self, name: str, body: WordsOrStatements, location: Location, decorators: Optional[Iterable[concat.level0.parse.WordNode]] = None, bases: Iterable[Iterable[concat.level0.parse.WordNode]] = (), keyword_args: Iterable[Tuple[str, concat.level0.parse.WordNode]] = ()):
+        super().__init__()
+        self.location = location
+        self.children = body
+        self.class_name = name
+        self.decorators = [] if decorators is None else decorators
+        self.bases = bases
+        self.keyword_args = keyword_args
 
 
 def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
@@ -343,6 +360,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['statement'] |= parsy.alt(
         parsers.ref_parser('del-statement'),
         parsers.ref_parser('async-funcdef-statement'),
+        parsers.ref_parser('classdef-statement'),
     )
 
     # Parsers a del statement.
@@ -385,6 +403,18 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
 
     parsers['async-funcdef-statement'] = async_funcdef_statement_parser
 
+    decorator = parsers.token('AT') >> parsers.ref_parser('word')
+
+    @parsy.generate('suite')
+    def suite():
+        words = parsers['word'].many()
+        statement = parsy.seq(parsers['statement'])
+        block_content = (parsers['word'] | parsers['statement']
+                         << parsers.token('NEWLINE')).at_least(1)
+        indented_block = parsers.token('NEWLINE') >> parsers.token(
+            'INDENT') >> block_content << parsers.token('DEDENT')
+        return (yield words | statement | indented_block)
+
     @parsy.generate('module')
     def module():
         name = parsers.token('NAME').map(operator.attrgetter('value'))
@@ -426,3 +456,26 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
 
     parsers['import-statement'] |= (parsers.token('FROM') >> module << parsers.token(
         'IMPORT') << parsers.token('STAR')).map(FromImportStarStatementNode)
+
+    # This parses a class definition statement.
+    # classdef statement = CLASS, NAME, decorator*, [ bases ], keyword arg*, COLON, suite ;
+    # bases = tuple word ;
+    # keyword arg = NAME, EQUAL, word ;
+    @parsy.generate('classdef statement')
+    def classdef_statement_parser():
+        location = (yield parsers.token('CLASS')).start
+        name_token = yield parsers.token('NAME')
+        decorators = yield decorator.many()
+        bases_list = yield bases.optional()
+        keyword_args = yield keyword_arg.many()
+        yield parsers.token('COLON')
+        body = yield suite
+        return ClassdefStatementNode(name_token.value, body, location, decorators, bases_list, keyword_args)
+
+    parsers['classdef-statement'] = classdef_statement_parser
+
+    bases = parsers.ref_parser(
+        'tuple-word').map(operator.attrgetter('tuple_children'))
+
+    keyword_arg = parsy.seq(parsers.token('NAME').map(operator.attrgetter(
+        'value')) << parsers.token('EQUAL'), parsers.ref_parser('word')).map(tuple)
