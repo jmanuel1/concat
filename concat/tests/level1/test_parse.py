@@ -179,6 +179,55 @@ class TestSmallExamples(unittest.TestCase):
             ('AWAIT', 'await', (1, 5), (1, 10)),
             ('NEWLINE', '\n', (1, 10), (1, 11)),
             ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'import a.submodule\n': to_tokens(
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('IMPORT', 'import', (1, 0), (1, 6)),
+            ('NAME', 'a', (1, 7), (1, 8)),
+            ('DOT', '.', (1, 8), (1, 9)),
+            ('NAME', 'submodule', (1, 9), (1, 18)),
+            ('NEWLINE', '\n', (1, 18), (1, 19)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'import a as b\n': to_tokens(
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('IMPORT', 'import', (1, 0), (1, 6)),
+            ('NAME', 'a', (1, 7), (1, 8)),
+            ('AS', 'as', (1, 9), (1, 11)),
+            ('NAME', 'b', (1, 12), (1, 13)),
+            ('NEWLINE', '\n', (1, 13), (1, 14)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'from .a import b\n': to_tokens(
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('FROM', 'from', (1, 0), (1, 4)),
+            ('DOT', '.', (1, 5), (1, 6)),
+            ('NAME', 'a', (1, 6), (1, 7)),
+            ('IMPORT', 'import', (1, 8), (1, 14)),
+            ('NAME', 'b', (1, 15), (1, 16)),
+            ('NEWLINE', '\n', (1, 16), (1, 17)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'from .a import b as c\n': to_tokens(
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('FROM', 'from', (1, 0), (1, 4)),
+            ('DOT', '.', (1, 5), (1, 6)),
+            ('NAME', 'a', (1, 6), (1, 7)),
+            ('IMPORT', 'import', (1, 8), (1, 14)),
+            ('NAME', 'b', (1, 15), (1, 16)),
+            ('AS', 'as', (1, 17), (1, 19)),
+            ('NAME', 'c', (1, 20), (1, 21)),
+            ('NEWLINE', '\n', (1, 21), (1, 22)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'from a import *\n': to_tokens(
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('FROM', 'from', (1, 0), (1, 4)),
+            ('NAME', 'a', (1, 5), (1, 6)),
+            ('IMPORT', 'import', (1, 7), (1, 13)),
+            ('STAR', '*', (1, 14), (1, 15)),
+            ('NEWLINE', '\n', (1, 15), (1, 16)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
         )
     }
 

@@ -4,8 +4,9 @@ This parser is designed to extend the level zero parser.
 """
 from concat.level0.lex import Token
 import concat.level0.parse
-from typing import Iterable, List, Tuple, Sequence, Optional, Union
 import abc
+import operator
+from typing import Iterable, List, Tuple, Sequence, Optional, Union
 import parsy
 
 
@@ -144,6 +145,27 @@ class AsyncFuncdefStatementNode(concat.level0.parse.StatementNode):
         self.body = body
         self.children = [*self.decorators, *
                          (self.annotation or []), *self.body]
+
+
+class ImportStatementNode(concat.level0.parse.ImportStatementNode):
+    def __init__(self, module: str, asname: Optional[str] = None):
+        # delibrately no super
+        self.children = []
+        self.value = module
+        # TODO: stop lying
+        self.location = (0, 0)
+        self.asname = asname
+
+
+class FromImportStatementNode(ImportStatementNode):
+    def __init__(self, relative_module: str, imported_name: str, asname: Optional[str] = None):
+        super().__init__(relative_module, asname)
+        self.imported_name = imported_name
+
+
+class FromImportStarStatementNode(FromImportStatementNode):
+    def __init__(self, module: str):
+        super().__init__(module, '*')
 
 
 def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
@@ -362,3 +384,45 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         return AsyncFuncdefStatementNode(name, decorators, annotation, body, location)
 
     parsers['async-funcdef-statement'] = async_funcdef_statement_parser
+
+    @parsy.generate('module')
+    def module():
+        name = parsers.token('NAME').map(operator.attrgetter('value'))
+        return (yield name.sep_by(parsers.token('DOT'), min=1).concat())
+
+    # This parsers an import statement.
+    # import statement = IMPORT, module, [ AS, NAME ]
+    #   | FROM, relative module, IMPORT, NAME, [ AS, NAME ]
+    #   | FROM, module, IMPORT, STAR;
+    # module = NAME, (DOT, NAME)* ;
+    # relative module = DOT*, module | DOT+ ;
+    @parsy.generate('import statement')
+    def import_statement_parser():
+        module_name = yield (parsers.token('IMPORT') >> module)
+        asname_parser = parsers.token('NAME').map(operator.attrgetter('value'))
+        asname = None
+        if (yield parsers.token('AS').optional()):
+            asname = yield asname_parser
+        return ImportStatementNode(module_name, asname)
+
+    parsers['import-statement'] = import_statement_parser
+
+    @parsy.generate('relative module')
+    def relative_module():
+        dot = parsers.token('DOT').map(operator.attrgetter('value'))
+        return (yield (dot.many().concat() + module) | dot.at_least(1))
+
+    @parsy.generate('from-import statement')
+    def from_import_statement_parser():
+        module = yield parsers.token('FROM') >> relative_module
+        name_parser = parsers.token('NAME').map(operator.attrgetter('value'))
+        imported_name = yield parsers.token('IMPORT') >> name_parser
+        asname = None
+        if (yield parsers.token('AS').optional()):
+            asname = yield name_parser
+        return FromImportStatementNode(module, imported_name, asname)
+
+    parsers['import-statement'] |= from_import_statement_parser
+
+    parsers['import-statement'] |= (parsers.token('FROM') >> module << parsers.token(
+        'IMPORT') << parsers.token('STAR')).map(FromImportStarStatementNode)
