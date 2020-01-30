@@ -8,6 +8,7 @@ import concat.level1.stdlib.pyinterop.math
 import concat.level1.stdlib.pyinterop.custom_class
 import concat.level1.stdlib.pyinterop.instance
 import concat.level1.stdlib.compositional
+import concat.level1.stdlib.shuffle_words
 from typing import Dict
 import ast
 
@@ -44,6 +45,19 @@ def _do_preamble(globals: Dict[str, object]) -> None:
     globals['fdopen'] = concat.level1.stdlib.pyinterop.fdopen
     globals['call'] = concat.level1.stdlib.pyinterop.call
     globals['curry'] = concat.level1.stdlib.compositional.curry
+    globals['drop'] = concat.level1.stdlib.shuffle_words.drop
+    globals['drop_2'] = concat.level1.stdlib.shuffle_words.drop_2
+    globals['drop_3'] = concat.level1.stdlib.shuffle_words.drop_3
+    globals['nip'] = concat.level1.stdlib.shuffle_words.nip
+    globals['nip_2'] = concat.level1.stdlib.shuffle_words.nip_2
+    globals['dup'] = concat.level1.stdlib.shuffle_words.dup
+    globals['dup_2'] = concat.level1.stdlib.shuffle_words.dup_2
+    globals['swap'] = concat.level1.stdlib.shuffle_words.swap
+    globals['dup_3'] = concat.level1.stdlib.shuffle_words.dup_3
+    globals['over'] = concat.level1.stdlib.shuffle_words.over
+    globals['over_2'] = concat.level1.stdlib.shuffle_words.over_2
+    globals['pick'] = concat.level1.stdlib.shuffle_words.pick
+    globals['to_slice'] = concat.level1.stdlib.pyinterop.to_slice
 
 
 def execute(

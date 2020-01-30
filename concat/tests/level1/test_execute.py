@@ -10,7 +10,9 @@ class TestExecute(unittest.TestCase):
              'to_set', 'add_to_set', 'to_frozenset', 'to_dict',
              'user_defined_function', 'method', 'with_async', 'for_async',
              'coroutine', 'math', 'import_module', 'import_advanced',
-             'custom_class', 'instance', 'open', 'popen', 'fdopen', 'curry', 'call']
+             'custom_class', 'instance', 'open', 'popen', 'fdopen', 'curry',
+             'call', 'drop', 'drop_2', 'drop_3', 'nip', 'nip_2', 'dup',
+             'dup_2', 'swap', 'dup_3', 'over', 'over_2', 'pick', 'to_slice']
 
     def setUp(self) -> None:
         pass
