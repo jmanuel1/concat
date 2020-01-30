@@ -153,6 +153,17 @@ class AsyncFuncdefStatementNode(concat.level0.parse.StatementNode):
                          (self.annotation or []), *self.body]
 
 
+class FuncdefStatementNode(concat.level0.parse.StatementNode):
+    def __init__(self, name: Token, decorators: Iterable[concat.level0.parse.WordNode], annotation: Optional[Iterable[concat.level0.parse.WordNode]], body: Iterable[Union[concat.level0.parse.WordNode, concat.level0.parse.StatementNode]], location: Tuple[int, int]):
+        self.location = location
+        self.name = name.value
+        self.decorators = decorators
+        self.annotation = annotation
+        self.body = body
+        self.children = [*self.decorators, *
+                         (self.annotation or []), *self.body]
+
+
 class ImportStatementNode(concat.level0.parse.ImportStatementNode):
     def __init__(self, module: str, asname: Optional[str] = None):
         # delibrately no super
@@ -361,6 +372,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         parsers.ref_parser('del-statement'),
         parsers.ref_parser('async-funcdef-statement'),
         parsers.ref_parser('classdef-statement'),
+        parsers.ref_parser('funcdef-statement')
     )
 
     # Parsers a del statement.
@@ -403,7 +415,24 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
 
     parsers['async-funcdef-statement'] = async_funcdef_statement_parser
 
+    # This parses a function definition.
+    # funcdef statement = DEF, NAME, decorator*, [ annotation ], COLON, suite ;
+    @parsy.generate('funcdef statement')
+    def funcdef_statement_parser():
+        location = yield parsers.token('DEF')
+        name = yield parsers.token('NAME')
+        decorators = yield decorator.many()
+        annotation = yield annotation_parser.optional()
+        yield parsers.token('COLON')
+        body = yield suite
+        return FuncdefStatementNode(name, decorators, annotation, body, location)
+
+    parsers['funcdef-statement'] = funcdef_statement_parser
+
     decorator = parsers.token('AT') >> parsers.ref_parser('word')
+
+    annotation_parser = parsers.token(
+        'RARROW') >> parsers.ref_parser('word').many()
 
     @parsy.generate('suite')
     def suite():

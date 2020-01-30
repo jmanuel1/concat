@@ -263,6 +263,15 @@ class TestSmallExamples(unittest.TestCase):
             ('NEWLINE', '\n', (1, 18), (1, 19)),
             ('ENDMARKER', '', (2, 0), (2, 0))
         ),
+        'def test: pass\n': to_tokens(
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('DEF', 'def', (1, 0), (1, 3)),
+            ('NAME', 'test', (1, 4), (1, 8)),
+            ('COLON', ':', (1, 8), (1, 9)),
+            ('NAME', 'pass', (1, 10), (1, 14)),
+            ('NEWLINE', '\n', (1, 14), (1, 15)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
         'class A metaclass=$M: pass\n': to_tokens(
             ('ENCODING', 'utf-8', (0, 0), (0, 0)),
             ('CLASS', 'class', (1, 0), (1, 5)),
