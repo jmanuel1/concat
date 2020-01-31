@@ -56,15 +56,47 @@ class SliceWordNode(concat.level0.parse.WordNode):
             self.location = self.children[0]
 
 
-class OperatorWordNode(concat.level0.parse.WordNode):
+class OperatorWordNode(abc.ABC, concat.level0.parse.WordNode):
+    def __init__(self, token: concat.level0.lex.Token):
+        super().__init__()
+        self.children = []
+        self.location = token.start
+
+
+class SubtractWordNode(OperatorWordNode):
     pass
 
 
-class MinusWordNode(OperatorWordNode):
-    def __init__(self, minus: concat.level0.lex.Token):
-        super().__init__()
-        self.children = []
-        self.location = minus.start
+class PowerWordNode(OperatorWordNode):
+    pass
+
+
+class InvertWordNode(OperatorWordNode):
+    pass
+
+
+class MulWordNode(OperatorWordNode):
+    pass
+
+
+class MatMulWordNode(OperatorWordNode):
+    pass
+
+
+class FloorDivWordNode(OperatorWordNode):
+    pass
+
+
+class DivWordNode(OperatorWordNode):
+    pass
+
+
+class ModWordNode(OperatorWordNode):
+    pass
+
+
+class AddWordNode(OperatorWordNode):
+    pass
 
 
 class BytesWordNode(concat.level0.parse.WordNode):
@@ -251,9 +283,35 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
 
     parsers['slice-word'] = slice_word_parser
 
-    parsers['operator-word'] = parsers.ref_parser('minus-word')
+    parsers['operator-word'] = parsy.alt(
+        parsers.ref_parser('subtract-word'),
+        parsers.ref_parser('power-word'),
+        parsers.ref_parser('invert-word'),
+        parsers.ref_parser('mul-word'),
+        parsers.ref_parser('mat-mul-word'),
+        parsers.ref_parser('floor-div-word'),
+        parsers.ref_parser('div-word'),
+        parsers.ref_parser('mod-word'),
+        parsers.ref_parser('add-word')
+    )
 
-    parsers['minus-word'] = parsers.token('MINUS').map(MinusWordNode)
+    parsers['invert-word'] = parsers.token('TILDE').map(InvertWordNode)
+
+    parsers['power-word'] = parsers.token('DOUBLESTAR').map(PowerWordNode)
+
+    parsers['subtract-word'] = parsers.token('MINUS').map(SubtractWordNode)
+
+    parsers['mul-word'] = parsers.token('STAR').map(MulWordNode)
+
+    parsers['mat-mul-word'] = parsers.token('AT').map(MatMulWordNode)
+
+    parsers['floor-div-word'] = parsers.token('DOUBLESLASH').map(FloorDivWordNode)
+
+    parsers['div-word'] = parsers.token('SLASH').map(DivWordNode)
+
+    parsers['mod-word'] = parsers.token('PERCENT').map(ModWordNode)
+
+    parsers['add-word'] = parsers.token('PLUS').map(AddWordNode)
 
     # This parses a bytes word.
     # bytes word = BYTES ;
