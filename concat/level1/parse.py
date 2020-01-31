@@ -99,6 +99,14 @@ class AddWordNode(OperatorWordNode):
     pass
 
 
+class LeftShiftWordNode(OperatorWordNode):
+    pass
+
+
+class RightShiftWordNode(OperatorWordNode):
+    pass
+
+
 class BytesWordNode(concat.level0.parse.WordNode):
     def __init__(self, bytes: concat.level0.lex.Token):
         super().__init__()
@@ -292,7 +300,9 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         parsers.ref_parser('floor-div-word'),
         parsers.ref_parser('div-word'),
         parsers.ref_parser('mod-word'),
-        parsers.ref_parser('add-word')
+        parsers.ref_parser('add-word'),
+        parsers.ref_parser('left-shift-word'),
+        parsers.ref_parser('right-shift-word')
     )
 
     parsers['invert-word'] = parsers.token('TILDE').map(InvertWordNode)
@@ -312,6 +322,10 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['mod-word'] = parsers.token('PERCENT').map(ModWordNode)
 
     parsers['add-word'] = parsers.token('PLUS').map(AddWordNode)
+
+    parsers['left-shift-word'] = parsers.token('LEFTSHIFT').map(LeftShiftWordNode)
+
+    parsers['right-shift-word'] = parsers.token('RIGHTSHIFT').map(RightShiftWordNode)
 
     # This parses a bytes word.
     # bytes word = BYTES ;
