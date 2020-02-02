@@ -305,27 +305,23 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         parsers.ref_parser('right-shift-word')
     )
 
-    parsers['invert-word'] = parsers.token('TILDE').map(InvertWordNode)
+    operators = (
+        ('power', 'DOUBLESTAR', PowerWordNode),
+        ('subtract', 'MINUS', SubtractWordNode),
+        ('mul', 'STAR', MulWordNode),
+        ('mat-mul', 'AT', MatMulWordNode),
+        ('floor-div', 'DOUBLESLASH', FloorDivWordNode),
+        ('div', 'SLASH', DivWordNode),
+        ('mod', 'PERCENT', ModWordNode),
+        ('add', 'PLUS', AddWordNode),
+        ('left-shift', 'LEFTSHIFT', LeftShiftWordNode),
+        ('right-shift', 'RIGHTSHIFT', RightShiftWordNode),
+        ('invert', 'TILDE', InvertWordNode),
+    )
 
-    parsers['power-word'] = parsers.token('DOUBLESTAR').map(PowerWordNode)
-
-    parsers['subtract-word'] = parsers.token('MINUS').map(SubtractWordNode)
-
-    parsers['mul-word'] = parsers.token('STAR').map(MulWordNode)
-
-    parsers['mat-mul-word'] = parsers.token('AT').map(MatMulWordNode)
-
-    parsers['floor-div-word'] = parsers.token('DOUBLESLASH').map(FloorDivWordNode)
-
-    parsers['div-word'] = parsers.token('SLASH').map(DivWordNode)
-
-    parsers['mod-word'] = parsers.token('PERCENT').map(ModWordNode)
-
-    parsers['add-word'] = parsers.token('PLUS').map(AddWordNode)
-
-    parsers['left-shift-word'] = parsers.token('LEFTSHIFT').map(LeftShiftWordNode)
-
-    parsers['right-shift-word'] = parsers.token('RIGHTSHIFT').map(RightShiftWordNode)
+    for operator_name, token_type, node_type in operators:
+        parser_name = operator_name + '-word'
+        parsers[parser_name] = parsers.token(token_type).map(node_type)
 
     # This parses a bytes word.
     # bytes word = BYTES ;
