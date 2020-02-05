@@ -56,7 +56,7 @@ class SliceWordNode(concat.level0.parse.WordNode):
             self.location = self.children[0]
 
 
-class OperatorWordNode(abc.ABC, concat.level0.parse.WordNode):
+class OperatorWordNode(concat.level0.parse.WordNode, abc.ABC):
     def __init__(self, token: concat.level0.lex.Token):
         super().__init__()
         self.children = []
@@ -104,6 +104,18 @@ class LeftShiftWordNode(OperatorWordNode):
 
 
 class RightShiftWordNode(OperatorWordNode):
+    pass
+
+
+class BitwiseAndWordNode(OperatorWordNode):
+    pass
+
+
+class BitwiseXorWordNode(OperatorWordNode):
+    pass
+
+
+class BitwiseOrWordNode(OperatorWordNode):
     pass
 
 
@@ -302,7 +314,10 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         parsers.ref_parser('mod-word'),
         parsers.ref_parser('add-word'),
         parsers.ref_parser('left-shift-word'),
-        parsers.ref_parser('right-shift-word')
+        parsers.ref_parser('right-shift-word'),
+        parsers.ref_parser('bitwise-and-word'),
+        parsers.ref_parser('bitwise-xor-word'),
+        parsers.ref_parser('bitwise-or-word'),
     )
 
     operators = (
@@ -316,6 +331,9 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         ('add', 'PLUS', AddWordNode),
         ('left-shift', 'LEFTSHIFT', LeftShiftWordNode),
         ('right-shift', 'RIGHTSHIFT', RightShiftWordNode),
+        ('bitwise-and', 'AMPER', BitwiseAndWordNode),
+        ('bitwise-xor', 'CIRCUMFLEX', BitwiseXorWordNode),
+        ('bitwise-or', 'VBAR', BitwiseOrWordNode),
         ('invert', 'TILDE', InvertWordNode),
     )
 

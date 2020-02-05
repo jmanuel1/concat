@@ -371,6 +371,30 @@ class TestSmallExamples(unittest.TestCase):
             ('RIGHTSHIFT', '>>', (1, 4), (1, 6)),
             ('NEWLINE', '\n', (1, 6), (1, 7)),
             ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        '1 2 &\n': to_tokens(
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('NUMBER', '1', (1, 0), (1, 1)),
+            ('NUMBER', '2', (1, 2), (1, 3)),
+            ('AMPER', '&', (1, 4), (1, 5)),
+            ('NEWLINE', '\n', (1, 5), (1, 6)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        '1 2 ^\n': to_tokens(
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('NUMBER', '1', (1, 0), (1, 1)),
+            ('NUMBER', '2', (1, 2), (1, 3)),
+            ('CIRCUMFLEX', '^', (1, 4), (1, 5)),
+            ('NEWLINE', '\n', (1, 5), (1, 6)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        '1 2 |\n': to_tokens(
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('NUMBER', '1', (1, 0), (1, 1)),
+            ('NUMBER', '2', (1, 2), (1, 3)),
+            ('VBAR', '|', (1, 4), (1, 5)),
+            ('NEWLINE', '\n', (1, 5), (1, 6)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
         )
     }
 
