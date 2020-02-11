@@ -1,30 +1,14 @@
 """Tests that the level 1 parser accepts valid level 1 token streams."""
 import concat.level0.parse
 import concat.level1.parse
-from concat.level0.lex import Token
+from concat.tests.token_util import to_tokens
 import unittest
-from typing import Tuple, Iterable
 import parsy
-
-
-TokenTuple = Tuple[str, str, Tuple[int, int], Tuple[int, int]]
-
-
-def to_token(tupl: TokenTuple) -> Token:
-    """Make a Token object out of tuple."""
-    token = Token()
-    token.type, token.value, token.start, token.end = tupl
-    return token
-
-
-def to_tokens(*tokTuples: TokenTuple) -> Iterable[Token]:
-    """Make an iterable of Token objects out of the arguments of tuples."""
-    for tupl in tokTuples:
-        yield to_token(tupl)
 
 
 class TestSmallExamples(unittest.TestCase):
     """Test that parser recognizes small example programs (token sequences)."""
+    # TODO: Share examples with lexer tests
     examples = {
         'None\n': to_tokens(  # newline is important
             ('ENCODING', 'utf-8', (0, 0), (0, 0)),
