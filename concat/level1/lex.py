@@ -29,9 +29,8 @@ class Lexer:
             type_map = {'NotImplemented': 'NOTIMPL',
                         'Ellipsis': 'ELLIPSIS', 'del': 'DEL', 'yield': 'YIELD',
                         'async': 'ASYNC', 'await': 'AWAIT', 'as': 'AS',
-                        'class': 'CLASS'}
+                        'class': 'CLASS', 'is': 'IS', 'in': 'IN'}
             token.type = type_map.get(token.value, token.type)
-        # this eval could become unsafe we ever wanted sandboxing or something
         elif token.type == 'STRING' and self.__is_bytes_literal(token.value):
             token.type = 'BYTES'
         return token
