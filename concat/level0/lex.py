@@ -47,10 +47,6 @@ class Lexer:
                 tok.type = 'DOLLARSIGN'
         elif tok.value in {'def', 'import', 'None', 'from'}:
             tok.type = tok.value.upper()
-        elif tok.value in {'and', 'or'}:
-            tok.type = 'BIN_BOOL_FUNC'
-        elif tok.value == 'not':
-            tok.type = 'UNARY_BOOL_FUNC'
 
         self._update_position(tok)
         return tok
