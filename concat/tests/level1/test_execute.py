@@ -12,7 +12,8 @@ class TestExecute(unittest.TestCase):
              'coroutine', 'math', 'import_module', 'import_advanced',
              'custom_class', 'instance', 'open', 'popen', 'fdopen', 'curry',
              'call', 'drop', 'drop_2', 'drop_3', 'nip', 'nip_2', 'dup',
-             'dup_2', 'swap', 'dup_3', 'over', 'over_2', 'pick', 'to_slice']
+             'dup_2', 'swap', 'dup_3', 'over', 'over_2', 'pick', 'to_slice',
+             'choose', 'if_then', 'if_not', 'case', 'loop']
 
     def setUp(self) -> None:
         pass

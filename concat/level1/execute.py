@@ -1,7 +1,7 @@
 """This module takes the transpiler/compiler output and executes it."""
 import concat.level0.execute
 import concat.level1.stdlib.pyinterop
-import concat.level1.stdlib.pyinterop.user_defined_function
+import concat.level1.stdlib.pyinterop.user_defined_function as udf
 import concat.level1.stdlib.pyinterop.method
 import concat.level1.stdlib.pyinterop.coroutine
 import concat.level1.stdlib.pyinterop.math
@@ -9,6 +9,7 @@ import concat.level1.stdlib.pyinterop.custom_class
 import concat.level1.stdlib.pyinterop.instance
 import concat.level1.stdlib.compositional
 import concat.level1.stdlib.shuffle_words
+import concat.level1.stdlib.execution
 from typing import Dict
 import ast
 
@@ -30,7 +31,7 @@ def _do_preamble(globals: Dict[str, object]) -> None:
     globals['add_to_set'] = concat.level1.stdlib.pyinterop.add_to_set
     globals['to_frozenset'] = concat.level1.stdlib.pyinterop.to_frozenset
     globals['to_dict'] = concat.level1.stdlib.pyinterop.to_dict
-    globals['user_defined_function'] = concat.level1.stdlib.pyinterop.user_defined_function
+    globals['user_defined_function'] = udf
     globals['method'] = concat.level1.stdlib.pyinterop.method
     globals['with_async'] = concat.level1.stdlib.pyinterop.with_async
     globals['for_async'] = concat.level1.stdlib.pyinterop.for_async
@@ -58,6 +59,11 @@ def _do_preamble(globals: Dict[str, object]) -> None:
     globals['over_2'] = concat.level1.stdlib.shuffle_words.over_2
     globals['pick'] = concat.level1.stdlib.shuffle_words.pick
     globals['to_slice'] = concat.level1.stdlib.pyinterop.to_slice
+    globals['choose'] = concat.level1.stdlib.execution.choose
+    globals['if_then'] = concat.level1.stdlib.execution.if_then
+    globals['if_not'] = concat.level1.stdlib.execution.if_not
+    globals['case'] = concat.level1.stdlib.execution.case
+    globals['loop'] = concat.level1.stdlib.execution.loop
 
 
 def execute(
