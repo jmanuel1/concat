@@ -454,6 +454,26 @@ class TestSmallExamples(unittest.TestCase):
             ('ASSERT', 'assert', (1, 5), (1, 11)),
             ('NEWLINE', '\n', (1, 11), (1, 12)),
             ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'None AnException raise\n': (
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('NONE', 'None', (1, 0), (1, 4)),
+            ('NAME', 'AnException', (1, 5), (1, 16)),
+            ('RAISE', 'raise', (1, 17), (1, 22)),
+            ('NEWLINE', '\n', (1, 22), (1, 23)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        '$() $() try\n': (
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('DOLLARSIGN', '$', (1, 0), (1, 1)),
+            ('LPAR', '(', (1, 1), (1, 2)),
+            ('RPAR', ')', (1, 2), (1, 3)),
+            ('DOLLARSIGN', '$', (1, 4), (1, 5)),
+            ('LPAR', '(', (1, 5), (1, 6)),
+            ('RPAR', ')', (1, 6), (1, 7)),
+            ('TRY', 'try', (1, 8), (1, 11)),
+            ('NEWLINE', '\n', (1, 11), (1, 12)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
         )
     }
 
