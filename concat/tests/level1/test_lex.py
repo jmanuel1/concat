@@ -447,6 +447,13 @@ class TestSmallExamples(unittest.TestCase):
             ('NOT', 'not', (1, 2), (1, 5)),
             ('NEWLINE', '\n', (1, 5), (1, 6)),
             ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        'True assert\n': (
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('TRUE', 'True', (1, 0), (1, 4)),
+            ('ASSERT', 'assert', (1, 5), (1, 11)),
+            ('NEWLINE', '\n', (1, 11), (1, 12)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
         )
     }
 

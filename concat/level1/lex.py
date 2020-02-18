@@ -31,6 +31,8 @@ class Lexer:
                         'async': 'ASYNC', 'await': 'AWAIT', 'as': 'AS',
                         'class': 'CLASS', 'is': 'IS', 'in': 'IN', 'or': 'OR',
                         'and': 'AND', 'not': 'NOT',
+                        'True': 'TRUE',
+                        'assert': 'ASSERT',
             token.type = type_map.get(token.value, token.type)
         elif token.type == 'STRING' and self.__is_bytes_literal(token.value):
             token.type = 'BYTES'
