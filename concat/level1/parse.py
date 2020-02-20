@@ -119,6 +119,38 @@ class BitwiseOrWordNode(OperatorWordNode):
     pass
 
 
+class LessThanWordNode(OperatorWordNode):
+    pass
+
+
+class GreaterThanWordNode(OperatorWordNode):
+    pass
+
+
+class EqualToWordNode(OperatorWordNode):
+    pass
+
+
+class GreaterThanOrEqualToWordNode(OperatorWordNode):
+    pass
+
+
+class LessThanOrEqualToWordNode(OperatorWordNode):
+    pass
+
+
+class NotEqualToWordNode(OperatorWordNode):
+    pass
+
+
+class IsWordNode(OperatorWordNode):
+    pass
+
+
+class InWordNode(OperatorWordNode):
+    pass
+
+
 class BytesWordNode(concat.level0.parse.WordNode):
     def __init__(self, bytes: concat.level0.lex.Token):
         super().__init__()
@@ -318,6 +350,14 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         parsers.ref_parser('bitwise-and-word'),
         parsers.ref_parser('bitwise-xor-word'),
         parsers.ref_parser('bitwise-or-word'),
+        parsers.ref_parser('less-than-word'),
+        parsers.ref_parser('greater-than-word'),
+        parsers.ref_parser('equal-to-word'),
+        parsers.ref_parser('greater-than-or-equal-to-word'),
+        parsers.ref_parser('less-than-or-equal-to-word'),
+        parsers.ref_parser('not-equal-to-word'),
+        parsers.ref_parser('is-word'),
+        parsers.ref_parser('in-word'),
     )
 
     operators = (
@@ -335,6 +375,16 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         ('bitwise-xor', 'CIRCUMFLEX', BitwiseXorWordNode),
         ('bitwise-or', 'VBAR', BitwiseOrWordNode),
         ('invert', 'TILDE', InvertWordNode),
+        ('less-than', 'LESS', LessThanWordNode),
+        ('greater-than', 'GREATER', GreaterThanWordNode),
+        ('equal-to', 'EQEQUAL', EqualToWordNode),
+        ('greater-than-or-equal-to', 'GREATEREQUAL', GreaterThanOrEqualToWordNode),
+        ('less-than-or-equal-to', 'LESSEQUAL', LessThanOrEqualToWordNode),
+        ('not-equal-to', 'NOTEQUAL', NotEqualToWordNode),
+        ('is', 'IS', IsWordNode),
+        # there is not 'is not'; instead we have 'is' and 'not'
+        ('in', 'IN', InWordNode),
+        # there is not 'not in'; instead we have 'in' and 'not'
     )
 
     for operator_name, token_type, node_type in operators:
