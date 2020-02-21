@@ -151,6 +151,18 @@ class InWordNode(OperatorWordNode):
     pass
 
 
+class OrWordNode(OperatorWordNode):
+    pass
+
+
+class AndWordNode(OperatorWordNode):
+    pass
+
+
+class NotWordNode(OperatorWordNode):
+    pass
+
+
 class BytesWordNode(concat.level0.parse.WordNode):
     def __init__(self, bytes: concat.level0.lex.Token):
         super().__init__()
@@ -358,6 +370,9 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         parsers.ref_parser('not-equal-to-word'),
         parsers.ref_parser('is-word'),
         parsers.ref_parser('in-word'),
+        parsers.ref_parser('or-word'),
+        parsers.ref_parser('and-word'),
+        parsers.ref_parser('not-word')
     )
 
     operators = (
@@ -385,6 +400,9 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         # there is not 'is not'; instead we have 'is' and 'not'
         ('in', 'IN', InWordNode),
         # there is not 'not in'; instead we have 'in' and 'not'
+        ('or', 'OR', OrWordNode),
+        ('and', 'AND', AndWordNode),
+        ('not', 'NOT', NotWordNode)
     )
 
     for operator_name, token_type, node_type in operators:
