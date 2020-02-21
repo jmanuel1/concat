@@ -301,7 +301,8 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         parsers.ref_parser('tuple-word'),
         parsers.ref_parser('list-word'),
         parsers.ref_parser('set-word'),
-        parsers.ref_parser('dict-word')
+        parsers.ref_parser('dict-word'),
+        parsers.ref_parser('true-word')
     )
 
     # This parses a none word.
@@ -321,7 +322,8 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         parsers.ref_parser('slice-word'),
         parsers.ref_parser('operator-word'),
         parsers.ref_parser('yield-word'),
-        parsers.ref_parser('await-word')
+        parsers.ref_parser('await-word'),
+        parsers.ref_parser('assert-word'),
     )
 
     # This parses a subscription word.
@@ -518,9 +520,13 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     key_value_pair = parsy.seq(parsers.ref_parser('word').many(
     ) << parsers.token('COLON'), parsers.ref_parser('word').many())
 
+    parsers['true-word'] = parsers.token('TRUE').map(TrueWordNode)
+
     parsers['yield-word'] = parsers.token('YIELD').map(YieldWordNode)
 
     parsers['await-word'] = parsers.token('AWAIT').map(AwaitWordNode)
+
+    parsers['assert-word'] = parsers.token('ASSERT').map(AssertWordNode)
 
     parsers['statement'] |= parsy.alt(
         parsers.ref_parser('del-statement'),
