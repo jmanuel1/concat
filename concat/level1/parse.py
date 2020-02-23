@@ -247,6 +247,12 @@ class AsyncFuncdefStatementNode(concat.level0.parse.StatementNode):
         self.body = body
         self.children = [*self.decorators, *
                          (self.annotation or []), *self.body]
+class RaiseWordNode(SimpleKeywordWordNode):
+    pass
+
+
+class TryWordNode(SimpleKeywordWordNode):
+    pass
 
 
 class FuncdefStatementNode(concat.level0.parse.StatementNode):
@@ -324,6 +330,8 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         parsers.ref_parser('yield-word'),
         parsers.ref_parser('await-word'),
         parsers.ref_parser('assert-word'),
+        parsers.ref_parser('raise-word'),
+        parsers.ref_parser('try-word'),
     )
 
     # This parses a subscription word.
@@ -527,6 +535,10 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['await-word'] = parsers.token('AWAIT').map(AwaitWordNode)
 
     parsers['assert-word'] = parsers.token('ASSERT').map(AssertWordNode)
+
+    parsers['raise-word'] = parsers.token('RAISE').map(RaiseWordNode)
+
+    parsers['try-word'] = parsers.token('TRY').map(TryWordNode)
 
     parsers['statement'] |= parsy.alt(
         parsers.ref_parser('del-statement'),
