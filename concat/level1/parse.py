@@ -4,9 +4,10 @@ This parser is designed to extend the level zero parser.
 """
 from concat.level0.lex import Token
 import concat.level0.parse
+import concat.level1.typecheck
 import abc
 import operator
-from typing import Iterable, List, Tuple, Sequence, Optional, Union
+from typing import Iterable, List, Tuple, Sequence, Optional, Union, Generator
 import parsy
 
 
@@ -244,15 +245,6 @@ class AssertWordNode(SimpleKeywordWordNode):
     pass
 
 
-class AsyncFuncdefStatementNode(concat.level0.parse.StatementNode):
-    def __init__(self, name: Token, decorators: Iterable[concat.level0.parse.WordNode], annotation: Optional[Iterable[concat.level0.parse.WordNode]], body: Iterable[Union[concat.level0.parse.WordNode, concat.level0.parse.StatementNode]], location: Tuple[int, int]):
-        self.location = location
-        self.name = name.value
-        self.decorators = decorators
-        self.annotation = annotation
-        self.body = body
-        self.children = [*self.decorators, *
-                         (self.annotation or []), *self.body]
 class RaiseWordNode(SimpleKeywordWordNode):
     pass
 
@@ -266,7 +258,15 @@ class WithWordNode(SimpleKeywordWordNode):
 
 
 class FuncdefStatementNode(concat.level0.parse.StatementNode):
-    def __init__(self, name: Token, decorators: Iterable[concat.level0.parse.WordNode], annotation: Optional[Iterable[concat.level0.parse.WordNode]], body: Iterable[Union[concat.level0.parse.WordNode, concat.level0.parse.StatementNode]], location: Tuple[int, int]):
+    def __init__(
+        self,
+        name: Token,
+        decorators: Iterable[concat.level0.parse.WordNode],
+        annotation: Optional[Iterable[concat.level0.parse.WordNode]],
+        body: WordsOrStatements,
+        location: Location,
+        stack_effect: Optional[concat.level1.typecheck.StackEffect] = None
+    ):
         self.location = location
         self.name = name.value
         self.decorators = decorators
@@ -274,6 +274,11 @@ class FuncdefStatementNode(concat.level0.parse.StatementNode):
         self.body = body
         self.children = [*self.decorators, *
                          (self.annotation or []), *self.body]
+        self.stack_effect = stack_effect
+
+
+class AsyncFuncdefStatementNode(FuncdefStatementNode):
+    pass
 
 
 class ImportStatementNode(concat.level0.parse.ImportStatementNode):
@@ -583,34 +588,43 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     )
 
     # This parses an async function definition.
-    # async funcdef statement = ASYNC, DEF, NAME, decorator*, [ annotation ], COLON, suite ;
-    # decorator = AT, word ;
-    # annotation = RARROW, word* ;
-    # suite = word* | statement | NEWLINE, INDENT, (word | statement, NEWLINE)+, DEDENT ;
+    # async funcdef statement = ASYNC, funcdef statement ;
     @parsy.generate('async funcdef statement')
-    def async_funcdef_statement_parser():
+    def async_funcdef_statement_parser() -> Generator:
         location = (yield parsers.token('ASYNC')).start
-        yield parsers.token('DEF')
-        name = yield parsers.token('NAME')
-        decorators = yield decorator.many()
-        annotation = yield annotation_parser.optional()
-        yield parsers.token('COLON')
-        body = yield suite
-        return AsyncFuncdefStatementNode(name, decorators, annotation, body, location)
+        func: FuncdefStatementNode = (yield parsers['funcdef-statement'])
+        name = Token()
+        name.value = func.name
+        return AsyncFuncdefStatementNode(
+            name, func.decorators, func.annotation, func.body, location, func.stack_effect)
 
     parsers['async-funcdef-statement'] = async_funcdef_statement_parser
 
     # This parses a function definition.
-    # funcdef statement = DEF, NAME, decorator*, [ annotation ], COLON, suite ;
+    # funcdef statement = DEF, NAME, [ LPAR, stack effect, RPAR ], decorator*,
+    #   [ annotation ], COLON, suite ;
+    # decorator = AT, word ;
+    # annotation = RARROW, word* ;
+    # suite = word* | statement | NEWLINE, INDENT, (word | statement, NEWLINE)+, DEDENT ;
+    # The stack effect syntax is defined within the .typecheck module.
     @parsy.generate('funcdef statement')
-    def funcdef_statement_parser():
+    def funcdef_statement_parser() -> Generator:
         location = yield parsers.token('DEF')
         name = yield parsers.token('NAME')
+        effect_tokens = None
+        if (yield parsers.token('LPAR').optional()):
+            effect_tokens = []
+            while not (yield parsers.token('RPAR').optional()):
+                effect_tokens.append((yield parsy.any_char))
+        if effect_tokens is None:
+            effect = None
+        else:
+            effect = concat.level1.typecheck.parse_stack_effect(effect_tokens)
         decorators = yield decorator.many()
         annotation = yield annotation_parser.optional()
         yield parsers.token('COLON')
         body = yield suite
-        return FuncdefStatementNode(name, decorators, annotation, body, location)
+        return FuncdefStatementNode(name, decorators, annotation, body, location, effect)
 
     parsers['funcdef-statement'] = funcdef_statement_parser
 
