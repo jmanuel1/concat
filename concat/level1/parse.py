@@ -226,16 +226,22 @@ class DictWordNode(IterableWordNode):
             yield value
 
 
-class YieldWordNode(concat.level0.parse.WordNode):
+class SimpleKeywordWordNode(concat.level0.parse.WordNode, abc.ABC):
     def __init__(self, token: Token):
         self.location = token.start
         self.children = []
 
 
-class AwaitWordNode(concat.level0.parse.WordNode):
-    def __init__(self, token: Token):
-        self.location = token.start
-        self.children = []
+class YieldWordNode(SimpleKeywordWordNode):
+    pass
+
+
+class AwaitWordNode(SimpleKeywordWordNode):
+    pass
+
+
+class AssertWordNode(SimpleKeywordWordNode):
+    pass
 
 
 class AsyncFuncdefStatementNode(concat.level0.parse.StatementNode):
@@ -252,6 +258,10 @@ class RaiseWordNode(SimpleKeywordWordNode):
 
 
 class TryWordNode(SimpleKeywordWordNode):
+    pass
+
+
+class WithWordNode(SimpleKeywordWordNode):
     pass
 
 
@@ -332,6 +342,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         parsers.ref_parser('assert-word'),
         parsers.ref_parser('raise-word'),
         parsers.ref_parser('try-word'),
+        parsers.ref_parser('with-word')
     )
 
     # This parses a subscription word.
@@ -539,6 +550,8 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['raise-word'] = parsers.token('RAISE').map(RaiseWordNode)
 
     parsers['try-word'] = parsers.token('TRY').map(TryWordNode)
+
+    parsers['with-word'] = parsers.token('WITH').map(WithWordNode)
 
     parsers['statement'] |= parsy.alt(
         parsers.ref_parser('del-statement'),

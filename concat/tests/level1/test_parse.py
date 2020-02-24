@@ -499,6 +499,16 @@ class TestSmallExamples(unittest.TestCase):
             ('TRY', 'try', (1, 8), (1, 11)),
             ('NEWLINE', '\n', (1, 11), (1, 12)),
             ('ENDMARKER', '', (2, 0), (2, 0))
+        ),
+        '$() ctxmgr with\n': to_tokens(
+            ('ENCODING', 'utf-8', (0, 0), (0, 0)),
+            ('DOLLARSIGN', '$', (1, 0), (1, 1)),
+            ('LPAR', '(', (1, 1), (1, 2)),
+            ('RPAR', ')', (1, 2), (1, 3)),
+            ('NAME', 'ctxmgr', (1, 4), (1, 10)),
+            ('WITH', 'with', (1, 11), (1, 15)),
+            ('NEWLINE', '\n', (1, 15), (1, 16)),
+            ('ENDMARKER', '', (2, 0), (2, 0))
         )
     }
 
