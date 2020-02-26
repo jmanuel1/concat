@@ -32,7 +32,7 @@ class TestStackEffectParser(unittest.TestCase):
         'a b -- b a': concat.level1.typecheck.StackEffect(2, 2),
         'a -- a a': concat.level1.typecheck.StackEffect(1, 2),
         'a --': concat.level1.typecheck.StackEffect(1, 0),
-        'a:object b:object -- b a': concat.level1.typecheck.TypedStackEffect(('object', 'object'), ('object', 'object'))
+        'a:object b:object -- b a': concat.level1.typecheck.GenericArityTypedStackEffect(('object', 'object'), ('object', 'object'))
     }
 
     def test_examples(self) -> None:
@@ -98,5 +98,5 @@ class TestGenericArityTypeInference(unittest.TestCase):
     def test_with_word_inference(self):
         wth = '$(drop 0 ~) {"file": "a_file"} open with'
         tree = parse(wth)
-        type = concat.level1.typecheck.check(tree, {'drop': concat.level1.typecheck.StackEffect(1, 0), 'open': concat.level1.typecheck.TypedStackEffect(('dict',), ('file',))})
-        self.assertEquals(type, concat.level1.typecheck.TypedStackEffect((), ('int',)))
+        type = concat.level1.typecheck.check(tree, {'drop': concat.level1.typecheck.StackEffect(1, 0), 'open': concat.level1.typecheck.GenericArityTypedStackEffect(('dict',), ('file',))})
+        self.assertEquals(type, concat.level1.typecheck.GenericArityTypedStackEffect((), ('int',)))

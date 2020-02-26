@@ -22,9 +22,9 @@ class StackEffect:
     out_arity: int
 
     def compose(self, other: 'StackEffect') -> 'StackEffect':
-        if isinstance(other, TypedStackEffect):
-            if not isinstance(self, TypedStackEffect):
-                self = TypedStackEffect(
+        if isinstance(other, GenericArityTypedStackEffect):
+            if not isinstance(self, GenericArityTypedStackEffect):
+                self = GenericArityTypedStackEffect(
                     ['object'] * self.in_arity, ['object'] * self.out_arity)
             return self.compose(other)
         self_stack_underflow = -self.in_arity
@@ -42,20 +42,24 @@ class StackEffect:
 
     @classmethod
     def compose_all(cls, effects: Iterable['StackEffect']) -> 'StackEffect':
-        return functools.reduce(cls.compose, effects, cls.noop_type())
+        return functools.reduce(cls.compose, effects, cls._noop_type())
 
     @classmethod
-    def noop_type(cls) -> 'StackEffect':
+    def _noop_type(cls) -> 'StackEffect':
         return cls(0, 0)
 
 
-@dataclasses.dataclass
-class TypedStackEffect(StackEffect):
-    """Holds the types expected by and outputted by a word, along with arities."""
-    _in_types: Sequence[str]
-    _out_types: Sequence[str]
+_Type = Union[str, 'GenericArityTypedStackEffect.Variable', 'StackEffect']
 
-    def __init__(self, in_types: Sequence[str], out_types: Sequence[str]) -> None:
+
+@dataclasses.dataclass
+class GenericArityTypedStackEffect(StackEffect):
+    class Variable:
+        pass
+    _in_types: Sequence[_Type]
+    _out_types: Sequence[_Type]
+
+    def __init__(self, in_types: Sequence[_Type], out_types: Sequence[_Type]):
         super().__init__(len(in_types), len(out_types))
         self._in_types, self._out_types = in_types, out_types
 
@@ -74,19 +78,14 @@ class TypedStackEffect(StackEffect):
                 (*self._out_types,) == (*other._out_types,)
         return True
 
-    def compose(self, other: StackEffect) -> 'TypedStackEffect':
-        if not isinstance(other, type(self)):
-            other = type(self)(['object'] * other.in_arity,
-                               ['object'] * other.out_arity)
-        # FIXME: this function should not be aware of its subclass versions
-        if isinstance(other, GenericArityTypedStackEffect):
-            return GenericArityTypedStackEffect(self._in_types, self._out_types).compose(other)
-        # type checking
-        for out_type, in_type in zip(reversed(self._out_types), reversed(other._in_types)):
-            if in_type != out_type:
-                print('tried to compose', self, 'and', other)
-                raise TypeError("{!r} does not match {!r}".format(
-                    self._out_types, other._in_types))
+    def compose(self, other: StackEffect) -> 'GenericArityTypedStackEffect':
+        if not isinstance(other, GenericArityTypedStackEffect):
+            other = GenericArityTypedStackEffect(
+                ['object'] * other.in_arity, ['object'] * other.out_arity)
+        # unify self out types and other in types
+        unifications = self.__unify(self._out_types, other._in_types)
+        self = self.__bind(unifications)
+        other = other.__bind(unifications)
         self_stack_underflow = -self.in_arity
         composed_stack_underflow = self_stack_underflow + \
             self.out_arity - other.in_arity
@@ -99,61 +98,9 @@ class TypedStackEffect(StackEffect):
         out_arity = composed_stack_underflow + other.out_arity - stack_underflow
         out_types = [
             *self._out_types[-(out_arity - len(other._out_types)) + 1:], *other._out_types]
-        result = TypedStackEffect(in_types, out_types)
+        result = type(self)(in_types, out_types)
         print(self, other, result)
         return result
-
-    @classmethod
-    def noop_type(cls) -> 'TypedStackEffect':
-        return cls((), ())
-
-
-_Type = Union[str, 'GenericArityTypedStackEffect.Variable', 'StackEffect']
-
-
-@dataclasses.dataclass
-class GenericArityTypedStackEffect(TypedStackEffect):
-    class Variable:
-        pass
-    _in_types: Sequence[_Type]  # type: ignore
-    _out_types: Sequence[_Type]  # type: ignore
-
-    def __init__(self, in_types: Sequence[_Type], out_types: Sequence[_Type]):
-        super().__init__(in_types, out_types)  # type: ignore
-
-    def compose(self, other: StackEffect) -> 'GenericArityTypedStackEffect':
-        if not isinstance(other, GenericArityTypedStackEffect):
-            if isinstance(other, TypedStackEffect):
-                other = GenericArityTypedStackEffect(
-                    other._in_types, other._out_types)
-            else:
-                other = GenericArityTypedStackEffect(
-                    ['object'] * other.in_arity, ['object'] * other.out_arity)
-        # unify self out types and other in types
-        i, j = len(self._out_types) - 1, len(other._in_types) - 1
-        unifications = {}
-        while i > -1 and j > -1:
-            type1, type2 = self._out_types[i], other._in_types[j]
-            if isinstance(type1, self.Variable):
-                if i == 0:
-                    unifications[type1] = other._in_types[:j + 1]
-                else:
-                    next_type = self._out_types[i - 1]
-                    next_type_index = _rindex(
-                        other._in_types, next_type, j)
-                    unifications[type1] = other._in_types[next_type_index + 1: j + 1]
-            elif isinstance(type2, self.Variable):
-                raise NotImplementedError
-            else:
-                if type1 != type2:
-                    raise TypeError('{!r} does not unify with {!r}'.format(
-                        self._out_types, other._in_types))
-        # this is wrong
-        # type: ignore
-        return super(type(self), self.__bind(unifications)).compose(other.__bind(unifications))
-
-    def __repr__(self) -> str:
-        return super().__repr__()
 
     def __bind(self, unifications: Mapping[Variable, Sequence[_Type]]) -> 'GenericArityTypedStackEffect':
         in_types: List[_Type] = []
@@ -174,6 +121,58 @@ class GenericArityTypedStackEffect(TypedStackEffect):
                 out_types.append(type)
         return GenericArityTypedStackEffect(in_types, out_types)
 
+    @classmethod
+    def _noop_type(cls) -> 'GenericArityTypedStackEffect':
+        return cls((), ())
+
+    def __str__(self) -> str:
+        return '({} -- {})'.format(' '.join(str(type) for type in self._in_types), ' '.join(str(type) for type in self._out_types))
+
+    @classmethod
+    def __unify(cls, type_list: Sequence[_Type], other_type_list: Sequence[_Type]) -> Dict[Variable, Sequence[_Type]]:
+        unifications = {}
+        i, j = len(type_list) - 1, len(other_type_list) - 1
+        while i > -1 and j > -1:
+            type1, type2 = type_list[i], other_type_list[j]
+            if isinstance(type1, cls.Variable):
+                if i == 0:
+                    unifications[type1] = other_type_list[:j + 1]
+                    j = -1
+                else:
+                    next_type = type_list[i - 1]
+                    next_type_index = _rindex(
+                        other_type_list, next_type, j)
+                    unifications[type1] = other_type_list[next_type_index + 1: j + 1]
+                    j = next_type_index
+                i -= 1
+            elif isinstance(type2, cls.Variable):
+                raise NotImplementedError
+            elif isinstance(type1, GenericArityTypedStackEffect) and isinstance(type2, GenericArityTypedStackEffect):
+                type1 = type1.__bind(unifications)
+                type2 = type2.__bind(unifications)
+                unifs = cls.__unify(type1._in_types, type2._in_types)
+                type1 = type1.__bind(unifs)
+                type2 = type2.__bind(unifs)
+                unifs.update(cls.__unify(type1._out_types, type2._out_types))
+                type1 = type1.__bind(unifs)
+                type2 = type2.__bind(unifs)
+                if type1 != type2:
+                    print('tried unifying', type1, 'with', type2)
+                    print('first:', type_list, 'other:', other_type_list)
+                    raise TypeError('{} does not unify with {}'.format(
+                        type_list, other_type_list))
+                unifications.update(unifs)
+            elif isinstance(type2, StackEffect):
+                raise NotImplementedError
+            else:
+                if type1 != type2:
+                    print('tried unifying', type1, 'with', type2)
+                    print('first:', type_list, 'other:', other_type_list)
+                    raise TypeError('{} does not unify with {}'.format(
+                        type_list, other_type_list))
+                i -= 1
+                j -= 1
+        return unifications
 
 _T = TypeVar('_T', bound=concat.level0.parse.Node)
 _U = TypeVar('_U', bound=concat.level0.parse.Node)
@@ -215,7 +214,7 @@ def parse_stack_effect(tokens: List[concat.level0.lex.Token]) -> StackEffect:
     parsed_effect = stack_effect.parse(tokens)
     in_types = [_ensure_type(item[1]) for item in parsed_effect[0]]
     out_types = [_ensure_type(item[1]) for item in parsed_effect[1]]
-    return TypedStackEffect(in_types, out_types)
+    return GenericArityTypedStackEffect(in_types, out_types)
 
 
 def check(tree: concat.level0.parse.TopLevelNode, env: Dict[str, StackEffect] = {}) -> None:
@@ -235,7 +234,7 @@ def _assert_tree_type(
 def __top_level_check(closure: _Closure[concat.level0.parse.TopLevelNode]) -> None:
     effects = concat.level0.transpile.All(concat.level0.transpile.Choice(
         _statement_check, _word_check)).visit(closure)
-    TypedStackEffect.compose_all(
+    GenericArityTypedStackEffect.compose_all(
         [effect for effect in effects if effect is not None])
 
 
@@ -279,15 +278,16 @@ def _with_word_check(closure: _Closure) -> StackEffect:
 @concat.level0.transpile.FunctionalVisitor
 def _try_word_check(closure: _Closure) -> StackEffect:
     _assert_tree_type(concat.level1.parse.TryWordNode).visit(closure)
-    # FIXME: This should depend on the function argument's stack effect
-    return StackEffect(2, 0)
+    in_var = GenericArityTypedStackEffect.Variable()
+    out_var = GenericArityTypedStackEffect.Variable()
+    return GenericArityTypedStackEffect((in_var, 'iterable', GenericArityTypedStackEffect((in_var,), (out_var,))), (out_var,))
 
 
 @concat.level0.transpile.FunctionalVisitor
 def _invert_word_check(closure: _Closure) -> StackEffect:
     _assert_tree_type(concat.level1.parse.InvertWordNode).visit(closure)
     # FIXME: Though this usually pushes an int, __invert__ could return anything when called on anything
-    return TypedStackEffect(('int',), ('int',))
+    return GenericArityTypedStackEffect(('int',), ('int',))
 
 
 _operator_word_check = concat.level0.transpile.alt(_invert_word_check)
@@ -297,14 +297,14 @@ _operator_word_check = concat.level0.transpile.alt(_invert_word_check)
 def _num_word_check(closure: _Closure) -> StackEffect:
     _assert_tree_type(concat.level0.parse.NumberWordNode).visit(closure)
     if isinstance(closure.tree.value, int):
-        return TypedStackEffect((), ('int',))
+        return GenericArityTypedStackEffect((), ('int',))
     raise NotImplementedError('other numeric literal types')
 
 
 @concat.level0.transpile.FunctionalVisitor
 def _dict_word_check(closure: _Closure) -> StackEffect:
     _assert_tree_type(concat.level1.parse.DictWordNode).visit(closure)
-    return TypedStackEffect((), ('dict',))
+    return GenericArityTypedStackEffect((), ('dict',))
 
 
 _literal_word_check = concat.level0.transpile.alt(
