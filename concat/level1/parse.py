@@ -17,22 +17,26 @@ WordsOrStatements = Iterable[
 Location = Tuple[int, int]
 
 
-class SingletonWordNode(abc.ABC, concat.level0.parse.WordNode):
+class SimpleValueWordNode(concat.level0.parse.WordNode, abc.ABC):
     def __init__(self, token: Token):
         super().__init__()
         self.location = token.start
         self.children = []
 
 
-class NoneWordNode(SingletonWordNode):
+class NoneWordNode(SimpleValueWordNode):
     pass
 
 
-class NotImplWordNode(SingletonWordNode):
+class NotImplWordNode(SimpleValueWordNode):
     pass
 
 
-class EllipsisWordNode(SingletonWordNode):
+class EllipsisWordNode(SimpleValueWordNode):
+    pass
+
+
+class TrueWordNode(SimpleValueWordNode):
     pass
 
 
