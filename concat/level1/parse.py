@@ -17,6 +17,17 @@ WordsOrStatements = Iterable[
 Location = Tuple[int, int]
 
 
+# Patches to parsy for better errors--useful for debugging
+
+class ParseError(parsy.ParseError):
+    def line_info(self):
+        return '{}:{}'.format(*self.stream[self.index].start)
+
+
+# let's lie
+parsy.ParseError = ParseError  # type: ignore
+
+
 class SimpleValueWordNode(concat.level0.parse.WordNode, abc.ABC):
     def __init__(self, token: Token):
         super().__init__()
