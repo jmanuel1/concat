@@ -38,6 +38,8 @@ class Lexer:
             token.type = type_map.get(token.value, token.type)
         elif token.type == 'STRING' and self.__is_bytes_literal(token.value):
             token.type = 'BYTES'
+        elif token.type == 'ERRORTOKEN' and token.value == '`':
+            token.type = 'BACKTICK'
         return token
 
     def __is_bytes_literal(self, literal: str) -> bool:
