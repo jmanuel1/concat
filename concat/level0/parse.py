@@ -26,29 +26,34 @@ well-defined extension points. Libraries like pyparsing would do that for me.
 parsy is used instead of pyparsing since it supports having a separate
 tokenization phase.
 """
-from typing import (
-    Iterable, TypeVar, Any, Sequence, Tuple, Dict, Generator, List, Callable)
+import abc
+from typing import (Iterable, TypeVar, Any, Sequence, Tuple,
+                    Dict, Generator, List, Callable, Union)
 from concat.level0.lex import Token
 import parsy
 
 
-class Node:
+class Node(abc.ABC):
 
     def __init__(self):
         self.location = (0, 0)
         self.children: Iterable[Node]
 
 
+# FIXME: use type alias from level 1
+WordsOrStatements = Iterable[Union['WordNode', 'StatementNode']]
+
+
 class TopLevelNode(Node):
 
-    def __init__(self, encoding: Token, children: Iterable[Node]):
+    def __init__(self, encoding: Token, children: WordsOrStatements):
         super().__init__()
         self.encoding = encoding.value
         self.location = encoding.start
-        self.children = children
+        self.children: WordsOrStatements = children
 
 
-class StatementNode(Node):
+class StatementNode(Node, abc.ABC):
     pass
 
 
@@ -70,7 +75,7 @@ class PushWordNode(WordNode):
     def __init__(self, child: WordNode):
         super().__init__()
         self.location = child.location
-        self.children = [child]
+        self.children: List[WordNode] = [child]
 
 
 class NumberWordNode(WordNode):
@@ -100,7 +105,7 @@ class QuoteWordNode(WordNode):
     ):
         super().__init__()
         self.location = location
-        self.children = children
+        self.children: Sequence[WordNode] = children
 
 
 class NameWordNode(WordNode):
@@ -133,7 +138,7 @@ class ParserDict(Dict[str, parsy.Parser]):
     def extend_with(self: T, extension: Callable[[T], None]) -> None:
         extension(self)
 
-    def parse(self, tokens: Sequence[Token]) -> Node:
+    def parse(self, tokens: Sequence[Token]) -> TopLevelNode:
         return self['top-level'].parse(list(tokens))
 
     def token(self, typ: str) -> parsy.Parser:
