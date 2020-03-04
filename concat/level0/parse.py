@@ -155,15 +155,17 @@ class ParserDict(Dict[str, parsy.Parser]):
 def level_0_extension(parsers: ParserDict) -> None:
     # This parses the top level of a file.
     # top level =
-    #   ENCODING, (word | (statement, NEWLINE))*, [ NEWLINE ], ENDMARKER ;
+    #   ENCODING, (word | statement, NEWLINE | NEWLINE)*, [ NEWLINE ],
+    #   ENDMARKER ;
     @parsy.generate('top level')
     def top_level_parser() -> Generator[parsy.Parser, Any, TopLevelNode]:
         encoding = yield parsers.token('ENCODING')
-        # NOTE: no need to use ref_parser because we are already in a function
-        statement = parsers.ref_parser('statement') << parsers.token('NEWLINE')
-        word = parsers.ref_parser('word')
-        children = yield (statement | word).many()
-        yield parsers.token('NEWLINE').optional()
+        newline = parsers.token('NEWLINE')
+        statement = parsers['statement']
+        word = parsers['word']
+        children = yield (word | (statement << newline) | newline).many()
+        children = [
+            child for child in children if not isinstance(child, Token)]
         yield parsers.token('ENDMARKER')
         return TopLevelNode(encoding, children)
 
