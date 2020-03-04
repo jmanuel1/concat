@@ -84,7 +84,7 @@ class NumberWordNode(WordNode):
         super().__init__()
         self.location = number.start
         self.children: List[Node] = []
-        self.value = int(number.value)
+        self.value = eval(number.value)
 
 
 class StringWordNode(WordNode):
@@ -93,7 +93,7 @@ class StringWordNode(WordNode):
         super().__init__()
         self.location = string.start
         self.children: List[Node] = []
-        self.value = string.value[1:-1]
+        self.value = eval(string.value)
 
 
 class QuoteWordNode(WordNode):
