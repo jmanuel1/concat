@@ -14,7 +14,8 @@ import abc
 import ast
 import functools
 import astunparse  # type: ignore
-from typing import Tuple, Union, TypeVar, Generic, Iterable, Dict, Callable, cast
+from typing import (Tuple, Union, TypeVar, Generic,
+                    Iterable, Dict, Callable, cast)
 from typing_extensions import Protocol
 import concat.level0.parse
 
@@ -22,6 +23,7 @@ import concat.level0.parse
 # TODO: move all visitor combinator implementation to new module
 
 NodeType1 = TypeVar('NodeType1')
+NodeType1_co = TypeVar('NodeType1_co', covariant=True)
 NodeType1_contra = TypeVar('NodeType1_contra', contravariant=True)
 NodeType2 = TypeVar('NodeType2')
 NodeType3 = TypeVar('NodeType3')
@@ -30,9 +32,11 @@ ReturnType1_co = TypeVar('ReturnType1_co', covariant=True)
 ReturnType2 = TypeVar('ReturnType2')
 
 
-class InternalNode(Protocol[NodeType1]):
+class InternalNode(Protocol[NodeType1_co]):
 
-    children: Iterable[NodeType1]
+    @property
+    def children(self) -> Iterable[NodeType1_co]:
+        ...
 
 
 class VisitFailureException(Exception):
@@ -45,7 +49,9 @@ class Visitor(abc.ABC, Generic[NodeType1_contra, ReturnType1_co]):
     def visit(self, node: NodeType1_contra) -> ReturnType1_co:
         pass
 
-    def then(self, other: 'Visitor[NodeType1_contra, ReturnType2]') -> 'Visitor[NodeType1_contra, ReturnType2]':
+    def then(self,
+             other: 'Visitor[NodeType1_contra, ReturnType2]'
+             ) -> 'Visitor[NodeType1_contra, ReturnType2]':
         @FunctionalVisitor
         def visitor(node: NodeType1_contra) -> ReturnType2:
             return Sequence(self, other).visit(node)[1]
