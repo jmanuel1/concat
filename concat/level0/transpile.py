@@ -67,6 +67,11 @@ class FunctionalVisitor(Visitor[NodeType1, ReturnType1]):
     def visit(self, node: NodeType1) -> ReturnType1:
         return self.__func(node)
 
+    def __repr__(self) -> str:
+        type_name = type(self).__qualname__
+        func_name = self.__func.__qualname__
+        return '{}({})'.format(type_name, func_name)
+
 
 class Identity(Visitor[NodeType1, NodeType1]):
     """Visser's do-nothing visitor."""
@@ -99,16 +104,33 @@ class Choice(Visitor[NodeType1, Union[ReturnType1, ReturnType2]]):
     def __init__(
         self,
         visitor1: Visitor[NodeType1, ReturnType1],
-        visitor2: Visitor[NodeType1, ReturnType2]
+        visitor2: Visitor[NodeType1, ReturnType2],
+        debug: bool = False
     ):
         super().__init__()
         self.__visitor1, self.__visitor2 = visitor1, visitor2
+        self.__debug = debug
 
     def visit(self, node: NodeType1) -> Union[ReturnType1, ReturnType2]:
+        if self.__debug:
+            print('in choice', repr(self),  '{')
         try:
-            return self.__visitor1.visit(node)
+            if self.__debug:
+                print('trying', repr(self.__visitor1))
+            result: Union[ReturnType1,
+                          ReturnType2] = self.__visitor1.visit(node)
         except VisitFailureException:
-            return self.__visitor2.visit(node)
+            if self.__debug:
+                print('trying', repr(self.__visitor2))
+            result = self.__visitor2.visit(node)
+        if self.__debug:
+            print('} end choice')
+        return result
+
+    def __repr__(self) -> str:
+        type_name = type(self).__qualname__
+        visitor_reprs = repr(self.__visitor1), repr(self.__visitor2)
+        return '{}({}, {})'.format(type_name, *visitor_reprs)
 
 
 # Traversal combinators
@@ -116,15 +138,27 @@ class Choice(Visitor[NodeType1, Union[ReturnType1, ReturnType2]]):
 class All(Visitor[InternalNode[NodeType1], Iterable[ReturnType1]]):
     """Visser's every-child traversal combinator."""
 
-    def __init__(self, visitor: Visitor[NodeType1, ReturnType1]):
+    def __init__(
+        self, visitor: Visitor[NodeType1, ReturnType1], debug: bool = False
+    ):
         super().__init__()
         self.__visitor = visitor
+        self.__debug = debug
 
     def visit(self, node: InternalNode[NodeType1]) -> Iterable[ReturnType1]:
+        if self.__debug:
+            print('in', repr(self), ', visiting children of',
+                  node, '(children:', node.children, ') {')
         # return a list instead of a generator so that the subvisitor actually
         # runs
         result = [self.__visitor.visit(child)
                   for child in node.children]
+        if self.__debug:
+            print('} end all')
+        return result
+
+    def __repr__(self) -> str:
+        return '{}({})'.format(type(self).__qualname__, repr(self.__visitor))
 
 
 class One(Visitor[InternalNode[NodeType1], ReturnType1]):
