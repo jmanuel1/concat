@@ -121,7 +121,10 @@ class All(Visitor[InternalNode[NodeType1], Iterable[ReturnType1]]):
         self.__visitor = visitor
 
     def visit(self, node: InternalNode[NodeType1]) -> Iterable[ReturnType1]:
-        return (self.__visitor.visit(child) for child in node.children)
+        # return a list instead of a generator so that the subvisitor actually
+        # runs
+        result = [self.__visitor.visit(child)
+                  for child in node.children]
 
 
 class One(Visitor[InternalNode[NodeType1], ReturnType1]):
