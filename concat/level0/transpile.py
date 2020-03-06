@@ -274,13 +274,17 @@ def level_0_extension(
         visitors.ref_visitor('attribute-word')
     )
 
-    # Converts a QuoteWordNode to a Python expression which is a sequence.
+    # Converts a QuoteWordNode to a Python expression which is both a sequence
+    # and callable.
     @FunctionalVisitor
-    def quote_word_visitor(node: concat.level0.parse.Node):
+    def quote_word_visitor(node: concat.level0.parse.Node) -> ast.Call:
         if not isinstance(node, concat.level0.parse.QuoteWordNode):
             raise VisitFailureException
         children = list(All(visitors.ref_visitor('word')).visit(node))
-        py_node = ast.List(elts=children, ctx=ast.Load())
+        lst = ast.List(elts=children, ctx=ast.Load())
+        quote_constructor = cast(ast.Expression, ast.parse(
+            'concat.level0.stdlib.types.Quotation', mode='eval')).body
+        py_node = ast.Call(func=quote_constructor, args=[lst], keywords=[])
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
