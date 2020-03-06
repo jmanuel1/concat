@@ -310,23 +310,27 @@ def level_0_extension(
         visitors.ref_visitor('string-word')
     )
 
-    # Converts a NumberWordNode to a ast.Num
+    # Converts a NumberWordNode to a ast.expr
     @FunctionalVisitor
-    def number_word_visitor(node: concat.level0.parse.Node) -> ast.Num:
+    def number_word_visitor(node: concat.level0.parse.Node) -> ast.expr:
         if not isinstance(node, concat.level0.parse.NumberWordNode):
             raise VisitFailureException
-        py_node = ast.Num(n=node.value)
+        num = ast.Num(n=node.value)
+        py_node = ast.Call(func=ast.Name('push', ast.Load()),
+                           args=[num], keywords=[])
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
     visitors['number-word'] = number_word_visitor
 
-    # Converts a StringWordNode to a ast.Str
+    # Converts a StringWordNode to a ast.expr
     @FunctionalVisitor
-    def string_word_visitor(node: concat.level0.parse.Node) -> ast.Str:
+    def string_word_visitor(node: concat.level0.parse.Node) -> ast.expr:
         if not isinstance(node, concat.level0.parse.StringWordNode):
             raise VisitFailureException
-        py_node = ast.Str(s=node.value)
+        string = ast.Str(s=node.value)
+        py_node = ast.Call(func=ast.Name('push', ast.Load()),
+                           args=[string], keywords=[])
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
