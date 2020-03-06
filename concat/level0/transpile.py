@@ -202,18 +202,21 @@ class VisitorDict(Dict[str, Visitor[NodeType1, ReturnType1]]):
         return visit
 
 
+# TODO: Put these AST helpers in seperate level-independent module
+
+def statementfy(node: Union[ast.expr, ast.stmt]) -> ast.stmt:
+    if isinstance(node, ast.expr):
+        load = ast.Load()
+        stack = ast.Name(id='stack', ctx=load)
+        stash = ast.Name(id='stash', ctx=load)
+        call_node = ast.Call(func=node, args=[stack, stash], keywords=[])
+        return ast.Expr(value=call_node)
+    return node
+
+
 def level_0_extension(
     visitors: VisitorDict[concat.level0.parse.Node, ast.AST]
 ) -> None:
-    def statementfy(node: Union[ast.expr, ast.stmt]) -> ast.stmt:
-        if isinstance(node, ast.expr):
-            load = ast.Load()
-            stack = ast.Name(id='stack', ctx=load)
-            stash = ast.Name(id='stash', ctx=load)
-            call_node = ast.Call(func=node, args=[stack, stash], keywords=[])
-            return ast.Expr(value=call_node)
-        return node
-
     # Converts a TopLevelNode to the top level of a Python module
     @FunctionalVisitor
     def top_level_visitor(
@@ -254,7 +257,8 @@ def level_0_extension(
             id=node.value, ctx=ast.Load()), attr='__class__', ctx=ast.Store())
         module_type = cast(
             ast.Expression,
-            ast.parse('concat.level0.stdlib.importlib.Module', mode='eval')).body
+            ast.parse('concat.level0.stdlib.importlib.Module', mode='eval')
+        ).body
         assign = ast.Assign(targets=[class_store], value=module_type)
         import_node.lineno, import_node.col_offset = node.location
         assign.lineno, assign.col_offset = node.location
