@@ -336,16 +336,14 @@ def level_0_extension(
 
     visitors['string-word'] = string_word_visitor
 
-    # Converts a AttributeWordNode to be an attribute lookup on the top of the stack
+    # Converts a AttributeWordNode to be an attribute lookup on the top of the
+    # stack
     @FunctionalVisitor
     def attribute_word_visitor(node: concat.level0.parse.Node):
         if not isinstance(node, concat.level0.parse.AttributeWordNode):
             raise VisitFailureException
+        top = cast(ast.Expression, ast.parse('stack.pop()', mode='eval')).body
         load = ast.Load()
-        stack = ast.Name(id='stack', ctx=load)
-        negative_one = ast.Num(n=-1)
-        negative_one_index = ast.Index(value=negative_one)
-        top = ast.Subscript(value=stack, slice=negative_one_index, ctx=load)
         attribute = ast.Attribute(value=top, attr=node.value, ctx=load)
         attribute.lineno, attribute.col_offset = node.location
         return attribute
