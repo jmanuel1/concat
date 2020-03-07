@@ -14,6 +14,7 @@ import parsy
 # Typedefs
 WordsOrStatements = Iterable[
     Union[concat.level0.parse.WordNode, concat.level0.parse.StatementNode]]
+Words = Iterable[concat.level0.parse.WordNode]
 Location = Tuple[int, int]
 
 
@@ -187,8 +188,8 @@ class BytesWordNode(concat.level0.parse.WordNode):
         self.value = eval(bytes.value)
 
 
-class IterableWordNode(abc.ABC, concat.level0.parse.WordNode):
-    def __init__(self, element_words: Iterable[Iterable[concat.level0.parse.WordNode]], location: Tuple[int, int]):
+class IterableWordNode(concat.level0.parse.WordNode, abc.ABC):
+    def __init__(self, element_words: Iterable[Words], location: Location):
         super().__init__()
         self.children = []
         self.location = location
@@ -196,28 +197,20 @@ class IterableWordNode(abc.ABC, concat.level0.parse.WordNode):
             self.children += list(children)
 
 
-class TupleWordNode(concat.level0.parse.WordNode):
-    def __init__(self, element_words: Iterable[Iterable[concat.level0.parse.WordNode]], location: Tuple[int, int]):
-        super().__init__()
+class TupleWordNode(IterableWordNode):
+    def __init__(self, element_words: Iterable[Words], location: Location):
+        super().__init__(element_words, location)
         self.tuple_children = element_words
-        self.children = []
-        self.location = location
-        for children in self.tuple_children:
-            self.children += list(children)
 
 
-class ListWordNode(concat.level0.parse.WordNode):
-    def __init__(self, element_words: Iterable[Iterable[concat.level0.parse.WordNode]], location: Tuple[int, int]):
-        super().__init__()
+class ListWordNode(IterableWordNode):
+    def __init__(self, element_words: Iterable[Words], location: Location):
+        super().__init__(element_words, location)
         self.list_children = element_words
-        self.children = []
-        self.location = location
-        for children in self.list_children:
-            self.children += list(children)
 
 
 class SetWordNode(IterableWordNode):
-    def __init__(self, element_words: Iterable[Iterable[concat.level0.parse.WordNode]], location: Tuple[int, int]):
+    def __init__(self, element_words: Iterable[Words], location: Location):
         super().__init__(element_words, location)
         self.set_children = element_words
 
@@ -230,13 +223,17 @@ class DelStatementNode(concat.level0.parse.StatementNode):
 
 
 class DictWordNode(IterableWordNode):
-    def __init__(self, element_words: Iterable[Iterable[Iterable[concat.level0.parse.WordNode]]], location: Tuple[int, int]):
+    def __init__(
+        self, element_words: Iterable[Iterable[Words]], location: Location
+    ):
         flattened_pairs = self.__flatten_pairs(element_words)
         super().__init__(flattened_pairs, location)
         self.dict_children = element_words
 
     @staticmethod
-    def __flatten_pairs(element_words: Iterable[Iterable[Iterable[concat.level0.parse.WordNode]]]) -> Iterable[Iterable[concat.level0.parse.WordNode]]:
+    def __flatten_pairs(
+        element_words: Iterable[Iterable[Words]]
+    ) -> Iterable[Words]:
         for key, value in element_words:
             yield key
             yield value
@@ -455,7 +452,8 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['bytes-word'] = parsers.token('BYTES').map(BytesWordNode)
 
     # This parses a tuple word.
-    # tuple word = LPAR, ([ word* ], COMMA | word+, (COMMA, word+)+, [ COMMA ]), RPAR ;
+    # tuple word = LPAR, ([ word* ], COMMA | word+, (COMMA, word+)+, [ COMMA
+    #   ]), RPAR ;
     @parsy.generate('tuple word')
     def tuple_word_parser():
         # TODO: reflect the grammar in the code better
@@ -471,7 +469,8 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         if not element_words[0]:
             yield parsy.fail('word before first comma in tuple longer than 1')
         element_words.append((yield parsers['word'].at_least(1)))
-        element_words += (yield (parsers.token('COMMA') >> parsers['word'].at_least(1)).many())
+        element_words += yield (parsers.token('COMMA')
+                                >> parsers['word'].at_least(1)).many()
         yield parsers.token('COMMA').optional()
         yield parsers.token('RPAR')
         return TupleWordNode(element_words, location)
@@ -479,7 +478,8 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['tuple-word'] = tuple_word_parser
 
     # This parses a list word.
-    # list word = LSQB, ([ word* ], COMMA | word+, (COMMA, word+)+, [ COMMA ]), RSQB ;
+    # list word = LSQB, ([ word* ], COMMA | word+, (COMMA, word+)+, [ COMMA ]),
+    # RSQB ;
     @parsy.generate('list word')
     def list_word_parser():
         # TODO: reflect the grammar in the code better
