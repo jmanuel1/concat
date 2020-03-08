@@ -57,6 +57,7 @@ class Lexer:
             self.lineno += 1
 
 
+# QUESTION: Make a dataclass?
 class Token:
     """Class to represent tokens.
 
@@ -88,6 +89,13 @@ class Token:
             repr(self.value),
             repr(self.start),
             repr(self.end))
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Token):
+            return NotImplemented
+        self_as_tuple = (self.type, self.value, self.start, self.end)
+        other_as_tuple = (other.type, other.value, other.start, other.end)
+        return self_as_tuple == other_as_tuple
 
 
 lexer = Lexer()
