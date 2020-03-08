@@ -300,11 +300,9 @@ class ImportStatementNode(concat.level0.parse.ImportStatementNode):
         asname: Optional[str] = None,
         location: Location = (0, 0)
     ):
-        # QUESTION: There is delibrately no super call. Should this even be a
-        # subclass of the level 0 ImportStatementNode?
-        self.children = []
-        self.value = module
-        self.location = location
+        token = Token()
+        token.value = module
+        super().__init__(token, location)
         self.asname = asname
 
 
