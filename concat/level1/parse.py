@@ -284,8 +284,8 @@ class FuncdefStatementNode(concat.level0.parse.StatementNode):
         self.decorators = decorators
         self.annotation = annotation
         self.body = body
-        self.children = [*self.decorators, *
-                         (self.annotation or []), *self.body]
+        self.children = [
+            *self.decorators, *(self.annotation or []), *self.body]
         self.stack_effect = stack_effect
 
 
@@ -304,7 +304,12 @@ class ImportStatementNode(concat.level0.parse.ImportStatementNode):
 
 
 class FromImportStatementNode(ImportStatementNode):
-    def __init__(self, relative_module: str, imported_name: str, asname: Optional[str] = None):
+    def __init__(
+        self,
+        relative_module: str,
+        imported_name: str,
+        asname: Optional[str] = None
+    ):
         super().__init__(relative_module, asname)
         self.imported_name = imported_name
 
@@ -315,7 +320,15 @@ class FromImportStarStatementNode(FromImportStatementNode):
 
 
 class ClassdefStatementNode(concat.level0.parse.StatementNode):
-    def __init__(self, name: str, body: WordsOrStatements, location: Location, decorators: Optional[Iterable[concat.level0.parse.WordNode]] = None, bases: Iterable[Iterable[concat.level0.parse.WordNode]] = (), keyword_args: Iterable[Tuple[str, concat.level0.parse.WordNode]] = ()):
+    def __init__(
+        self,
+        name: str,
+        body: WordsOrStatements,
+        location: Location,
+        decorators: Optional[Words] = None,
+        bases: Iterable[Words] = (),
+        keyword_args: Iterable[Tuple[str, concat.level0.parse.WordNode]] = ()
+    ):
         super().__init__()
         self.location = location
         self.children = body
@@ -532,7 +545,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['set-word'] = set_word_parser
 
     # This parses a dict word.
-    # dict word = LBRACE, ([ key-value pair ], COMMA | key-value pair, (COMMA, key-value pair)+, [ COMMA ]), RBRACE ;
+    # dict word = LBRACE, ([ key-value pair ], [ COMMA ] | key-value pair, (COMMA, key-value pair)+, [ COMMA ]), RBRACE ;
     # key-value pair = word*, COLON, word* ;
     @parsy.generate('dict word')
     def dict_word_parser():
@@ -540,7 +553,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         location = (yield parsers.token('LBRACE')).start
         element_words = []
         element_words.append((yield key_value_pair.optional()))
-        yield parsers.token('COMMA')
+        yield parsers.token('COMMA').optional()
         if (yield parsers.token('RBRACE').optional()):
             # 0 or 1-length list
             length = 1 if element_words[0] else 0
