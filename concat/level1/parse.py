@@ -294,12 +294,17 @@ class AsyncFuncdefStatementNode(FuncdefStatementNode):
 
 
 class ImportStatementNode(concat.level0.parse.ImportStatementNode):
-    def __init__(self, module: str, asname: Optional[str] = None):
-        # delibrately no super
+    def __init__(
+        self,
+        module: str,
+        asname: Optional[str] = None,
+        location: Location = (0, 0)
+    ):
+        # QUESTION: There is delibrately no super call. Should this even be a
+        # subclass of the level 0 ImportStatementNode?
         self.children = []
         self.value = module
-        # TODO: stop lying
-        self.location = (0, 0)
+        self.location = location
         self.asname = asname
 
 
@@ -308,15 +313,16 @@ class FromImportStatementNode(ImportStatementNode):
         self,
         relative_module: str,
         imported_name: str,
-        asname: Optional[str] = None
+        asname: Optional[str] = None,
+        location: Location = (0, 0)
     ):
-        super().__init__(relative_module, asname)
+        super().__init__(relative_module, asname, location)
         self.imported_name = imported_name
 
 
 class FromImportStarStatementNode(FromImportStatementNode):
-    def __init__(self, module: str):
-        super().__init__(module, '*')
+    def __init__(self, module: str, location: Location = (0, 0)):
+        super().__init__(module, '*', None, location)
 
 
 class ClassdefStatementNode(concat.level0.parse.StatementNode):
@@ -676,20 +682,22 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         name = parsers.token('NAME').map(operator.attrgetter('value'))
         return (yield name.sep_by(parsers.token('DOT'), min=1).concat())
 
-    # This parsers an import statement.
+    # These following parsers parse import statements.
     # import statement = IMPORT, module, [ AS, NAME ]
     #   | FROM, relative module, IMPORT, NAME, [ AS, NAME ]
     #   | FROM, module, IMPORT, STAR;
     # module = NAME, (DOT, NAME)* ;
     # relative module = DOT*, module | DOT+ ;
+
     @parsy.generate('import statement')
-    def import_statement_parser():
-        module_name = yield (parsers.token('IMPORT') >> module)
+    def import_statement_parser() -> Generator:
+        location = (yield parsers.token('IMPORT')).start
+        module_name = yield module
         asname_parser = parsers.token('NAME').map(operator.attrgetter('value'))
         asname = None
         if (yield parsers.token('AS').optional()):
             asname = yield asname_parser
-        return ImportStatementNode(module_name, asname)
+        return ImportStatementNode(module_name, asname, location)
 
     parsers['import-statement'] = import_statement_parser
 
@@ -699,19 +707,27 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         return (yield (dot.many().concat() + module) | dot.at_least(1))
 
     @parsy.generate('from-import statement')
-    def from_import_statement_parser():
-        module = yield parsers.token('FROM') >> relative_module
+    def from_import_statement_parser() -> Generator:
+        location = (yield parsers.token('FROM')).start
+        module = yield relative_module
         name_parser = parsers.token('NAME').map(operator.attrgetter('value'))
         imported_name = yield parsers.token('IMPORT') >> name_parser
         asname = None
         if (yield parsers.token('AS').optional()):
             asname = yield name_parser
-        return FromImportStatementNode(module, imported_name, asname)
+        return FromImportStatementNode(module, imported_name, asname, location)
 
     parsers['import-statement'] |= from_import_statement_parser
 
-    parsers['import-statement'] |= (parsers.token('FROM') >> module << parsers.token(
-        'IMPORT') << parsers.token('STAR')).map(FromImportStarStatementNode)
+    @parsy.generate('from-import-star statement')
+    def from_import_star_statement_parser() -> Generator:
+        location = (yield parsers.token('FROM')).start
+        module_name = yield module
+        yield parsers.token('IMPORT')
+        yield parsers.token('STAR')
+        return FromImportStarStatementNode(module_name, location)
+
+    parsers['import-statement'] |= from_import_star_statement_parser
 
     # This parses a class definition statement.
     # classdef statement = CLASS, NAME, decorator*, [ bases ], keyword arg*, COLON, suite ;
