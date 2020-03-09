@@ -2,8 +2,14 @@
 
 Tests that the boundary between Python and Concat is correct."""
 import unittest
+import unittest.mock
+import types
+import contextlib
+import asyncio
+import builtins
+import io
 import concat.level1.stdlib.pyinterop
-from typing import List, cast
+from typing import List, cast, Iterator, TextIO
 
 
 class TestObjectFactories(unittest.TestCase):
@@ -118,6 +124,15 @@ class TestObjectFactories(unittest.TestCase):
         message = 'to_dict has incorrect stack effect'
         self.assertEqual(stack, [{None: None, 5: True}], msg=message)
 
+    def test_to_stop_iteration(self) -> None:
+        """Test that to_stop_iteration works."""
+        stack: List[object] = [[(None, None), (5, True)]]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.to_stop_iteration(stack, stash)
+        message = 'to_stop_iteration has incorrect stack effect'
+        self.assertIsInstance(stack[0], StopIteration, msg='top of stack is not a StopIteration')
+        self.assertEqual(cast(StopIteration, stack[0]).value, [(None, None), (5, True)], msg=message)
+
 
 class TestBuiltinAnalogs(unittest.TestCase):
     def test_len(self) -> None:
@@ -167,3 +182,110 @@ class TestBuiltinAnalogs(unittest.TestCase):
         concat.level1.stdlib.pyinterop.add_to_set(stack, stash)
         message = 'add_to_set has incorrect stack effect'
         self.assertEqual(stack, [], msg=message)
+
+    def generator(self) -> Iterator[int]:
+        yield 42
+
+    def test_next(self) -> None:
+        """Test that next works."""
+        stack: List[object] = [self.generator()]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.next(stack, stash)
+        message = 'next has incorrect stack effect'
+        self.assertEqual(stack, [42], msg=message)
+
+    def test_import_module(self) -> None:
+        """Test that import_module works."""
+        stack: List[object] = [None, 'builtins']
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.import_module(stack, stash)
+        message = 'import_module has incorrect stack effect'
+        self.assertIs(stack[0], builtins, msg=message)
+
+    def test_import_advanced(self) -> None:
+        """Test that import_advanced works."""
+        stack: List[object] = [None, None, None, None, 'builtins']
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.import_advanced(stack, stash)
+        message = 'import_advanced has incorrect stack effect'
+        self.assertIs(stack[0], builtins, msg=message)
+
+    def test_open(self) -> None:
+        """Test that open works."""
+        stack: List[object] = [{'file': __file__}]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.open(stack, stash)
+        message = 'open has incorrect stack effect'
+        self.assertIsInstance(stack[0], io.TextIOWrapper, msg=message)
+        cast(TextIO, stack[0]).close()
+
+    @unittest.skip('How do I test popen without taking over stdin and stdout?')
+    def test_popen(self) -> None:
+        """Test that popen works."""
+        stack: List[object] = [None, None, 'python']
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.popen(stack, stash)
+        message = 'popen has incorrect stack effect'
+        try:
+            self.assertIsInstance(stack[0], io.IOBase, msg=message)
+        finally:
+            cast(io.IOBase, stack[0]).close()
+
+    def test_fdopen(self) -> None:
+        """Test that fdopen works."""
+        fileobj = open(__file__)
+        fd = fileobj.fileno()
+        stack: List[object] = [{}, fd]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.fdopen(stack, stash)
+        message = 'fdopen has incorrect stack effect'
+        self.assertIsInstance(stack[0], io.TextIOWrapper, msg=message)
+        message = 'fdopen return file object with wrong file descriptor'
+        self.assertEqual(cast(io.TextIOWrapper, stack[0]).fileno(), fd, msg=message)
+        fileobj.close()
+
+
+class TestAsync(unittest.TestCase):
+    def dummy(self, stack: List[object], stash: List[object]) -> None:
+        pass
+
+    @contextlib.asynccontextmanager
+    async def dummy_context(self):
+        yield
+
+    async def dummy_iterator(self):
+        yield
+
+    async def dummy_coroutine(self):
+        pass
+
+    def test_with_async(self) -> None:
+        """Test that with_async works."""
+        stack: List[object] = [self.dummy, self.dummy_context()]
+        stash: List[object] = []
+        coroutine = concat.level1.stdlib.pyinterop.with_async(stack, stash)
+        asyncio.get_event_loop().run_until_complete(coroutine)
+        message = 'with_async has incorrect stack effect'
+        self.assertEqual(stack, [None], msg=message)
+
+    def test_for_async(self) -> None:
+        """Test that for_async works."""
+        stack: List[object] = [self.dummy, self.dummy_iterator()]
+        stash: List[object] = []
+        coroutine = concat.level1.stdlib.pyinterop.for_async(stack, stash)
+        asyncio.get_event_loop().run_until_complete(coroutine)
+        message = 'for_async has incorrect stack effect'
+        self.assertEqual(stack, [None], msg=message)
+
+
+class TestCallables(unittest.TestCase):
+    def test_call(self) -> None:
+        """Test that call works."""
+        callable = unittest.mock.MagicMock()
+        stack: List[object] = [callable]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.call(stack, stash)
+        message = 'call has incorrect stack effect'
+        self.assertEqual(stack, [], msg=message)
+        message = 'call did not apply the callable to the stack and stash'
+        callable.assert_called_with([], [])
