@@ -9,6 +9,7 @@ import asyncio
 import builtins
 import io
 import concat.level1.stdlib.pyinterop
+import concat.level1.stdlib.pyinterop.builtin_function
 from typing import List, cast, Iterator, TextIO
 
 
@@ -130,8 +131,10 @@ class TestObjectFactories(unittest.TestCase):
         stash: List[object] = []
         concat.level1.stdlib.pyinterop.to_stop_iteration(stack, stash)
         message = 'to_stop_iteration has incorrect stack effect'
-        self.assertIsInstance(stack[0], StopIteration, msg='top of stack is not a StopIteration')
-        self.assertEqual(cast(StopIteration, stack[0]).value, [(None, None), (5, True)], msg=message)
+        self.assertIsInstance(stack[0], StopIteration,
+                              msg='top of stack is not a StopIteration')
+        self.assertEqual(cast(StopIteration, stack[0]).value, [
+                         (None, None), (5, True)], msg=message)
 
 
 class TestBuiltinAnalogs(unittest.TestCase):
@@ -241,7 +244,8 @@ class TestBuiltinAnalogs(unittest.TestCase):
         message = 'fdopen has incorrect stack effect'
         self.assertIsInstance(stack[0], io.TextIOWrapper, msg=message)
         message = 'fdopen return file object with wrong file descriptor'
-        self.assertEqual(cast(io.TextIOWrapper, stack[0]).fileno(), fd, msg=message)
+        self.assertEqual(
+            cast(io.TextIOWrapper, stack[0]).fileno(), fd, msg=message)
         fileobj.close()
 
 
@@ -276,6 +280,42 @@ class TestAsync(unittest.TestCase):
         asyncio.get_event_loop().run_until_complete(coroutine)
         message = 'for_async has incorrect stack effect'
         self.assertEqual(stack, [None], msg=message)
+
+
+class TestBuiltinFunctionAttributeAccessors(unittest.TestCase):
+    def test_self(self) -> None:
+        """Test that builtin_function.self works."""
+        stack: List[object] = [len]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.builtin_function.self(stack, stash)
+        message = 'builtin_function.self has incorrect stack effect'
+        self.assertEqual(
+            stack, [cast(types.BuiltinFunctionType, len).__self__], msg=message
+        )
+
+    def test_doc(self) -> None:
+        """Test that builtin_function.doc works."""
+        stack: List[object] = [len]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.builtin_function.doc(stack, stash)
+        message = 'builtin_function.doc has incorrect stack effect'
+        self.assertEqual(stack, [len.__doc__], msg=message)
+
+    def test_name(self) -> None:
+        """Test that builtin_function.name works."""
+        stack: List[object] = [len]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.builtin_function.name(stack, stash)
+        message = 'builtin_function.name has incorrect stack effect'
+        self.assertEqual(stack, [len.__name__], msg=message)
+
+    def test_module(self) -> None:
+        """Test that builtin_function.module works."""
+        stack: List[object] = [len]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.builtin_function.module(stack, stash)
+        message = 'builtin_function.module has incorrect stack effect'
+        self.assertEqual(stack, [len.__module__], msg=message)
 
 
 class TestCallables(unittest.TestCase):
