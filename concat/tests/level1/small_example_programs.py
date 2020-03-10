@@ -1,4 +1,4 @@
-from concat.tests.token_util import to_tokens
+from concat.level0.lex import to_tokens
 
 # The newlines in each example are important.
 

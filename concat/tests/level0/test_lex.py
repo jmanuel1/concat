@@ -1,13 +1,11 @@
 import concat.level0.lex as lex
+from concat.level0.lex import TokenTuple
 import unittest
-from typing import Tuple
-
-
-TokenTuple = Tuple[str, str, Tuple[int, int], Tuple[int, int]]
+from typing import Tuple, Dict, Sequence
 
 
 class TestSmallExamples(unittest.TestCase):
-    examples = {
+    examples: Dict[str, Sequence[TokenTuple]] = {
         '$() $(0) bool\n': (  # newline is important
             ('ENCODING', 'utf-8', (0, 0), (0, 0)),
             ('DOLLARSIGN', '$', (1, 0), (1, 1)),
@@ -53,7 +51,7 @@ class TestSmallExamples(unittest.TestCase):
     }
 
     def test_examples(self) -> None:
-        for example in type(self).examples:
+        for example in self.examples:
             with self.subTest(example=example):
                 tokens = []
                 lex.lexer.input(example)
@@ -63,7 +61,7 @@ class TestSmallExamples(unittest.TestCase):
                         break
                     tokens.append(token)
 
-                expectationPairs = zip(tokens, type(self).examples[example])
+                expectationPairs = zip(tokens, self.examples[example])
                 self.assertTrue(
                     all(map(self._matches_token, expectationPairs)))
 
@@ -71,8 +69,8 @@ class TestSmallExamples(unittest.TestCase):
         token, tokTuple = pair
 
         return (
-            token.type == tokTuple[0] and
-            token.value == tokTuple[1] and
-            token.start == tokTuple[2] and
-            token.end == tokTuple[3]
+            token.type == tokTuple[0]
+            and token.value == tokTuple[1]
+            and token.start == tokTuple[2]
+            and token.end == tokTuple[3]
         )

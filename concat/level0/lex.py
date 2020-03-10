@@ -2,10 +2,10 @@
 import tokenize
 import sys
 import io
-from typing import Optional, Iterator
+from typing import Optional, Iterator, Tuple, List
 
 
-__all__ = ['Lexer', 'Token', 'lexer']
+TokenTuple = Tuple[str, str, Tuple[int, int], Tuple[int, int]]
 
 
 class Lexer:
@@ -67,12 +67,9 @@ class Token:
     self.end - ending position of token in source, as (line, col)
     """
 
-    def __init__(self) -> None:
+    def __init__(self, tupl: TokenTuple = ('', '', (0, 0), (0, 0))) -> None:
         """Create the Token object."""
-        self.type: str = ''
-        self.value = ''
-        self.start = (0, 0)
-        self.end = (0, 0)
+        self.type, self.value, self.start, self.end = tupl
 
     def __str__(self) -> str:
         """Convert to a string.
@@ -96,6 +93,10 @@ class Token:
         self_as_tuple = (self.type, self.value, self.start, self.end)
         other_as_tuple = (other.type, other.value, other.start, other.end)
         return self_as_tuple == other_as_tuple
+
+
+def to_tokens(*tokTuples: TokenTuple) -> List[Token]:
+    return [Token(tuple) for tuple in tokTuples]
 
 
 lexer = Lexer()
