@@ -10,6 +10,7 @@ import builtins
 import io
 import concat.level1.stdlib.pyinterop
 import concat.level1.stdlib.pyinterop.builtin_function
+import concat.level1.stdlib.pyinterop.builtin_method
 from typing import List, cast, Iterator, TextIO
 
 
@@ -316,6 +317,18 @@ class TestBuiltinFunctionAttributeAccessors(unittest.TestCase):
         concat.level1.stdlib.pyinterop.builtin_function.module(stack, stash)
         message = 'builtin_function.module has incorrect stack effect'
         self.assertEqual(stack, [len.__module__], msg=message)
+
+
+class TestBuiltinMethodAttributeAccessors(unittest.TestCase):
+    def test_self(self) -> None:
+        """Test that builtin_method.self works."""
+        lst: List[object] = []
+        stack: List[object] = [lst.append]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.builtin_method.self(stack, stash)
+        message = 'builtin_method.self has incorrect stack effect'
+        test_self = cast(types.BuiltinMethodType, lst.append).__self__
+        self.assertIs(stack[0], test_self, msg=message)
 
 
 class TestCallables(unittest.TestCase):
