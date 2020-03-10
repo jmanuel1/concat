@@ -188,6 +188,10 @@ T = TypeVar('T')
 
 class VisitorDict(Dict[str, Visitor[NodeType1, ReturnType1]]):
 
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.data: Dict = {}
+
     def extend_with(self: T, extension: Callable[[T], None]) -> None:
         extension(self)
 
@@ -283,10 +287,12 @@ def level_0_extension(
         children = list(All(visitors.ref_visitor('word')).visit(node))
         lst = ast.List(elts=children, ctx=ast.Load())
         quote_constructor = cast(ast.Expression, ast.parse(
-            'concat.level0.stdlib.types.Quotation', mode='eval')).body
+            visitors.data['quote-constructor-string'], mode='eval')).body
         py_node = ast.Call(func=quote_constructor, args=[lst], keywords=[])
         py_node.lineno, py_node.col_offset = node.location
         return py_node
+
+    visitors.data['quote-constructor-string'] = 'concat.level0.stdlib.types.Quotation'
 
     visitors['quote-word'] = quote_word_visitor
 
