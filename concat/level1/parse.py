@@ -549,32 +549,25 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['set-word'] = set_word_parser
 
     # This parses a dict word.
-    # dict word = LBRACE, ([ key-value pair ], [ COMMA ] | key-value pair, (COMMA, key-value pair)+, [ COMMA ]), RBRACE ;
+    # dict word =
+    #   LBRACE,
+    #   [ key-value pair, (COMMA, key-value pair)* ],
+    #   [ COMMA ],
+    #   RBRACE ;
     # key-value pair = word*, COLON, word* ;
     @parsy.generate('dict word')
-    def dict_word_parser():
-        # TODO: reflect the grammar in the code better
+    def dict_word_parser() -> Generator:
         location = (yield parsers.token('LBRACE')).start
-        element_words = []
-        element_words.append((yield key_value_pair.optional()))
-        yield parsers.token('COMMA').optional()
-        if (yield parsers.token('RBRACE').optional()):
-            # 0 or 1-length list
-            length = 1 if element_words[0] else 0
-            return DictWordNode(element_words[0:length], location)
-        # >= 2-length lists; there must be no 'empty words'
-        if not element_words[0]:
-            yield parsy.fail('key-value pair before first comma in dict longer than 1')
-        element_words.append((yield key_value_pair))
-        element_words += (yield (parsers.token('COMMA') >> key_value_pair).many())
-        yield parsers.token('COMMA').optional()
+        elements = key_value_pair.sep_by(parsers.token(
+            'COMMA'), min=0) << parsers.token('COMMA').optional()
+        element_words = yield elements
         yield parsers.token('RBRACE')
         return DictWordNode(element_words, location)
 
     parsers['dict-word'] = dict_word_parser
 
     key_value_pair = parsy.seq(parsers.ref_parser('word').many(
-    ) << parsers.token('COLON'), parsers.ref_parser('word').many())
+        ) << parsers.token('COLON'), parsers.ref_parser('word').many())
 
     parsers['true-word'] = parsers.token('TRUE').map(TrueWordNode)
 
