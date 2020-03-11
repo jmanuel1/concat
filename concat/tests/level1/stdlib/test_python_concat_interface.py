@@ -10,6 +10,7 @@ import builtins
 import io
 import concat.level1.stdlib.pyinterop
 import concat.level1.stdlib.pyinterop.builtin_function
+import concat.level1.stdlib.pyinterop.coroutine
 import concat.level1.stdlib.pyinterop.builtin_method
 from typing import List, cast, Iterator, TextIO
 
@@ -250,6 +251,10 @@ class TestBuiltinAnalogs(unittest.TestCase):
         fileobj.close()
 
 
+class DummyException(Exception):
+    pass
+
+
 class TestAsync(unittest.TestCase):
     def dummy(self, stack: List[object], stash: List[object]) -> None:
         pass
@@ -281,6 +286,40 @@ class TestAsync(unittest.TestCase):
         asyncio.get_event_loop().run_until_complete(coroutine)
         message = 'for_async has incorrect stack effect'
         self.assertEqual(stack, [None], msg=message)
+
+    def test_coroutine_send(self) -> None:
+        """Test that coroutine.send works."""
+        stack: List[object] = [None, self.dummy_coroutine()]
+        stash: List[object] = []
+        try:
+            concat.level1.stdlib.pyinterop.coroutine.send(stack, stash)
+        except StopIteration:
+            message = 'coroutine.send has incorrect stack effect'
+            self.assertEqual(stack, [], msg=message)
+            return
+        self.fail('coroutine.send should have raised StopIteration')
+
+    def test_coroutine_throw(self) -> None:
+        """Test that coroutine.throw works."""
+        stack: List[object] = [
+            None, None, DummyException, self.dummy_coroutine()]
+        stash: List[object] = []
+        self.assertRaises(
+            DummyException,
+            concat.level1.stdlib.pyinterop.coroutine.throw,
+            stack,
+            stash
+        )
+        message = 'coroutine.throw has incorrect stack effect'
+        self.assertEqual(stack, [], msg=message)
+
+    def test_coroutine_close(self) -> None:
+        """Test that coroutine.close works."""
+        stack: List[object] = [self.dummy_coroutine()]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.coroutine.close(stack, stash)
+        message = 'coroutine.close has incorrect stack effect'
+        self.assertEqual(stack, [], msg=message)
 
 
 class TestBuiltinFunctionAttributeAccessors(unittest.TestCase):
