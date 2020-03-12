@@ -495,50 +495,31 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['tuple-word'] = tuple_word_parser
 
     # This parses a list word.
-    # list word = LSQB, ([ word* ], COMMA | word+, (COMMA, word+)+, [ COMMA ]),
-    # RSQB ;
+    # list word = LSQB, word list, RSQB ;
     @parsy.generate('list word')
-    def list_word_parser():
-        # TODO: reflect the grammar in the code better
+    def list_word_parser() -> Generator:
         location = (yield parsers.token('LSQB')).start
-        element_words = []
-        element_words.append((yield parsers['word'].many()))
-        yield parsers.token('COMMA')
-        if (yield parsers.token('RSQB').optional()):
-            # 0 or 1-length list
-            length = 1 if element_words[0] else 0
-            return ListWordNode(element_words[0:length], location)
-        # >= 2-length lists; there must be no 'empty words'
-        if not element_words[0]:
-            yield parsy.fail('word before first comma in list longer than 1')
-        element_words.append((yield parsers['word'].at_least(1)))
-        element_words += (yield (parsers.token('COMMA') >> parsers['word'].at_least(1)).many())
-        yield parsers.token('COMMA').optional()
-        yield parsers.token('RSQB')
+        element_words = yield word_list_parser
+        end = parsers.token('RSQB')
+        yield end
         return ListWordNode(element_words, location)
 
     parsers['list-word'] = list_word_parser
 
+    # word list = (COMMA | word+, COMMA | word+, (COMMA, word+)+, [ COMMA ]) ;
     @parsy.generate('word list')
-    def word_list_parser():
-        element_words = []
-        element_words.append((yield parsers['word'].many()))
-        yield parsers.token('COMMA')
-        if (yield parsers.token('RPAR').optional()):
-            # 0 or 1-length tuple
-            length = 1 if element_words[0] else 0
-            return element_words[0:length]
-        # >= 2-length tuples; there must be no 'empty words'
-        if not element_words[0]:
-            yield parsy.fail('word before first comma in tuple longer than 1')
-        element_words.append((yield parsers['word'].at_least(1)))
-        element_words += (yield (parsers.token('COMMA') >> parsers['word'].at_least(1)).many())
-        yield parsers.token('COMMA').optional()
+    def word_list_parser() -> Generator:
+        empty: 'parsy.Parser[Token, List[Words]]' = parsers.token(
+            'COMMA').result([])
+        singleton = parsy.seq(parsers['word'].at_least(
+            1) << parsers.token('COMMA'))
+        multiple_element = parsers['word'].at_least(1).sep_by(
+            parsers.token('COMMA'), min=2) << parsers.token('COMMA').optional()
+        element_words = yield (multiple_element | singleton | empty)
         return element_words
 
     # This parses a set word.
     # list word = LBRACE, word list, RBRACE ;
-    # word list = ([ word* ], COMMA | word+, (COMMA, word+)+, [ COMMA ]) ;
     @parsy.generate('set word')
     def set_word_parser():
         location = (yield parsers.token('LBRACE')).start
