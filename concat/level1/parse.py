@@ -469,26 +469,11 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['bytes-word'] = parsers.token('BYTES').map(BytesWordNode)
 
     # This parses a tuple word.
-    # tuple word = LPAR, ([ word* ], COMMA | word+, (COMMA, word+)+, [ COMMA
-    #   ]), RPAR ;
+    # tuple word = LPAR, word list, RPAR ;
     @parsy.generate('tuple word')
-    def tuple_word_parser():
-        # TODO: reflect the grammar in the code better
+    def tuple_word_parser() -> Generator:
         location = (yield parsers.token('LPAR')).start
-        element_words = []
-        element_words.append((yield parsers['word'].many()))
-        yield parsers.token('COMMA')
-        if (yield parsers.token('RPAR').optional()):
-            # 0 or 1-length tuple
-            length = 1 if element_words[0] else 0
-            return TupleWordNode(element_words[0:length], location)
-        # >= 2-length tuples; there must be no 'empty words'
-        if not element_words[0]:
-            yield parsy.fail('word before first comma in tuple longer than 1')
-        element_words.append((yield parsers['word'].at_least(1)))
-        element_words += yield (parsers.token('COMMA')
-                                >> parsers['word'].at_least(1)).many()
-        yield parsers.token('COMMA').optional()
+        element_words = yield word_list_parser
         yield parsers.token('RPAR')
         return TupleWordNode(element_words, location)
 
