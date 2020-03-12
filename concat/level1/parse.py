@@ -342,6 +342,16 @@ class ClassdefStatementNode(concat.level0.parse.StatementNode):
         self.keyword_args = keyword_args
 
 
+def _flatten(list: List[Union[concat.level0.parse.WordNode, Words]]) -> Words:
+    flat_list: List[concat.level0.parse.WordNode] = []
+    for el in list:
+        if isinstance(el, concat.level0.parse.WordNode):
+            flat_list.append(el)
+        else:
+            flat_list.extend(el)
+    return flat_list
+
+
 def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['literal-word'] |= parsy.alt(
         parsers.ref_parser('none-word'),
@@ -563,9 +573,9 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['del-statement'] = parsers.token(
         'DEL') >> parsers.ref_parser('target-words').map(DelStatementNode)
 
-    # TODO: flatten
-    parsers['target-words'] = parsy.seq(parsers.ref_parser('target-word')) + (parsers.token(
-        'COMMA') >> parsers.ref_parser('target-word')).many() << parsers.token('COMMA').optional()  # type: ignore
+    parsers['target-words'] = (parsers.ref_parser('target-word').sep_by(
+        parsers.token('COMMA'), min=1) << parsers.token('COMMA').optional()
+        ).map(_flatten)
 
     parsers['target-word'] = parsy.alt(
         parsers.ref_parser('name-word'),
