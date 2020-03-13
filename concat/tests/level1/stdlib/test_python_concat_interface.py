@@ -12,6 +12,7 @@ import concat.level1.stdlib.pyinterop
 import concat.level1.stdlib.pyinterop.builtin_function
 import concat.level1.stdlib.pyinterop.coroutine
 import concat.level1.stdlib.pyinterop.builtin_method
+import concat.level1.stdlib.pyinterop.custom_class
 from typing import List, cast, Iterator, TextIO
 
 
@@ -381,3 +382,54 @@ class TestCallables(unittest.TestCase):
         self.assertEqual(stack, [], msg=message)
         message = 'call did not apply the callable to the stack and stash'
         callable.assert_called_with([], [])
+
+
+class TestCustomClassAttributeAccessors(unittest.TestCase):
+    def test_name(self) -> None:
+        """Test that custom_class.name works."""
+        stack: List[object] = [TestCustomClassAttributeAccessors]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.custom_class.name(stack, stash)
+        message = 'custom_class.name has incorrect stack effect'
+        self.assertEqual(stack, [TestCustomClassAttributeAccessors.__name__], msg=message)
+
+    def test_doc(self) -> None:
+        """Test that custom_class.doc works."""
+        stack: List[object] = [TestCustomClassAttributeAccessors]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.custom_class.doc(stack, stash)
+        message = 'custom_class.doc has incorrect stack effect'
+        self.assertEqual(stack, [TestCustomClassAttributeAccessors.__doc__], msg=message)
+
+    def test_annotations(self) -> None:
+        """Test that custom_class.annotations works."""
+        TestCustomClassAttributeAccessors.__annotations__ = {}
+        stack: List[object] = [TestCustomClassAttributeAccessors]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.custom_class.annotations(stack, stash)
+        message = 'custom_class.annotations has incorrect stack effect'
+        self.assertEqual(stack, [TestCustomClassAttributeAccessors.__annotations__], msg=message)
+
+    def test_dict(self) -> None:
+        """Test that custom_class.dict works."""
+        stack: List[object] = [TestCustomClassAttributeAccessors]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.custom_class.dict(stack, stash)
+        message = 'custom_class.dict has incorrect stack effect'
+        self.assertEqual(stack, [TestCustomClassAttributeAccessors.__dict__], msg=message)
+
+    def test_module(self) -> None:
+        """Test that custom_class.module works."""
+        stack: List[object] = [TestCustomClassAttributeAccessors]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.custom_class.module(stack, stash)
+        message = 'custom_class.module has incorrect stack effect'
+        self.assertEqual(stack, [TestCustomClassAttributeAccessors.__module__], msg=message)
+
+    def test_bases(self) -> None:
+        """Test that custom_class.bases works."""
+        stack: List[object] = [TestCustomClassAttributeAccessors]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.custom_class.bases(stack, stash)
+        message = 'custom_class.bases has incorrect stack effect'
+        self.assertEqual(stack, [TestCustomClassAttributeAccessors.__bases__], msg=message)
