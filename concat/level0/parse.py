@@ -28,9 +28,10 @@ tokenization phase.
 """
 import abc
 from typing import (Iterable, TypeVar, Any, Sequence, Tuple,
-                    Dict, Generator, List, Callable, Union)
+                    Dict, Generator, List, Callable)
 from concat.level0.lex import Token
 import parsy
+import concat.astutils
 
 
 class Node(abc.ABC):
@@ -40,17 +41,13 @@ class Node(abc.ABC):
         self.children: Iterable[Node]
 
 
-# FIXME: use type alias from level 1
-WordsOrStatements = Iterable[Union['WordNode', 'StatementNode']]
-
-
 class TopLevelNode(Node):
 
-    def __init__(self, encoding: Token, children: WordsOrStatements):
+    def __init__(self, encoding: Token, children: 'concat.astutils.WordsOrStatements'):
         super().__init__()
         self.encoding = encoding.value
         self.location = encoding.start
-        self.children: WordsOrStatements = children
+        self.children: concat.astutils.WordsOrStatements = children
 
 
 class StatementNode(Node, abc.ABC):

@@ -206,21 +206,12 @@ class VisitorDict(Dict[str, Visitor[NodeType1, ReturnType1]]):
         return visit
 
 
-# TODO: Put these AST helpers in seperate level-independent module
-
-def statementfy(node: Union[ast.expr, ast.stmt]) -> ast.stmt:
-    if isinstance(node, ast.expr):
-        load = ast.Load()
-        stack = ast.Name(id='stack', ctx=load)
-        stash = ast.Name(id='stash', ctx=load)
-        call_node = ast.Call(func=node, args=[stack, stash], keywords=[])
-        return ast.Expr(value=call_node)
-    return node
-
-
 def level_0_extension(
-    visitors: VisitorDict[concat.level0.parse.Node, ast.AST]
+    visitors: VisitorDict['concat.level0.parse.Node', ast.AST]
 ) -> None:
+    # FIXME: fix a circular import so we can move this line back to the top
+    from concat.astutils import statementfy
+
     # Converts a TopLevelNode to the top level of a Python module
     @FunctionalVisitor
     def top_level_visitor(

@@ -5,17 +5,11 @@ This parser is designed to extend the level zero parser.
 from concat.level0.lex import Token
 import concat.level0.parse
 import concat.level1.typecheck
+from concat.astutils import Words, Location, WordsOrStatements, flatten
 import abc
 import operator
-from typing import Iterable, List, Tuple, Sequence, Optional, Union, Generator
+from typing import Iterable, List, Tuple, Sequence, Optional, Generator
 import parsy
-
-
-# Typedefs
-WordsOrStatements = Iterable[
-    Union[concat.level0.parse.WordNode, concat.level0.parse.StatementNode]]
-Words = Iterable[concat.level0.parse.WordNode]
-Location = Tuple[int, int]
 
 
 # Patches to parsy for better errors--useful for debugging
@@ -342,16 +336,6 @@ class ClassdefStatementNode(concat.level0.parse.StatementNode):
         self.keyword_args = keyword_args
 
 
-def _flatten(list: List[Union[concat.level0.parse.WordNode, Words]]) -> Words:
-    flat_list: List[concat.level0.parse.WordNode] = []
-    for el in list:
-        if isinstance(el, concat.level0.parse.WordNode):
-            flat_list.append(el)
-        else:
-            flat_list.extend(el)
-    return flat_list
-
-
 def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['literal-word'] |= parsy.alt(
         parsers.ref_parser('none-word'),
@@ -458,7 +442,11 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         ('less-than', 'LESS', LessThanWordNode),
         ('greater-than', 'GREATER', GreaterThanWordNode),
         ('equal-to', 'EQEQUAL', EqualToWordNode),
-        ('greater-than-or-equal-to', 'GREATEREQUAL', GreaterThanOrEqualToWordNode),
+        (
+            'greater-than-or-equal-to',
+            'GREATEREQUAL',
+            GreaterThanOrEqualToWordNode
+        ),
         ('less-than-or-equal-to', 'LESSEQUAL', LessThanOrEqualToWordNode),
         ('not-equal-to', 'NOTEQUAL', NotEqualToWordNode),
         ('is', 'IS', IsWordNode),
@@ -569,13 +557,18 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     # Parsers a del statement.
     # del statement = DEL, target words ;
     # target words = target word, (COMMA, target word)*, [ COMMA ] ;
-    # target word = name word | LPAR, target words, RPAR | LSQB, target words, RQSB | attribute word | subscription word | slice word ;
+    # target word = name word
+    #   | LPAR, target words, RPAR
+    #   | LSQB, target words, RQSB
+    #   | attribute word
+    #   | subscription word
+    #   | slice word ;
     parsers['del-statement'] = parsers.token(
         'DEL') >> parsers.ref_parser('target-words').map(DelStatementNode)
 
     parsers['target-words'] = (parsers.ref_parser('target-word').sep_by(
         parsers.token('COMMA'), min=1) << parsers.token('COMMA').optional()
-        ).map(_flatten)
+        ).map(flatten)
 
     parsers['target-word'] = parsy.alt(
         parsers.ref_parser('name-word'),
@@ -597,7 +590,13 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         name = Token()
         name.value = func.name
         return AsyncFuncdefStatementNode(
-            name, func.decorators, func.annotation, func.body, location, func.stack_effect)
+            name,
+            func.decorators,
+            func.annotation,
+            func.body,
+            location,
+            func.stack_effect
+        )
 
     parsers['async-funcdef-statement'] = async_funcdef_statement_parser
 
@@ -606,7 +605,8 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     #   [ annotation ], COLON, suite ;
     # decorator = AT, word ;
     # annotation = RARROW, word* ;
-    # suite = word* | statement | NEWLINE, INDENT, (word | statement, NEWLINE)+, DEDENT ;
+    # suite = word* | statement
+    #   | NEWLINE, INDENT, (word | statement, NEWLINE)+, DEDENT ;
     # The stack effect syntax is defined within the .typecheck module.
     @parsy.generate('funcdef statement')
     def funcdef_statement_parser() -> Generator:
@@ -625,7 +625,8 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         annotation = yield annotation_parser.optional()
         yield parsers.token('COLON')
         body = yield suite
-        return FuncdefStatementNode(name, decorators, annotation, body, location, effect)
+        return FuncdefStatementNode(
+            name, decorators, annotation, body, location, effect)
 
     parsers['funcdef-statement'] = funcdef_statement_parser
 
@@ -697,7 +698,8 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['import-statement'] |= from_import_star_statement_parser
 
     # This parses a class definition statement.
-    # classdef statement = CLASS, NAME, decorator*, [ bases ], keyword arg*, COLON, suite ;
+    # classdef statement = CLASS, NAME, decorator*, [ bases ], keyword arg*,
+    #   COLON, suite ;
     # bases = tuple word ;
     # keyword arg = NAME, EQUAL, word ;
     @parsy.generate('classdef statement')
@@ -706,10 +708,17 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         name_token = yield parsers.token('NAME')
         decorators = yield decorator.many()
         bases_list = yield bases.optional()
-        keyword_args = yield keyword_arg.many()
+        keyword_args = yield keyword_arg.map(tuple).many()
         yield parsers.token('COLON')
         body = yield suite
-        return ClassdefStatementNode(name_token.value, body, location, decorators, bases_list, keyword_args)
+        return ClassdefStatementNode(
+            name_token.value,
+            body,
+            location,
+            decorators,
+            bases_list,
+            keyword_args
+        )
 
     parsers['classdef-statement'] = classdef_statement_parser
 
@@ -717,4 +726,4 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         'tuple-word').map(operator.attrgetter('tuple_children'))
 
     keyword_arg = parsy.seq(parsers.token('NAME').map(operator.attrgetter(
-        'value')) << parsers.token('EQUAL'), parsers.ref_parser('word')).map(tuple)
+        'value')) << parsers.token('EQUAL'), parsers.ref_parser('word'))
