@@ -13,6 +13,7 @@ import concat.level1.stdlib.pyinterop.builtin_function
 import concat.level1.stdlib.pyinterop.coroutine
 import concat.level1.stdlib.pyinterop.builtin_method
 import concat.level1.stdlib.pyinterop.custom_class
+import concat.level1.stdlib.pyinterop.instance
 from typing import List, cast, Iterator, TextIO
 
 
@@ -433,3 +434,27 @@ class TestCustomClassAttributeAccessors(unittest.TestCase):
         concat.level1.stdlib.pyinterop.custom_class.bases(stack, stash)
         message = 'custom_class.bases has incorrect stack effect'
         self.assertEqual(stack, [TestCustomClassAttributeAccessors.__bases__], msg=message)
+
+
+class Dummy:
+    pass
+
+
+class TestClassInstanceAttributeAccessors(unittest.TestCase):
+    obj = Dummy()
+
+    def test_class(self) -> None:
+        """Test that instance.cls works."""
+        stack: List[object] = [self.obj]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.instance.cls(stack, stash)
+        message = 'instance.cls has incorrect stack effect'
+        self.assertIs(stack[0], self.obj.__class__, msg=message)
+
+    def test_dict(self) -> None:
+        """Test that instance.dict works."""
+        stack: List[object] = [self.obj]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.instance.dict(stack, stash)
+        message = 'instance.dict has incorrect stack effect'
+        self.assertIs(stack[0], self.obj.__dict__, msg=message)
