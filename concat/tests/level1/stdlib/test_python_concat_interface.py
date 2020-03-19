@@ -11,6 +11,7 @@ import io
 import concat.level1.stdlib.pyinterop
 import concat.level1.stdlib.pyinterop.builtin_function
 import concat.level1.stdlib.pyinterop.coroutine
+import concat.level1.stdlib.pyinterop.math
 import concat.level1.stdlib.pyinterop.builtin_method
 import concat.level1.stdlib.pyinterop.custom_class
 import concat.level1.stdlib.pyinterop.instance
@@ -324,6 +325,16 @@ class TestAsync(unittest.TestCase):
         self.assertEqual(stack, [], msg=message)
 
 
+class TestMath(unittest.TestCase):
+    def test_sine(self) -> None:
+        """Test that math.sin works."""
+        stack: List[object] = [0]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.math.sin(stack, stash)
+        message = 'math.sin has incorrect stack effect'
+        self.assertEqual(stack, [0], msg=message)
+
+
 class TestBuiltinFunctionAttributeAccessors(unittest.TestCase):
     def test_self(self) -> None:
         """Test that builtin_function.self works."""
@@ -392,7 +403,8 @@ class TestCustomClassAttributeAccessors(unittest.TestCase):
         stash: List[object] = []
         concat.level1.stdlib.pyinterop.custom_class.name(stack, stash)
         message = 'custom_class.name has incorrect stack effect'
-        self.assertEqual(stack, [TestCustomClassAttributeAccessors.__name__], msg=message)
+        self.assertEqual(
+            stack, [TestCustomClassAttributeAccessors.__name__], msg=message)
 
     def test_doc(self) -> None:
         """Test that custom_class.doc works."""
@@ -400,7 +412,8 @@ class TestCustomClassAttributeAccessors(unittest.TestCase):
         stash: List[object] = []
         concat.level1.stdlib.pyinterop.custom_class.doc(stack, stash)
         message = 'custom_class.doc has incorrect stack effect'
-        self.assertEqual(stack, [TestCustomClassAttributeAccessors.__doc__], msg=message)
+        self.assertEqual(
+            stack, [TestCustomClassAttributeAccessors.__doc__], msg=message)
 
     def test_annotations(self) -> None:
         """Test that custom_class.annotations works."""
@@ -409,7 +422,8 @@ class TestCustomClassAttributeAccessors(unittest.TestCase):
         stash: List[object] = []
         concat.level1.stdlib.pyinterop.custom_class.annotations(stack, stash)
         message = 'custom_class.annotations has incorrect stack effect'
-        self.assertEqual(stack, [TestCustomClassAttributeAccessors.__annotations__], msg=message)
+        self.assertEqual(
+            stack, [TestCustomClassAttributeAccessors.__annotations__], msg=message)
 
     def test_dict(self) -> None:
         """Test that custom_class.dict works."""
@@ -417,7 +431,8 @@ class TestCustomClassAttributeAccessors(unittest.TestCase):
         stash: List[object] = []
         concat.level1.stdlib.pyinterop.custom_class.dict(stack, stash)
         message = 'custom_class.dict has incorrect stack effect'
-        self.assertEqual(stack, [TestCustomClassAttributeAccessors.__dict__], msg=message)
+        self.assertEqual(
+            stack, [TestCustomClassAttributeAccessors.__dict__], msg=message)
 
     def test_module(self) -> None:
         """Test that custom_class.module works."""
@@ -425,7 +440,8 @@ class TestCustomClassAttributeAccessors(unittest.TestCase):
         stash: List[object] = []
         concat.level1.stdlib.pyinterop.custom_class.module(stack, stash)
         message = 'custom_class.module has incorrect stack effect'
-        self.assertEqual(stack, [TestCustomClassAttributeAccessors.__module__], msg=message)
+        self.assertEqual(
+            stack, [TestCustomClassAttributeAccessors.__module__], msg=message)
 
     def test_bases(self) -> None:
         """Test that custom_class.bases works."""
@@ -433,7 +449,8 @@ class TestCustomClassAttributeAccessors(unittest.TestCase):
         stash: List[object] = []
         concat.level1.stdlib.pyinterop.custom_class.bases(stack, stash)
         message = 'custom_class.bases has incorrect stack effect'
-        self.assertEqual(stack, [TestCustomClassAttributeAccessors.__bases__], msg=message)
+        self.assertEqual(
+            stack, [TestCustomClassAttributeAccessors.__bases__], msg=message)
 
 
 class Dummy:
