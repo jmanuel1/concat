@@ -29,7 +29,7 @@ tokenization phase.
 import abc
 from typing import (Iterable, TypeVar, Any, Sequence, Tuple,
                     Dict, Generator, List, Callable)
-from concat.level0.lex import Token
+import concat.level0.lex
 import parsy
 import concat.astutils
 
@@ -43,7 +43,11 @@ class Node(abc.ABC):
 
 class TopLevelNode(Node):
 
-    def __init__(self, encoding: Token, children: 'concat.astutils.WordsOrStatements'):
+    def __init__(
+        self,
+        encoding: 'concat.level0.lex.Token',
+        children: 'concat.astutils.WordsOrStatements'
+    ):
         super().__init__()
         self.encoding = encoding.value
         self.location = encoding.start
@@ -56,7 +60,11 @@ class StatementNode(Node, abc.ABC):
 
 class ImportStatementNode(StatementNode):
 
-    def __init__(self, module: Token, location: Tuple[int, int]):
+    def __init__(
+        self,
+        module: 'concat.level0.lex.Token',
+        location: Tuple[int, int]
+    ):
         super().__init__()
         self.location = location
         self.children = []
@@ -77,7 +85,7 @@ class PushWordNode(WordNode):
 
 class NumberWordNode(WordNode):
 
-    def __init__(self, number: Token):
+    def __init__(self, number: 'concat.level0.lex.Token'):
         super().__init__()
         self.location = number.start
         self.children: List[Node] = []
@@ -86,7 +94,7 @@ class NumberWordNode(WordNode):
 
 class StringWordNode(WordNode):
 
-    def __init__(self, string: Token) -> None:
+    def __init__(self, string: 'concat.level0.lex.Token') -> None:
         super().__init__()
         self.location = string.start
         self.children: List[Node] = []
@@ -107,7 +115,7 @@ class QuoteWordNode(WordNode):
 
 class NameWordNode(WordNode):
 
-    def __init__(self, name: Token):
+    def __init__(self, name: 'concat.level0.lex.Token'):
         super().__init__()
         self.location = name.start
         self.children: List[Node] = []
@@ -116,7 +124,7 @@ class NameWordNode(WordNode):
 
 class AttributeWordNode(WordNode):
 
-    def __init__(self, attribute: Token):
+    def __init__(self, attribute: 'concat.level0.lex.Token'):
         super().__init__()
         self.location = attribute.start
         self.children: List[Node] = []
@@ -135,7 +143,10 @@ class ParserDict(Dict[str, parsy.Parser]):
     def extend_with(self: T, extension: Callable[[T], None]) -> None:
         extension(self)
 
-    def parse(self, tokens: Sequence[Token]) -> TopLevelNode:
+    def parse(
+        self,
+        tokens: Sequence['concat.level0.lex.Token']
+    ) -> TopLevelNode:
         return self['top-level'].parse(list(tokens))
 
     def token(self, typ: str) -> parsy.Parser:
@@ -162,7 +173,8 @@ def level_0_extension(parsers: ParserDict) -> None:
         word = parsers['word']
         children = yield (word | (statement << newline) | newline).many()
         children = [
-            child for child in children if not isinstance(child, Token)]
+            child for child in children
+            if not isinstance(child, concat.level0.lex.Token)]
         yield parsers.token('ENDMARKER')
         return TopLevelNode(encoding, children)
 

@@ -2,7 +2,9 @@
 import tokenize
 import sys
 import io
+import dataclasses
 from typing import Optional, Iterator, Tuple, List
+import concat.astutils
 
 
 TokenTuple = Tuple[str, str, Tuple[int, int], Tuple[int, int]]
@@ -57,7 +59,7 @@ class Lexer:
             self.lineno += 1
 
 
-# QUESTION: Make a dataclass?
+@dataclasses.dataclass
 class Token:
     """Class to represent tokens.
 
@@ -66,37 +68,14 @@ class Token:
     self.start - starting position of token in source, as (line, col)
     self.end - ending position of token in source, as (line, col)
     """
-
-    def __init__(self, tupl: TokenTuple = ('', '', (0, 0), (0, 0))) -> None:
-        """Create the Token object."""
-        self.type, self.value, self.start, self.end = tupl
-
-    def __str__(self) -> str:
-        """Convert to a string.
-
-        A nice representation is returned, not a valid expression.
-        """
-        return '({}, {}, start {})'.format(
-            repr(self.type), repr(self.value), repr(self.start))
-
-    def __repr__(self) -> str:
-        """Return a tuple representation as a valid expression."""
-        return '({}, {}, {}, {})'.format(
-            repr(self.type),
-            repr(self.value),
-            repr(self.start),
-            repr(self.end))
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Token):
-            return NotImplemented
-        self_as_tuple = (self.type, self.value, self.start, self.end)
-        other_as_tuple = (other.type, other.value, other.start, other.end)
-        return self_as_tuple == other_as_tuple
+    type: str = ''
+    value: str = ''
+    start: concat.astutils.Location = (0, 0)
+    end: concat.astutils.Location = (0, 0)
 
 
 def to_tokens(*tokTuples: TokenTuple) -> List[Token]:
-    return [Token(tuple) for tuple in tokTuples]
+    return [Token(*tuple) for tuple in tokTuples]
 
 
 lexer = Lexer()
