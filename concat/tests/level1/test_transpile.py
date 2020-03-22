@@ -478,3 +478,60 @@ class TestSubVisitors(unittest.TestCase):
         test('right-shift-word')
         test('operator-word')
         test('word')
+
+    def test_bitwise_and_word_visitor(self) -> None:
+        token = concat.level0.lex.Token()
+        token.start = (0, 0)
+        node = concat.level1.parse.BitwiseAndWordNode(token)
+
+        def test(visitor: str) -> None:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by the {} visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            self.assertIsInstance(
+                py_node, ast.expr, msg='Python node is not an expression')
+
+        test('bitwise-and-word')
+        test('operator-word')
+        test('word')
+
+    def test_bitwise_xor_word_visitor(self) -> None:
+        token = concat.level0.lex.Token()
+        token.start = (0, 0)
+        node = concat.level1.parse.BitwiseXorWordNode(token)
+
+        def test(visitor: str) -> None:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by the {} visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            self.assertIsInstance(
+                py_node, ast.expr, msg='Python node is not an expression')
+
+        test('bitwise-xor-word')
+        test('operator-word')
+        test('word')
+
+    def test_bitwise_or_word_visitor(self) -> None:
+        token = concat.level0.lex.Token()
+        token.start = (0, 0)
+        node = concat.level1.parse.BitwiseOrWordNode(token)
+
+        def test(visitor: str) -> None:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by the {} visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            self.assertIsInstance(
+                py_node, ast.expr, msg='Python node is not an expression')
+
+        test('bitwise-or-word')
+        test('operator-word')
+        test('word')
