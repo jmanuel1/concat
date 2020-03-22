@@ -23,6 +23,7 @@ from concat.visitors import (
 )
 from concat.astutils import (
     pop_stack,
+    to_transpiled_quotation,
     pack_expressions,
 )
 from typing import cast
@@ -38,6 +39,7 @@ def level_1_extension(
                                    visitors.ref_visitor('bytes-word'),
                                    visitors.ref_visitor('tuple-word'),
                                    visitors.ref_visitor('list-word'),
+                                   visitors.ref_visitor('set-word'),
                                    )
 
     # Converts a NoneWordNode to the Python expression `push(None)`.
@@ -149,6 +151,29 @@ def level_1_extension(
 
     visitors['list-word'] = assert_type(
         concat.level1.parse.ListWordNode).then(list_word_visitor)
+
+    # Converts a SetWordNode to the Python expression
+    # `push({(Quotation([...1])(stack,stash),stack.pop())[-1],(Quotation([...2])(stack,stash),stack.pop())[-1],......})`.
+    @FunctionalVisitor
+    def set_word_visitor(node: concat.level1.parse.SetWordNode):
+        load = ast.Load()
+        elements = []
+        for words in node.set_children:
+            py_quote = to_transpiled_quotation(words, node.location, visitors)
+            stack = ast.Name(id='stack', ctx=load)
+            stash = ast.Name(id='stack', ctx=load)
+            quote_call = ast.Call(func=py_quote, args=[
+                                  stack, stash], keywords=[])
+            element = pack_expressions([quote_call, pop_stack()])
+            elements.append(element)
+        lst = ast.Set(elts=elements)
+        push_func = ast.Name(id='push', ctx=load)
+        py_node = ast.Call(func=push_func, args=[lst], keywords=[])
+        py_node.lineno, py_node.col_offset = node.location
+        return py_node
+
+    visitors['set-word'] = assert_type(
+        concat.level1.parse.SetWordNode).then(set_word_visitor)
     visitors['word'] = alt(
         visitors['word'],
         visitors.ref_visitor('subscription-word'),
