@@ -1,3 +1,4 @@
+import concat.visitors
 from concat.level0.lex import Token
 import concat.level0.transpile
 import concat.level1.parse
@@ -10,7 +11,7 @@ from typing import cast
 class TestSubVisitors(unittest.TestCase):
 
     def setUp(self) -> None:
-        self.__visitors = concat.level0.transpile.VisitorDict[
+        self.__visitors = concat.visitors.VisitorDict[
             concat.level0.parse.Node, ast.AST]()
         self.__visitors.extend_with(concat.level0.transpile.level_0_extension)
         self.__visitors.extend_with(concat.level1.transpile.level_1_extension)
@@ -21,7 +22,7 @@ class TestSubVisitors(unittest.TestCase):
         node = concat.level1.parse.NoneWordNode(none)
         try:
             py_node = self.__visitors['none-word'].visit(node)
-        except concat.level0.transpile.VisitFailureException:
+        except concat.visitors.VisitFailureException:
             message = '{} was not accepted by the none-word visitor'.format(
                 node)
             self.fail(msg=message)
@@ -37,7 +38,7 @@ class TestSubVisitors(unittest.TestCase):
         node = concat.level1.parse.NotImplWordNode(not_impl)
         try:
             py_node = self.__visitors['not-impl-word'].visit(node)
-        except concat.level0.transpile.VisitFailureException:
+        except concat.visitors.VisitFailureException:
             message_template = '{} was not accepted by the not-impl-word '
             'visitor'
             message = message_template.format(node)

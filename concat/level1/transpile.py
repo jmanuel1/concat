@@ -12,9 +12,9 @@ Visser (2001): ACM SIGPLAN Notices 36(11):270-282 November 2001 DOI:
 
 import ast
 import concat.level0.parse
-from concat.level0.transpile import (
-    VisitorDict, FunctionalVisitor, VisitFailureException, alt)
 import concat.level1.parse
+from concat.visitors import (
+    VisitorDict, FunctionalVisitor, VisitFailureException, alt, All, Visitor)
 
 
 def level_1_extension(

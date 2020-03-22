@@ -1,6 +1,7 @@
 """The Concat Implementation."""
 
 
+import concat.visitors
 import concat.level0.lex
 import concat.level0.parse
 import concat.level0.transpile
@@ -53,7 +54,8 @@ if __name__ == '__main__':
     concat_ast = parser.parse(tokens)
     concat.level1.typecheck.infer(
         concat.level1.typecheck.Environment(), concat_ast.children)
-    transpiler = concat.level0.transpile.VisitorDict[concat.level0.parse.Node, ast.AST]()
+    transpiler = concat.visitors.VisitorDict[
+        concat.level0.parse.Node, ast.AST]()
     transpiler.extend_with(concat.level0.transpile.level_0_extension)
     transpiler.extend_with(concat.level1.transpile.level_1_extension)
     python_ast = cast(ast.Module, transpiler.visit(concat_ast))

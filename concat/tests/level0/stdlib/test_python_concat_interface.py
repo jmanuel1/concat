@@ -2,6 +2,7 @@
 
 Tests that the boundary between Python and Concat is correct."""
 import unittest
+import concat.visitors
 from concat.level0.stdlib.types import Quotation
 import concat.level0.stdlib.pyinterop
 import concat.level0.lex
@@ -47,7 +48,7 @@ class TestIntoConcatFromPython(unittest.TestCase):
         parser = concat.level0.parse.ParserDict()
         parser.extend_with(concat.level0.parse.level_0_extension)
         concat_ast = parser.parse(tokens)
-        transpiler = concat.level0.transpile.VisitorDict[concat.level0.parse.Node, ast.AST]()
+        transpiler = concat.visitors.VisitorDict[concat.level0.parse.Node, ast.AST]()
         transpiler.extend_with(concat.level0.transpile.level_0_extension)
         prog = cast(ast.Module, transpiler.visit(concat_ast))
         concat.level0.execute.execute('<test>', prog, namespace)

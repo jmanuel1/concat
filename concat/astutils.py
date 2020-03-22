@@ -1,7 +1,7 @@
 from typing import Union, List, Tuple, Iterable, Optional, cast
 import ast
+import concat.visitors
 import concat.level0.parse
-import concat.level0.transpile as transpile
 
 
 # Typedefs
@@ -10,7 +10,8 @@ WordsOrStatements = List[
     Union['concat.level0.parse.WordNode', 'concat.level0.parse.StatementNode']]
 Words = List['concat.level0.parse.WordNode']
 Location = Tuple[int, int]
-_TranspilerDict = transpile.VisitorDict['concat.level0.parse.Node', ast.AST]
+_TranspilerDict = concat.visitors.VisitorDict[
+    'concat.level0.parse.Node', ast.AST]
 
 
 # AST Manipulation utilities
