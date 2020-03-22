@@ -17,6 +17,7 @@ import astunparse  # type: ignore
 from typing import (Tuple, Union, TypeVar, Generic,
                     Iterable, Dict, Callable, cast)
 from typing_extensions import Protocol
+import concat.astutils
 import concat.level0.parse
 
 
@@ -209,9 +210,6 @@ class VisitorDict(Dict[str, Visitor[NodeType1, ReturnType1]]):
 def level_0_extension(
     visitors: VisitorDict['concat.level0.parse.Node', ast.AST]
 ) -> None:
-    # FIXME: fix a circular import so we can move this line back to the top
-    from concat.astutils import statementfy
-
     # Converts a TopLevelNode to the top level of a Python module
     @FunctionalVisitor
     def top_level_visitor(
@@ -220,7 +218,7 @@ def level_0_extension(
         statement = visitors.ref_visitor('statement')
         word = visitors.ref_visitor('word')
         body = list(All(Choice(statement, word)).visit(node))
-        statements = [statementfy(
+        statements = [concat.astutils.statementfy(
             cast(Union[ast.stmt, ast.expr], child)) for child in body]
         module = ast.Module(body=statements)
         ast.fix_missing_locations(module)
