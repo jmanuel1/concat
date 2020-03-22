@@ -34,6 +34,7 @@ def level_1_extension(
                                    visitors.ref_visitor('none-word'),
                                    visitors.ref_visitor('not-impl-word'),
                                    visitors.ref_visitor('ellipsis-word'),
+                                   visitors.ref_visitor('bytes-word'),
                                    )
 
     # Converts a NoneWordNode to the Python expression `push(None)`.
@@ -77,6 +78,20 @@ def level_1_extension(
 
     visitors['ellipsis-word'] = assert_type(
         concat.level1.parse.EllipsisWordNode).then(ellipsis_word_visitor)
+
+    # Converts a BytesWordNode to the Python expression
+    # `push(b'...')`.
+    @FunctionalVisitor
+    def bytes_word_visitor(node: concat.level1.parse.BytesWordNode):
+        load = ast.Load()
+        bytes = ast.Bytes(s=node.value)
+        push_func = ast.Name(id='push', ctx=load)
+        py_node = ast.Call(func=push_func, args=[bytes], keywords=[])
+        py_node.lineno, py_node.col_offset = node.location
+        return py_node
+
+    visitors['bytes-word'] = assert_type(
+        concat.level1.parse.BytesWordNode).then(bytes_word_visitor)
     visitors['word'] = alt(
         visitors['word'],
         visitors.ref_visitor('subscription-word'),

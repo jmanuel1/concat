@@ -106,3 +106,22 @@ class TestSubVisitors(unittest.TestCase):
             self.fail(msg=message)
         self.assertIn('2', astunparse.unparse(py_node),
                       msg='Python node does not contain 2')
+
+    def test_bytes_word_visitor(self) -> None:
+        bytes_token = concat.level0.lex.Token()
+        bytes_token.start, bytes_token.value = (0, 0), 'b"bytes"'
+        node = concat.level1.parse.BytesWordNode(bytes_token)
+
+        def test(visitor: str) -> None:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by the {} '
+                'visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            self.assertIsInstance(
+                py_node, ast.Call, msg='Python node is not a call')
+
+        test('bytes-word')
+        test('literal-word')
