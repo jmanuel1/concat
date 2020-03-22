@@ -816,3 +816,109 @@ class TestSubVisitors(unittest.TestCase):
 
         test('with-word')
         test('word')
+
+    def test_import_statement_visitor(self) -> None:
+        node = concat.level1.parse.ImportStatementNode('a.submodule')
+
+        def test(visitor: str) -> None:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by the {} visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            # The transpiler wraps its output in an if, so don't test for
+            # ast.Import
+            self.assertIsInstance(
+                py_node, ast.stmt, msg='Python node is not a statement')
+
+        test('import-statement')
+        test('statement')
+
+    def test_import_statement_visitor_with_as(self) -> None:
+        node = concat.level1.parse.ImportStatementNode('a.submodule', 'b')
+
+        def test(visitor: str) -> None:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by the {} visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            # The transpiler wraps its output in an if, so don't test for
+            # ast.Import
+            self.assertIsInstance(
+                py_node, ast.stmt, msg='Python node is not a statement')
+            self.assertIn('as b', astunparse.unparse(py_node),
+                          msg='as-part was not transpiled')
+
+        test('import-statement')
+        test('statement')
+
+    def test_import_statement_visitor_with_from(self) -> None:
+        node = concat.level1.parse.FromImportStatementNode('a.submodule', 'b')
+
+        def test(visitor: str) -> None:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by the {} visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            # The transpiler wraps its output in an if, so don't test for
+            # ast.Import
+            self.assertIsInstance(
+                py_node, ast.stmt,
+                msg='Python node is not a statement')
+            self.assertIn('from', astunparse.unparse(py_node),
+                          msg='was not transpiled as from-import')
+
+        test('import-statement')
+        test('statement')
+
+    def test_import_statement_visitor_with_from_and_as(self) -> None:
+        node = concat.level1.parse.FromImportStatementNode(
+            'a.submodule', 'b', 'c')
+
+        def test(visitor: str) -> None:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by the {} visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            # The transpiler wraps its output in an if, so don't test for
+            # ast.Import
+            self.assertIsInstance(
+                py_node, ast.stmt,
+                msg='Python node is not a statement')
+            self.assertIn('from', astunparse.unparse(py_node),
+                          msg='was not transpiled as from-import')
+            self.assertIn('as c', astunparse.unparse(py_node),
+                          msg='as-part was not transpiled')
+
+        test('import-statement')
+        test('statement')
+
+    def test_import_statement_visitor_with_from_and_star(self) -> None:
+        node = concat.level1.parse.FromImportStarStatementNode('a')
+
+        def test(visitor: str) -> None:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by the {} visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            # The transpiler wraps its output in an if, so don't test for
+            # ast.Import
+            self.assertIsInstance(
+                py_node, ast.stmt,
+                msg='Python node is not a statement')
+            self.assertIn('from', astunparse.unparse(py_node),
+                          msg='was not transpiled as from-import')
+            self.assertIn('*', astunparse.unparse(py_node),
+                          msg='star-part was not transpiled')
+
+        test('import-statement')
+        test('statement')

@@ -28,6 +28,8 @@ from concat.astutils import (
     to_transpiled_quotation,
     pack_expressions,
     to_python_decorator,
+    remove_leading_dots,
+    count_leading_dots,
 )
 from typing import cast
 
@@ -573,3 +575,34 @@ def level_1_extension(
     visitors['funcdef-statement'] = assert_type(
         concat.level1.parse.FuncdefStatementNode
     ).then(funcdef_statement_visitor)
+
+    old_import_statement = visitors['import-statement']
+
+    @FunctionalVisitor
+    def import_statement_visitor(
+        node: concat.level1.parse.ImportStatementNode
+    ) -> ast.If:
+        if_statement = cast(ast.If, old_import_statement.visit(node))
+        cast(ast.Import, if_statement.body[0]).names[0].asname = node.asname
+        return if_statement
+
+    @FunctionalVisitor
+    def from_import_statement_visitor(
+        node: concat.level1.parse.FromImportStatementNode
+    ) -> ast.If:
+        if_statement = cast(ast.If, old_import_statement.visit(node))
+        module = remove_leading_dots(node.value)
+        names = [ast.alias(node.imported_name, node.asname)]
+        level = count_leading_dots(node.value)
+        from_import = ast.ImportFrom(module, names, level)
+        if_statement.body[0] = from_import
+        return if_statement
+
+    visitors['import-statement'] = alt(
+        assert_type(
+            concat.level1.parse.FromImportStatementNode
+        ).then(from_import_statement_visitor),
+        assert_type(
+            concat.level1.parse.ImportStatementNode
+        ).then(import_statement_visitor)
+    )
