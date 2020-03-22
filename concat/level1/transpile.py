@@ -228,6 +228,7 @@ def level_1_extension(
         visitors.ref_visitor('subscription-word'),
         visitors.ref_visitor('slice-word'),
         visitors.ref_visitor('operator-word'),
+        visitors.ref_visitor('assert-word'),
     )
 
     visitors.extend_with(_literal_word_extension)
@@ -405,6 +406,12 @@ def level_1_extension(
         node_to_py_string('''lambda s,_:exec("""
             import asyncio
             asyncio.get_running_loop().run_until_complete(s.pop())""")'''))
+
+    # Converts an AssertWordNode to the Python 'lambda s,_: exec("assert
+    # s.pop()")'.
+    visitors['assert-word'] = assert_type(
+        concat.level1.parse.AssertWordNode).then(
+        node_to_py_string('lambda s,_:exec("assert s.pop()")'))
     visitors['statement'] = alt(
         visitors['statement'],
         visitors.ref_visitor('del-statement'),

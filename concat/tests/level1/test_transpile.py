@@ -744,3 +744,21 @@ class TestSubVisitors(unittest.TestCase):
         test('not-word')
         test('operator-word')
         test('word')
+
+    def test_assert_word_visitor(self) -> None:
+        token = concat.level0.lex.Token()
+        token.start = (0, 0)
+        node = concat.level1.parse.AssertWordNode(token)
+
+        def test(visitor: str) -> None:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by the {} visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            self.assertIsInstance(
+                py_node, ast.expr, msg='Python node is not an expression')
+
+        test('assert-word')
+        test('word')
