@@ -32,7 +32,7 @@ from concat.astutils import (
 from typing import cast
 
 
-def level_1_extension(
+def _literal_word_extension(
     visitors: VisitorDict[concat.level0.parse.Node, ast.AST]
 ) -> None:
     visitors['literal-word'] = alt(visitors['literal-word'],
@@ -48,9 +48,7 @@ def level_1_extension(
 
     # Converts a NoneWordNode to the Python expression `push(None)`.
     @FunctionalVisitor
-    def none_word_visitor(node: concat.level0.parse.Node):
-        if not isinstance(node, concat.level1.parse.NoneWordNode):
-            raise VisitFailureException
+    def none_word_visitor(node: concat.level1.parse.NoneWordNode):
         none = ast.NameConstant(value=None)
         load = ast.Load()
         push_func = ast.Name(id='push', ctx=load)
@@ -58,14 +56,13 @@ def level_1_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
-    visitors['none-word'] = none_word_visitor
+    visitors['none-word'] = assert_type(
+        concat.level1.parse.NoneWordNode).then(none_word_visitor)
 
     # Converts a NotImplWordNode to the Python expression
     # `push(NotImplemented)`.
     @FunctionalVisitor
-    def not_impl_word_visitor(node: concat.level0.parse.Node):
-        if not isinstance(node, concat.level1.parse.NotImplWordNode):
-            raise VisitFailureException
+    def not_impl_word_visitor(node: concat.level1.parse.NotImplWordNode):
         load = ast.Load()
         not_impl = ast.Name(id='NotImplemented', ctx=load)
         push_func = ast.Name(id='push', ctx=load)
@@ -73,7 +70,9 @@ def level_1_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
-    visitors['not-impl-word'] = not_impl_word_visitor
+    visitors['not-impl-word'] = assert_type(
+        concat.level1.parse.NotImplWordNode).then(not_impl_word_visitor)
+
     # Converts a EllipsisWordNode to the Python expression
     # `push(...)`.
     @FunctionalVisitor
@@ -211,6 +210,11 @@ def level_1_extension(
 
     visitors['dict-word'] = assert_type(
         concat.level1.parse.DictWordNode).then(dict_word_visitor)
+
+
+def level_1_extension(
+    visitors: VisitorDict[concat.level0.parse.Node, ast.AST]
+) -> None:
     visitors['word'] = alt(
         visitors['word'],
         visitors.ref_visitor('yield-word'),
@@ -218,6 +222,8 @@ def level_1_extension(
         visitors.ref_visitor('subscription-word'),
         visitors.ref_visitor('slice-word'),
     )
+
+    visitors.extend_with(_literal_word_extension)
 
     # Converts a SubscriptionWordNode to the Python expression `(...,
     # stack.pop(-2)[stack.pop()])[-1]`.
