@@ -1,11 +1,13 @@
 import concat.visitors
 from concat.level0.lex import Token
+import concat.level0.parse
 import concat.level0.transpile
 import concat.level1.parse
 import concat.level1.transpile
 import unittest
 import ast
 from typing import cast
+import astunparse  # type: ignore
 
 
 class TestSubVisitors(unittest.TestCase):
@@ -77,3 +79,30 @@ class TestSubVisitors(unittest.TestCase):
                 self.fail(msg=message)
             self.assertIsInstance(
                 py_node, ast.expr, msg='Python node is not a expression')
+
+    def test_slice_word_visitor(self) -> None:
+        node = concat.level1.parse.SliceWordNode(([], [], []))
+        for visitor in {'slice-word', 'word'}:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by the {} visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            self.assertIsInstance(
+                py_node, ast.expr, msg='Python node is not a expression')
+
+    def test_slice_word_visitor_with_step(self) -> None:
+        two_token = concat.level0.lex.Token()
+        two_token.type, two_token.value = 'NUMBER', '2'
+        two = concat.level0.parse.NumberWordNode(two_token)
+        node = concat.level1.parse.SliceWordNode(([], [], [two]))
+        try:
+            py_node = self.__visitors['slice-word'].visit(node)
+        except concat.visitors.VisitFailureException:
+            message_template = '{} was not accepted by the slice-word '
+            'visitor'
+            message = message_template.format(node)
+            self.fail(msg=message)
+        self.assertIn('2', astunparse.unparse(py_node),
+                      msg='Python node does not contain 2')

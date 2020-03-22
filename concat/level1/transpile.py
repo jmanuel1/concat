@@ -80,6 +80,7 @@ def level_1_extension(
     visitors['word'] = alt(
         visitors['word'],
         visitors.ref_visitor('subscription-word'),
+        visitors.ref_visitor('slice-word'),
     )
 
     # Converts a SubscriptionWordNode to the Python expression `(...,
@@ -100,3 +101,19 @@ def level_1_extension(
     visitors['subscription-word'] = assert_type(
         concat.level1.parse.SubscriptionWordNode).then(
         subscription_word_visitor)
+
+    # Converts a SliceWordNode to the Python equivalent of `[...3 ...2 ...1 #
+    # to_slice]`. This perhaps makes the evaluation order in a slice a bit
+    # weird.
+    @FunctionalVisitor
+    def slice_word_visitor(node: concat.level1.parse.SliceWordNode):
+        to_slice_token = concat.level0.lex.Token()
+        to_slice_token.type, to_slice_token.value = 'NAME', 'to_slice'
+        to_slice = concat.level0.parse.NameWordNode(to_slice_token)
+        subscription = concat.level1.parse.SubscriptionWordNode(
+            [*node.step_children, *node.stop_children, *node.start_children,
+             to_slice])
+        return visitors['subscription-word'].visit(subscription)
+
+    visitors['slice-word'] = assert_type(
+        concat.level1.parse.SliceWordNode).then(slice_word_visitor)
