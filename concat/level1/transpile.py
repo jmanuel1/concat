@@ -281,6 +281,12 @@ def level_1_extension(
         visitors.ref_visitor('bitwise-and-word'),
         visitors.ref_visitor('bitwise-xor-word'),
         visitors.ref_visitor('bitwise-or-word'),
+        visitors.ref_visitor('less-than-word'),
+        visitors.ref_visitor('greater-than-word'),
+        visitors.ref_visitor('equal-to-word'),
+        visitors.ref_visitor('greater-than-or-equal-to-word'),
+        visitors.ref_visitor('less-than-or-equal-to-word'),
+        visitors.ref_visitor('not-equal-to-word'),
     )
 
     @FunctionalVisitor
@@ -330,6 +336,24 @@ def level_1_extension(
 
     visitors['bitwise-or-word'] = assert_type(
         concat.level1.parse.BitwiseOrWordNode).then(binary_operator_visitor('|'))
+
+    visitors['less-than-word'] = assert_type(
+        concat.level1.parse.LessThanWordNode).then(binary_operator_visitor('<'))
+
+    visitors['greater-than-word'] = assert_type(
+        concat.level1.parse.GreaterThanWordNode).then(binary_operator_visitor('>'))
+
+    visitors['equal-to-word'] = assert_type(
+        concat.level1.parse.EqualToWordNode).then(binary_operator_visitor('=='))
+
+    visitors['greater-than-or-equal-to-word'] = assert_type(
+        concat.level1.parse.GreaterThanOrEqualToWordNode).then(binary_operator_visitor('>='))
+
+    visitors['less-than-or-equal-to-word'] = assert_type(
+        concat.level1.parse.LessThanOrEqualToWordNode).then(binary_operator_visitor('<='))
+
+    visitors['not-equal-to-word'] = assert_type(
+        concat.level1.parse.NotEqualToWordNode).then(binary_operator_visitor('!='))
 
     # NOTE on semantics: `yield` pushes the value it returns onto the stack.
     # `yield call` calls the value that is returned. `$yield` is a function
