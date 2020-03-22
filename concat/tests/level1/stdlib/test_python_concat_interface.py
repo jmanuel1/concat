@@ -10,6 +10,7 @@ import builtins
 import io
 import concat.level1.stdlib.pyinterop
 import concat.level1.stdlib.pyinterop.builtin_function
+import concat.level1.stdlib.pyinterop.user_defined_function
 import concat.level1.stdlib.pyinterop.method
 import concat.level1.stdlib.pyinterop.coroutine
 import concat.level1.stdlib.pyinterop.math
@@ -254,6 +255,111 @@ class TestBuiltinAnalogs(unittest.TestCase):
         self.assertEqual(
             cast(io.TextIOWrapper, stack[0]).fileno(), fd, msg=message)
         fileobj.close()
+
+
+def dummy(self) -> None:
+    pass
+
+
+class TestUserDefinedFunctionAttributeAccessors(unittest.TestCase):
+    def test_doc(self) -> None:
+        """Test that user_defined_function.doc works."""
+        stack: List[object] = [dummy]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.user_defined_function.doc(stack, stash)
+        message = 'user_defined_function.doc has incorrect stack effect'
+        self.assertEqual(stack, [dummy.__doc__], msg=message)
+
+    def test_name(self) -> None:
+        """Test that user_defined_function.name works."""
+        stack: List[object] = [dummy]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.user_defined_function.name(stack, stash)
+        message = 'user_defined_function.name has incorrect stack effect'
+        self.assertEqual(stack, [dummy.__name__], msg=message)
+
+    def test_qualname(self) -> None:
+        """Test that user_defined_function.qualname works."""
+        stack: List[object] = [dummy]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.user_defined_function.qualname(
+            stack, stash)
+        message = 'user_defined_function.qualname has incorrect stack effect'
+        self.assertEqual(stack, [dummy.__qualname__], msg=message)
+
+    def test_module(self) -> None:
+        """Test that user_defined_function.module works."""
+        stack: List[object] = [dummy]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.user_defined_function.module(
+            stack, stash)
+        message = 'user_defined_function.module has incorrect stack effect'
+        self.assertEqual(stack, [dummy.__module__], msg=message)
+
+    def test_defaults(self) -> None:
+        """Test that user_defined_function.defaults works."""
+        stack: List[object] = [dummy]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.user_defined_function.defaults(
+            stack, stash)
+        message = 'user_defined_function.defaults has incorrect stack effect'
+        self.assertEqual(stack, [dummy.__defaults__],
+                         msg=message)  # type: ignore
+
+    def test_code(self) -> None:
+        """Test that user_defined_function.code works."""
+        stack: List[object] = [dummy]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.user_defined_function.code(stack, stash)
+        message = 'user_defined_function.code has incorrect stack effect'
+        self.assertEqual(stack, [dummy.__code__], msg=message)
+
+    def test_globals(self) -> None:
+        """Test that user_defined_function.globals works."""
+        stack: List[object] = [dummy]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.user_defined_function.globals(
+            stack, stash)
+        message = 'user_defined_function.globals has incorrect stack effect'
+        self.assertEqual(stack, [dummy.__globals__],
+                         msg=message)  # type: ignore
+
+    def test_dict(self) -> None:
+        """Test that user_defined_function.dict works."""
+        stack: List[object] = [dummy]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.user_defined_function.dict(stack, stash)
+        message = 'user_defined_function.dict has incorrect stack effect'
+        self.assertEqual(stack, [dummy.__dict__], msg=message)
+
+    def test_closure(self) -> None:
+        """Test that user_defined_function.closure works."""
+        stack: List[object] = [dummy]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.user_defined_function.closure(
+            stack, stash)
+        message = 'user_defined_function.closure has incorrect stack effect'
+        self.assertEqual(stack, [dummy.__closure__],
+                         msg=message)  # type: ignore
+
+    def test_annotations(self) -> None:
+        """Test that user_defined_function.annotations works."""
+        stack: List[object] = [dummy]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.user_defined_function.annotations(
+            stack, stash)
+        message = 'user_defined_function.annotations has incorrect stack effect'
+        self.assertEqual(stack, [dummy.__annotations__], msg=message)
+
+    def test_kwdefaults(self) -> None:
+        """Test that user_defined_function.kwdefaults works."""
+        stack: List[object] = [dummy]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.user_defined_function.kwdefaults(
+            stack, stash)
+        message = 'user_defined_function.kwdefaults has incorrect stack effect'
+        self.assertEqual(
+            stack, [cast(types.FunctionType, dummy).__kwdefaults__], msg=message)
 
 
 class TestMethodAttributeAccessors(unittest.TestCase):
