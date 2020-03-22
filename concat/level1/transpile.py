@@ -268,8 +268,21 @@ def level_1_extension(
         concat.level1.parse.SliceWordNode).then(slice_word_visitor)
 
     visitors['operator-word'] = alt(
+        visitors.ref_visitor('invert-word'),
         visitors.ref_visitor('power-word'),
     )
+
+    @FunctionalVisitor
+    def invert_word_visitor(
+        node: concat.level1.parse.InvertWordNode
+    ) -> ast.expr:
+        py_node = cast(ast.Expression, ast.parse(
+            'lambda s,_:s.append(~s.pop())', mode='eval')).body
+        py_node.lineno, py_node.col_offset = node.location
+        return py_node
+
+    visitors['invert-word'] = assert_type(
+        concat.level1.parse.InvertWordNode).then(invert_word_visitor)
 
     visitors['power-word'] = assert_type(
         concat.level1.parse.PowerWordNode).then(binary_operator_visitor('**'))
