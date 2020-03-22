@@ -21,6 +21,7 @@ from concat.visitors import (
     Visitor,
     assert_type
 )
+from concat.transpile_visitors import node_to_py_string
 from concat.astutils import (
     pop_stack,
     to_transpiled_quotation,
@@ -210,6 +211,7 @@ def level_1_extension(
         concat.level1.parse.DictWordNode).then(dict_word_visitor)
     visitors['word'] = alt(
         visitors['word'],
+        visitors.ref_visitor('yield-word'),
         visitors.ref_visitor('subscription-word'),
         visitors.ref_visitor('slice-word'),
     )
@@ -249,6 +251,25 @@ def level_1_extension(
     visitors['slice-word'] = assert_type(
         concat.level1.parse.SliceWordNode).then(slice_word_visitor)
 
+
+    # NOTE on semantics: `yield` pushes the value it returns onto the stack.
+    # `yield call` calls the value that is returned. `$yield` is a function
+    # that does what `yield` does when called.
+    # `yield` causes the nearest enclosing generator quotation on the stack to
+    # yield.
+    @FunctionalVisitor
+    def yield_word_visitor(
+        node: concat.level1.parse.YieldWordNode
+    ) -> ast.expr:
+        return node_to_py_string(
+            '{}.yield_function'.format(
+                visitors.data['quote-constructor-string'])).visit(node)
+
+    visitors['yield-word'] = assert_type(
+        concat.level1.parse.YieldWordNode).then(yield_word_visitor)
+
+    visitors.data['quote-constructor-string'] = \
+        'concat.level1.stdlib.types.Quotation'
     visitors['statement'] = alt(
         visitors['statement'],
         visitors.ref_visitor('del-statement'),
