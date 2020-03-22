@@ -14,7 +14,13 @@ import ast
 import concat.level0.parse
 import concat.level1.parse
 from concat.visitors import (
-    VisitorDict, FunctionalVisitor, VisitFailureException, alt, All, Visitor)
+    VisitorDict,
+    FunctionalVisitor,
+    alt,
+    All,
+    Visitor,
+    assert_type
+)
 
 
 def level_1_extension(
@@ -22,7 +28,9 @@ def level_1_extension(
 ) -> None:
     visitors['literal-word'] = alt(visitors['literal-word'],
                                    visitors.ref_visitor('none-word'),
-                                   visitors.ref_visitor('not-impl-word'))
+                                   visitors.ref_visitor('not-impl-word'),
+                                   visitors.ref_visitor('ellipsis-word'),
+                                   )
 
     # Converts a NoneWordNode to the Python expression `push(None)`.
     @FunctionalVisitor
@@ -52,3 +60,16 @@ def level_1_extension(
         return py_node
 
     visitors['not-impl-word'] = not_impl_word_visitor
+    # Converts a EllipsisWordNode to the Python expression
+    # `push(...)`.
+    @FunctionalVisitor
+    def ellipsis_word_visitor(node: concat.level1.parse.EllipsisWordNode):
+        load = ast.Load()
+        ellipsis = ast.Ellipsis()
+        push_func = ast.Name(id='push', ctx=load)
+        py_node = ast.Call(func=push_func, args=[ellipsis], keywords=[])
+        py_node.lineno, py_node.col_offset = node.location
+        return py_node
+
+    visitors['ellipsis-word'] = assert_type(
+        concat.level1.parse.EllipsisWordNode).then(ellipsis_word_visitor)

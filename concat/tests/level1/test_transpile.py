@@ -48,3 +48,20 @@ class TestSubVisitors(unittest.TestCase):
         identifier = cast(ast.Name, cast(ast.Call, py_node).args[0]).id
         message = 'Python Name node does not contain "NotImplemented"'
         self.assertEqual(identifier, 'NotImplemented', msg=message)
+
+    def test_ellipsis_word_visitor(self) -> None:
+        ellipsis = Token()
+        ellipsis.start = (0, 0)
+        node = concat.level1.parse.EllipsisWordNode(ellipsis)
+        try:
+            py_node = self.__visitors['ellipsis-word'].visit(node)
+        except concat.visitors.VisitFailureException:
+            message_template = '{} was not accepted by the ellipsis-word '
+            'visitor'
+            message = message_template.format(node)
+            self.fail(msg=message)
+        self.assertIsInstance(
+            py_node, ast.Call, msg='Python node is not a call')
+        message = 'The Python node within the call is not an Ellipsis'
+        self.assertIsInstance(
+            cast(ast.Call, py_node).args[0], ast.Ellipsis, msg=message)
