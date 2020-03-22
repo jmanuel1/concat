@@ -214,6 +214,7 @@ def level_1_extension(
     visitors['word'] = alt(
         visitors['word'],
         visitors.ref_visitor('yield-word'),
+        visitors.ref_visitor('await-word'),
         visitors.ref_visitor('subscription-word'),
         visitors.ref_visitor('slice-word'),
     )
@@ -272,6 +273,15 @@ def level_1_extension(
 
     visitors.data['quote-constructor-string'] = \
         'concat.level1.stdlib.types.Quotation'
+
+    # Converts an AwaitWordNode to a Python expression that awaits the object
+    # at the top of the stack.
+    # QUESTION: How do we handle stack mutation?
+    visitors['await-word'] = assert_type(
+        concat.level1.parse.AwaitWordNode).then(
+        node_to_py_string('''lambda s,_:exec("""
+            import asyncio
+            asyncio.get_running_loop().run_until_complete(s.pop())""")'''))
     visitors['statement'] = alt(
         visitors['statement'],
         visitors.ref_visitor('del-statement'),
