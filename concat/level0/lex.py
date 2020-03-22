@@ -7,7 +7,8 @@ from typing import Optional, Iterator, Tuple, List
 import concat.astutils
 
 
-TokenTuple = Tuple[str, str, Tuple[int, int], Tuple[int, int]]
+TokenTuple = Tuple[
+    str, str, concat.astutils.Location, concat.astutils.Location]
 
 
 class Lexer:
