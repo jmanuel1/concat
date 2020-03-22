@@ -1,13 +1,16 @@
-"""The Concat type checker."""
+"""The Concat type checker.
+
+The type inference algorithm is based on the one described in "Robert Kleffner:
+A Foundation for Typed Concatenative Languages, April 2017."
+"""
+
+import abc
 import dataclasses
 import builtins
-import functools
-from typing import List, Iterable, Dict, Type, Sequence, Optional, TypeVar, Generic, Union, Mapping
-import concat.level0.lex
+from typing import (List, Set, Tuple, Dict, Iterator, Union,
+                    Optional, Generator, overload, cast)
 import concat.level0.parse
-import concat.level0.transpile
 import concat.level1.parse
-import concat.level1.transpile
 import parsy
 
 
@@ -15,316 +18,491 @@ class TypeError(builtins.TypeError):
     pass
 
 
-@dataclasses.dataclass
-class StackEffect:
-    """Holds the input and output arity of a word."""
-    in_arity: int
-    out_arity: int
+class NameError(builtins.NameError):
+    pass
 
-    def compose(self, other: 'StackEffect') -> 'StackEffect':
-        if isinstance(other, GenericArityTypedStackEffect):
-            if not isinstance(self, GenericArityTypedStackEffect):
-                self = GenericArityTypedStackEffect(
-                    ['object'] * self.in_arity, ['object'] * self.out_arity)
-            return self.compose(other)
-        self_stack_underflow = -self.in_arity
-        composed_stack_underflow = self_stack_underflow + \
-            self.out_arity - other.in_arity
-        stack_underflow = min(self_stack_underflow, composed_stack_underflow)
-        in_arity = -stack_underflow
-        out_arity = composed_stack_underflow + other.out_arity - stack_underflow
-        result = StackEffect(in_arity, out_arity)
-        print(self, other, result)
-        return result
+
+class _Type(abc.ABC):
+    def to_for_all(self) -> 'ForAll':
+        return ForAll([], self)
+
+    def is_subtype_of(self, supertype: '_Type') -> bool:
+        return supertype is self or supertype is PrimitiveTypes.object
+
+
+@dataclasses.dataclass
+class _PrimitiveInterface(_Type):
+    _name: str = '<primitive_interface>'
+
+
+class _PrimitiveInterfaces:
+    invertible = _PrimitiveInterface('invertible')
+
+
+@dataclasses.dataclass
+class _BuiltinType(_Type):
+    _name: str = '<primitive_type>'
+    _supertypes: Tuple[_Type, ...] = dataclasses.field(default_factory=tuple)
+
+    def is_subtype_of(self, supertype: _Type) -> bool:
+        return super().is_subtype_of(supertype) or supertype in self._supertypes
+
+
+class PrimitiveTypes:
+    int = _BuiltinType('int', (_PrimitiveInterfaces.invertible,))
+    bool = _BuiltinType('bool')
+    object = _BuiltinType('object')
+    context_manager = _BuiltinType('context_manager')
+    iterable = _BuiltinType('iterable')
+    dict = _BuiltinType('dict')
+    file = _BuiltinType('file')
+    str = _BuiltinType('str')
+
+
+class _Variable(_Type, abc.ABC):
+    """Objects that represent type variables.
+
+    Every type variable object is assumed to be unique. Thus, fresh type
+    variables can be made simply by creating new objects. They can also be
+    compared by identity."""
+    pass
+
+
+class SequenceVariable(_Variable):
+    pass
+
+
+@dataclasses.dataclass
+class IndividualVariable(_Variable):
+    bound: _Type = PrimitiveTypes.object
+
+    def is_subtype_of(self, supertype: _Type):
+        return super().is_subtype_of(supertype) or self.bound.is_subtype_of(supertype)
+
+    def __hash__(self) -> int:
+        return hash(id(self))
+
+
+@dataclasses.dataclass
+class ForAll(_Type):
+    quantified_variables: List[_Variable]
+    type: _Type
+
+    def to_for_all(self) -> 'ForAll':
+        return self
+
+
+@dataclasses.dataclass
+class _Function(_Type):
+    input: List[_Type]
+    output: List[_Type]
+
+    def __iter__(self) -> Iterator[List[_Type]]:
+        return iter((self.input, self.output))
+
+    def generalized_wrt(self, gamma: Dict[str, _Type]) -> ForAll:
+        return ForAll(list(_ftv(self) - _ftv(gamma)), self)
 
     def can_be_complete_program(self) -> bool:
-        return self.in_arity == 0
-
-    @classmethod
-    def compose_all(cls, effects: Iterable['StackEffect']) -> 'StackEffect':
-        return functools.reduce(cls.compose, effects, cls._noop_type())
-
-    @classmethod
-    def _noop_type(cls) -> 'StackEffect':
-        return cls(0, 0)
-
-
-_Type = Union[str, 'GenericArityTypedStackEffect.Variable', 'StackEffect']
-
-
-@dataclasses.dataclass
-class GenericArityTypedStackEffect(StackEffect):
-    class Variable:
-        pass
-    _in_types: Sequence[_Type]
-    _out_types: Sequence[_Type]
-
-    def __init__(self, in_types: Sequence[_Type], out_types: Sequence[_Type]):
-        super().__init__(len(in_types), len(out_types))
-        self._in_types, self._out_types = in_types, out_types
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, StackEffect):
-            return NotImplemented
-        # We create an object of the supertype because default dataclass __eq__
-        # returns NotImplemented when the types of the arguments are not
-        # identical
-        if not StackEffect(len(self._in_types), len(self._out_types)).__eq__(other):
-            print('HERE')
+        """Returns true iff the function type unifies with ( -- *out)."""
+        out_var = SequenceVariable()
+        try:
+            _unify_ind(self, _Function([], [out_var]))
+        except TypeError:
             return False
-        if isinstance(other, type(self)):
-            # We make sure that all the in/out type sequences are tuples
-            return (*self._in_types,) == (*other._in_types,) and \
-                (*self._out_types,) == (*other._out_types,)
         return True
 
-    def compose(self, other: StackEffect) -> 'GenericArityTypedStackEffect':
-        if not isinstance(other, GenericArityTypedStackEffect):
-            other = GenericArityTypedStackEffect(
-                ['object'] * other.in_arity, ['object'] * other.out_arity)
-        # unify self out types and other in types
-        unifications = self.__unify(self._out_types, other._in_types)
-        self = self.__bind(unifications)
-        other = other.__bind(unifications)
-        self_stack_underflow = -self.in_arity
-        composed_stack_underflow = self_stack_underflow + \
-            self.out_arity - other.in_arity
-        stack_underflow = min(self_stack_underflow, composed_stack_underflow)
-        if stack_underflow == self_stack_underflow:
-            in_types = self._in_types
-        else:
-            in_types = [
-                *other._in_types[-(-composed_stack_underflow - other.in_arity):], *self._in_types]
-        out_arity = composed_stack_underflow + other.out_arity - stack_underflow
-        out_types = [
-            *self._out_types[-(out_arity - len(other._out_types)) + 1:], *other._out_types]
-        result = type(self)(in_types, out_types)
-        print(self, other, result)
-        return result
+    def compose(self, other: '_Function') -> '_Function':
+        """Returns the type of applying self then other to a stack."""
+        i2, o2 = other
+        (i1, o1) = self
+        phi = _unify(o1, i2)
+        return phi(_Function(i1, o2))
 
-    def __bind(self, unifications: Mapping[Variable, Sequence[_Type]]) -> 'GenericArityTypedStackEffect':
-        in_types: List[_Type] = []
-        for type in self._in_types:
-            if isinstance(type, self.Variable):
-                in_types += unifications.get(type, [type])
-            elif isinstance(type, GenericArityTypedStackEffect):
-                in_types.append(type.__bind(unifications))
-            else:
-                in_types.append(type)
-        out_types: List[_Type] = []
-        for type in self._out_types:
-            if isinstance(type, self.Variable):
-                out_types += unifications.get(type, [type])
-            elif isinstance(type, GenericArityTypedStackEffect):
-                out_types.append(type.__bind(unifications))
-            else:
-                out_types.append(type)
-        return GenericArityTypedStackEffect(in_types, out_types)
+    def __eq__(self, other: object) -> bool:
+        """Compares function types for equality up to renaming of variables."""
+        if not isinstance(other, _Function):
+            return NotImplemented
+        input_arity_matches = len(self.input) == len(other.input)
+        output_arity_matches = len(self.output) == len(other.output)
+        arities_match = input_arity_matches and output_arity_matches
+        if not arities_match:
+            return False
+        # We can't use plain unification here because variables can only map to
+        # variables of the same type.
+        subs = _Substitutions()
+        type_pairs = zip(self.input + self.output, other.input + other.output)
+        for type1, type2 in type_pairs:
+            if isinstance(type1, IndividualVariable) and \
+                    isinstance(type2, IndividualVariable):
+                subs[type2] = type1
+            elif isinstance(type1, SequenceVariable) and \
+                    isinstance(type2, SequenceVariable):
+                subs[type2] = type1
+            type2 = subs(type2)
+            if type1 != type2:
+                return False
+        return True
 
-    @classmethod
-    def _noop_type(cls) -> 'GenericArityTypedStackEffect':
-        return cls((), ())
+    def __gt__(self, other: object) -> bool:
+        return NotImplemented  # no subtyping yet
 
-    def __str__(self) -> str:
-        return '({} -- {})'.format(' '.join(str(type) for type in self._in_types), ' '.join(str(type) for type in self._out_types))
 
-    @classmethod
-    def __unify(cls, type_list: Sequence[_Type], other_type_list: Sequence[_Type]) -> Dict[Variable, Sequence[_Type]]:
-        unifications = {}
-        i, j = len(type_list) - 1, len(other_type_list) - 1
-        while i > -1 and j > -1:
-            type1, type2 = type_list[i], other_type_list[j]
-            if isinstance(type1, cls.Variable):
-                if i == 0:
-                    unifications[type1] = other_type_list[:j + 1]
-                    j = -1
+# expose _Function as StackEffect
+StackEffect = _Function
+
+
+class Environment(Dict[str, _Type]):
+    pass
+
+
+class _Substitutions(Dict[_Variable, Union[_Type, List[_Type]]]):
+
+    _T = Union['_Substitutions', _Type, List[_Type], Environment]
+
+    @overload
+    def __call__(self, arg: '_Substitutions') -> '_Substitutions':
+        ...
+
+    @overload
+    def __call__(self, arg: _BuiltinType) -> _BuiltinType:
+        ...
+
+    @overload
+    def __call__(self, arg: _Function) -> _Function:
+        ...
+
+    @overload
+    def __call__(self, arg: ForAll) -> ForAll:
+        ...
+
+    @overload
+    def __call__(self, arg: _Variable) -> _Type:
+        ...
+
+    @overload
+    def __call__(self, arg: _Type) -> _Type:
+        ...
+
+    @overload
+    def __call__(self, arg: List[_Type]) -> List[_Type]:
+        ...
+
+    @overload
+    def __call__(self, arg: Environment) -> Environment:
+        ...
+
+    def __call__(self, arg: '_T') -> '_T':
+        if isinstance(arg, _Substitutions):
+            return _Substitutions({
+                **self,
+                **{a: self(i) for a, i in arg.items() if a not in self._dom()}
+            })
+        elif isinstance(arg, _BuiltinType):
+            return arg
+        elif isinstance(arg, _Function):
+            return _Function(self(arg.input), self(arg.output))
+        elif isinstance(arg, ForAll):
+            return ForAll(
+                arg.quantified_variables,
+                _Substitutions({
+                    a: i
+                    for a, i in self.items()
+                    if a not in arg.quantified_variables
+                })(arg.type)
+            )
+        elif isinstance(arg, _Variable) and arg in self:
+            return self[arg]
+        elif isinstance(arg, list):
+            subbed_types = []
+            for type in arg:
+                subbed_type = self(type)
+                if isinstance(subbed_type, list):
+                    subbed_types += subbed_type
                 else:
-                    next_type = type_list[i - 1]
-                    next_type_index = _rindex(
-                        other_type_list, next_type, j)
-                    unifications[type1] = other_type_list[next_type_index + 1: j + 1]
-                    j = next_type_index
-                i -= 1
-            elif isinstance(type2, cls.Variable):
-                raise NotImplementedError
-            elif isinstance(type1, GenericArityTypedStackEffect) and isinstance(type2, GenericArityTypedStackEffect):
-                type1 = type1.__bind(unifications)
-                type2 = type2.__bind(unifications)
-                unifs = cls.__unify(type1._in_types, type2._in_types)
-                type1 = type1.__bind(unifs)
-                type2 = type2.__bind(unifs)
-                unifs.update(cls.__unify(type1._out_types, type2._out_types))
-                type1 = type1.__bind(unifs)
-                type2 = type2.__bind(unifs)
-                if type1 != type2:
-                    print('tried unifying', type1, 'with', type2)
-                    print('first:', type_list, 'other:', other_type_list)
-                    raise TypeError('{} does not unify with {}'.format(
-                        type_list, other_type_list))
-                unifications.update(unifs)
-            elif isinstance(type2, StackEffect):
-                raise NotImplementedError
-            else:
-                if type1 != type2:
-                    print('tried unifying', type1, 'with', type2)
-                    print('first:', type_list, 'other:', other_type_list)
-                    raise TypeError('{} does not unify with {}'.format(
-                        type_list, other_type_list))
-                i -= 1
-                j -= 1
-        return unifications
+                    subbed_types.append(subbed_type)
+            return subbed_types
+        elif isinstance(arg, Environment):
+            return Environment({name: self(t) for name, t in arg.items()})
+        else:
+            return arg
 
-_T = TypeVar('_T', bound=concat.level0.parse.Node)
-_U = TypeVar('_U', bound=concat.level0.parse.Node)
-_V = TypeVar('_V')
+    def _dom(self) -> Set[_Variable]:
+        return {*self}
 
 
-@dataclasses.dataclass
-class _Closure(Generic[_T]):
-    """A closure is an AST and a dictionary of names of free variables to types."""
-    tree: _T
-    environment: Dict[str, StackEffect]
-
-    @property
-    def children(self) -> List['_Closure[_U]']:
-        return [_Closure(child, self.environment) for child in self.tree.children]
+def _inst(sigma: ForAll) -> _Type:
+    """This is the inst function described by Kleffner."""
+    subs = _Substitutions({a: type(a)() for a in sigma.quantified_variables})
+    return subs(sigma.type)
 
 
-def _rindex(seq: Sequence[_V], elem: _V, last_index: int) -> int:
-    for i in range(last_index, -1, -1):
-        e = seq[i]
-        if e == elem:
-            return i
-    raise ValueError('not found')
+def infer(
+    gamma: Environment,
+    e: 'concat.level1.parse.WordsOrStatements'
+) -> Tuple[_Substitutions, _Function]:
+    """The infer function described by Kleffner."""
+    e = list(e)
+    if len(e) == 0:
+        a_bar = SequenceVariable()
+        return _Substitutions(), _Function([a_bar], [a_bar])
+    elif isinstance(e[-1], concat.level0.parse.NumberWordNode):
+        S, i_to_o = infer(gamma, e[:-1])
+        if isinstance(e[-1].value, int):
+            i_to_o.output.append(PrimitiveTypes.int)
+            return S, i_to_o
+        else:
+            raise NotImplementedError
+    # there's no False word at the moment
+    elif isinstance(e[-1], concat.level1.parse.TrueWordNode):
+        S, i_to_o = infer(gamma, e[:-1])
+        i_to_o.output.append(PrimitiveTypes.bool)
+        return S, i_to_o
+    elif isinstance(e[-1], concat.level1.parse.AddWordNode):
+        # for now, only works with ints
+        S, (i, o) = infer(gamma, e[:-1])
+        a_bar = SequenceVariable()
+        phi = _unify(o, [
+                     a_bar, PrimitiveTypes.int, PrimitiveTypes.int])
+        return phi(S), phi(_Function(i, [a_bar, PrimitiveTypes.int]))
+    elif isinstance(e[-1], concat.level0.parse.NameWordNode):
+        # the type of if_then is built-in
+        if e[-1].value == 'if_then':
+            S, (i, o) = infer(gamma, e[:-1])
+            a_bar = SequenceVariable()
+            b = IndividualVariable()
+            phi = _unify(o, [a_bar, b, b, PrimitiveTypes.bool])
+            return phi(S), phi(_Function(i, [a_bar, b]))
+        # the type of call is built-in
+        elif e[-1].value == 'call':
+            S, (i, o) = infer(gamma, e[:-1])
+            a_bar, b_bar = SequenceVariable(), SequenceVariable()
+            phi = _unify(o, [a_bar, _Function([a_bar], [b_bar])])
+            return phi(S), phi(_Function(i, [b_bar]))
+        if not e[-1].value in gamma:
+            raise NameError
+        type_of_name = _inst(gamma[e[-1].value].to_for_all())
+        if not isinstance(type_of_name, _Function):
+            raise NotImplementedError
+        i2, o2 = type_of_name
+        S, (i1, o1) = infer(gamma, e[:-1])
+        phi = _unify(o1, S(i2))
+        return phi(S), phi(_Function(i1, S(o2)))
+    elif isinstance(e[-1], concat.level0.parse.PushWordNode):
+        pushed = cast(concat.level0.parse.PushWordNode, e[-1])
+        S1, (i1, o1) = infer(gamma, e[:-1])
+        S2, (i2, o2) = infer(S1(gamma), pushed.children)
+        return S2(S1), _Function(S2(i1), [*S2(o1), _Function(i2, o2)])
+    elif isinstance(e[-1], concat.level0.parse.QuoteWordNode):
+        quotation = cast(concat.level0.parse.QuoteWordNode, e[-1])
+        return infer(gamma, [*e[:-1], *quotation.children])
+    # there is no fix combinator, lambda abstraction, or a let form like
+    # Kleffner's
+    # now for our extensions
+    elif isinstance(e[-1], concat.level1.parse.WithWordNode):
+        S, (i, o) = infer(gamma, e[:-1])
+        a_bar, b_bar = SequenceVariable(), SequenceVariable()
+        phi = _unify(o, [a_bar, _Function([a_bar, PrimitiveTypes.object], [
+                     b_bar]), PrimitiveTypes.context_manager])
+        return phi(S), phi(_Function(i, [b_bar]))
+    elif isinstance(e[-1], concat.level1.parse.TryWordNode):
+        S, (i, o) = infer(gamma, e[:-1])
+        a_bar, b_bar = SequenceVariable(), SequenceVariable()
+        phi = _unify(o, [a_bar, PrimitiveTypes.iterable,
+                         _Function([a_bar], [b_bar])])
+        return phi(S), phi(_Function(i, [b_bar]))
+    elif isinstance(e[-1], concat.level1.parse.FuncdefStatementNode):
+        S, f = infer(gamma, e[:-1])
+        name = e[-1].name
+        declared_type = e[-1].stack_effect
+        phi1, inferred_type = infer(S(gamma), e[-1].body)
+        if declared_type is not None:
+            phi2 = _unify_ind(declared_type, inferred_type)
+            if phi2(declared_type) > phi2(inferred_type):
+                message = ('declared function type {} is not compatible with '
+                           'inferred type {}')
+                raise TypeError(message.format(
+                    declared_type, inferred_type))
+            type = declared_type
+        else:
+            type = inferred_type
+        # we *mutate* the type environment
+        gamma[name] = type.generalized_wrt(S(gamma))
+        return S, f
+    elif isinstance(e[-1], concat.level1.parse.DictWordNode):
+        S, (i, o) = infer(gamma, e[:-1])
+        phi = S
+        collected_type = o
+        for key, value in e[-1].dict_children:
+            phi1, (i1, o1) = infer(phi(gamma), key)
+            R1 = _unify(collected_type, i1)
+            phi = R1(phi1(phi(S)))
+            collected_type = phi(o1)
+            # drop the top of the stack to use as the key
+            collected_type = _drop_last_from_type_seq(collected_type)
+            phi2, (i2, o2) = infer(phi(gamma), value)
+            R2 = _unify(collected_type, i2)
+            phi = R2(phi2)
+            collected_type = phi(o2)
+            # drop the top of the stack to use as the value
+            collected_type = _drop_last_from_type_seq(collected_type)
+        return phi, phi(_Function(i, [*collected_type, PrimitiveTypes.dict]))
+    elif isinstance(e[-1], concat.level1.parse.InvertWordNode):
+        S, (i, o) = infer(gamma, e[:-1])
+        out_var = SequenceVariable()
+        type_var = IndividualVariable(_PrimitiveInterfaces.invertible)
+        phi = _unify(o, [out_var, type_var])
+        return phi(S), phi(_Function(i, [out_var, type_var]))
+    elif isinstance(e[-1], concat.level0.parse.StringWordNode):
+        S, (i, o) = infer(gamma, e[:-1])
+        return S, _Function(i, [*o, PrimitiveTypes.str])
+    else:
+        raise NotImplementedError(e[-1])
 
 
-def _ensure_type(name: Optional[concat.level0.lex.Token]) -> str:
-    if name is None:
-        return 'object'
-    return name.value
-
-
-def parse_stack_effect(tokens: List[concat.level0.lex.Token]) -> StackEffect:
-    parser_dict = concat.level0.parse.ParserDict()
-    item = parsy.seq(parser_dict.token('NAME'), (parser_dict.token(
-        'COLON') >> parser_dict.token('NAME')).optional())
-    separator = parser_dict.token('MINUS').times(2)
-    items = item.many()
-    stack_effect = parsy.seq(items << separator, items)
-    parsed_effect = stack_effect.parse(tokens)
-    in_types = [_ensure_type(item[1]) for item in parsed_effect[0]]
-    out_types = [_ensure_type(item[1]) for item in parsed_effect[1]]
-    return GenericArityTypedStackEffect(in_types, out_types)
-
-
-def check(tree: concat.level0.parse.TopLevelNode, env: Dict[str, StackEffect] = {}) -> None:
-    _top_level_check.visit(_Closure(tree, env))
-
-
-def _assert_tree_type(
-    cls: Type[concat.level0.parse.Node]
-) -> concat.level0.transpile.Visitor[_Closure, None]:
-    @concat.level0.transpile.FunctionalVisitor
-    def visitor(closure: _Closure) -> None:
-        concat.level1.transpile.assert_type(cls).visit(closure.tree)
-    return visitor
-
-
-@concat.level0.transpile.FunctionalVisitor
-def __top_level_check(closure: _Closure[concat.level0.parse.TopLevelNode]) -> None:
-    effects = concat.level0.transpile.All(concat.level0.transpile.Choice(
-        _statement_check, _word_check)).visit(closure)
-    GenericArityTypedStackEffect.compose_all(
-        [effect for effect in effects if effect is not None])
-
-
-_top_level_check = _assert_tree_type(
-    concat.level0.parse.TopLevelNode).then(__top_level_check)
-
-
-@concat.level0.transpile.FunctionalVisitor
-def _quote_word_check(closure: _Closure) -> StackEffect:
-    _assert_tree_type(concat.level0.parse.QuoteWordNode).visit(closure)
-    if isinstance(closure.tree, concat.level1.parse.TryWordNode):
-        print('HERE _quote_word_check')
-    effects = concat.level0.transpile.All(_word_check).visit(closure)
-    return StackEffect.compose_all(effects)
-
-
-@concat.level0.transpile.FunctionalVisitor
-def _push_word_check(closure: _Closure) -> StackEffect:
-    effects = _assert_tree_type(
-        concat.level0.parse.PushWordNode).then(concat.level0.transpile.All(_word_check)).visit(closure)
-    return GenericArityTypedStackEffect((), (GenericArityTypedStackEffect.compose_all(effects),))
-
-
-@concat.level0.transpile.FunctionalVisitor
-def __name_word_check(closure: _Closure[concat.level0.parse.NameWordNode]) -> StackEffect:
-    return closure.environment[closure.tree.value]
-
-
-_name_word_check = _assert_tree_type(
-    concat.level0.parse.NameWordNode).then(__name_word_check)
-
-
-@concat.level0.transpile.FunctionalVisitor
-def _with_word_check(closure: _Closure) -> StackEffect:
-    _assert_tree_type(concat.level1.parse.WithWordNode).visit(closure)
-    in_var = GenericArityTypedStackEffect.Variable()
-    out_var = GenericArityTypedStackEffect.Variable()
-    return GenericArityTypedStackEffect((in_var, GenericArityTypedStackEffect((in_var, 'object'), (out_var,)), 'context_manager'), (out_var,))
-
-
-@concat.level0.transpile.FunctionalVisitor
-def _try_word_check(closure: _Closure) -> StackEffect:
-    _assert_tree_type(concat.level1.parse.TryWordNode).visit(closure)
-    in_var = GenericArityTypedStackEffect.Variable()
-    out_var = GenericArityTypedStackEffect.Variable()
-    return GenericArityTypedStackEffect((in_var, 'iterable', GenericArityTypedStackEffect((in_var,), (out_var,))), (out_var,))
-
-
-@concat.level0.transpile.FunctionalVisitor
-def _invert_word_check(closure: _Closure) -> StackEffect:
-    _assert_tree_type(concat.level1.parse.InvertWordNode).visit(closure)
-    # FIXME: Though this usually pushes an int, __invert__ could return anything when called on anything
-    return GenericArityTypedStackEffect(('int',), ('int',))
-
-
-_operator_word_check = concat.level0.transpile.alt(_invert_word_check)
-
-
-@concat.level0.transpile.FunctionalVisitor
-def _num_word_check(closure: _Closure) -> StackEffect:
-    _assert_tree_type(concat.level0.parse.NumberWordNode).visit(closure)
-    if isinstance(closure.tree.value, int):
-        return GenericArityTypedStackEffect((), ('int',))
-    raise NotImplementedError('other numeric literal types')
-
-
-@concat.level0.transpile.FunctionalVisitor
-def _dict_word_check(closure: _Closure) -> StackEffect:
-    _assert_tree_type(concat.level1.parse.DictWordNode).visit(closure)
-    return GenericArityTypedStackEffect((), ('dict',))
-
-
-_literal_word_check = concat.level0.transpile.alt(
-    _num_word_check, _dict_word_check)
-
-_word_check = concat.level0.transpile.alt(
-    _quote_word_check, _push_word_check, _name_word_check, _with_word_check,
-    _try_word_check, _literal_word_check, _operator_word_check)
-
-
-@concat.level0.transpile.FunctionalVisitor
-def _funcdef_statement_check(closure: _Closure) -> None:
-    _assert_tree_type(concat.level1.parse.FuncdefStatementNode).visit(closure)
-    tree = closure.tree
-    explicit_effect = tree.stack_effect
-    body_effects = (_word_check.visit(_Closure(word, closure.environment))
-                    for word in tree.body if isinstance(word, concat.level0.parse.WordNode))
-    implicit_effect = StackEffect.compose_all(body_effects)
-    if explicit_effect is not None and explicit_effect != implicit_effect:
+def _ftv(f: Union[_Type, List[_Type], Dict[str, _Type]]) -> Set[_Variable]:
+    """The ftv function described by Kleffner."""
+    ftv: Set[_Variable]
+    if isinstance(f, _BuiltinType):
+        return set()
+    elif isinstance(f, _Variable):
+        return {f}
+    elif isinstance(f, _Function):
+        return _ftv(f.input) | _ftv(f.output)
+    elif isinstance(f, list):
+        ftv = set()
+        for t in f:
+            ftv |= _ftv(t)
+        return ftv
+    elif isinstance(f, ForAll):
+        return _ftv(f.type) - set(f.quantified_variables)
+    elif isinstance(f, dict):
+        ftv = set()
+        for sigma in f.values():
+            ftv |= _ftv(sigma)
+        return ftv
+    else:
         raise TypeError
 
 
-_statement_check = concat.level0.transpile.alt(_funcdef_statement_check)
+def _unify(i1: List[_Type], i2: List[_Type]) -> _Substitutions:
+    """The unify function described by Kleffner."""
+    IndividualTypes = (_BuiltinType, IndividualVariable, _Function)
+    if (len(i1), len(i2)) == (0, 0):
+        return _Substitutions({})
+    elif len(i1) == 1:
+        if isinstance(i1[0], SequenceVariable) and i1 == i2:
+            return _Substitutions({})
+        elif isinstance(i1[0], SequenceVariable) and i1[0] not in _ftv(i2):
+            return _Substitutions({i1[0]: i2})
+    elif len(i2) == 1 and isinstance(i2[0], SequenceVariable) and \
+            i2[0] not in _ftv(i1):
+        return _Substitutions({i2[0]: i1})
+    elif len(i1) > 0 and len(i2) > 0 and \
+            isinstance(i1[-1], IndividualTypes) and \
+            isinstance(i2[-1], IndividualTypes):
+        phi1 = _unify_ind(i1[-1], i2[-1])
+        phi2 = _unify(phi1(i1[:-1]), phi1(i2[:-1]))
+        return phi2(phi1)
+    raise TypeError('cannot unify {} with {}'.format(i1, i2))
+
+
+IndividualType = Union[_BuiltinType, IndividualVariable, _Function]
+
+
+def _unify_ind(t1: IndividualType, t2: IndividualType) -> _Substitutions:
+    """The unifyInd function described by Kleffner."""
+    if isinstance(t1, _BuiltinType):
+        if t1 is not t2:
+            raise TypeError(
+                'Primitive type {} cannot unify with primitive type {}'
+                .format(t1, t2))
+        return _Substitutions()
+    elif isinstance(t1, IndividualVariable) and t1 not in _ftv(t2):
+        if not t2.is_subtype_of(t1.bound):
+            raise TypeError('{} is not a subtype of {}'.format(t2, t1.bound))
+        return _Substitutions({t1: t2})
+    elif isinstance(t2, IndividualVariable) and t2 not in _ftv(t1):
+        if not t1.is_subtype_of(t2.bound):
+            raise TypeError('{} is not a subtype of {}'.format(t1, t2.bound))
+        return _Substitutions({t2: t1})
+    elif isinstance(t1, _Function) and isinstance(t2, _Function):
+        phi1 = _unify(t1.input, t2.input)
+        phi2 = _unify(phi1(t1.output), phi1(t2.output))
+        return phi2(phi1)
+    else:
+        raise NotImplementedError(t1, t2)
+
+
+def _drop_last_from_type_seq(l: List[_Type]) -> List[_Type]:
+    kept = SequenceVariable()
+    dropped = IndividualVariable()
+    drop_sub = _unify(l, [kept, dropped])
+    return drop_sub([kept])
+
+
+def _ensure_type(
+    typename: Union[Optional[concat.level0.lex.Token], _Function],
+    env: Environment,
+    obj_name: str
+) -> _Type:
+    if obj_name in env:
+        type = env[obj_name]
+    elif typename is None:
+        type = IndividualVariable()
+    elif isinstance(typename, _Function):
+        type = typename
+    else:
+        type = getattr(PrimitiveTypes, typename.value)
+    env[obj_name] = type
+    return type
+
+
+def _stack_effect(
+    env: Environment
+) -> 'parsy.Parser[concat.level0.lex.Token, _Function]':
+    @parsy.generate('stack effect')
+    def _stack_effect() -> Generator:
+        parser_dict = concat.level0.parse.ParserDict()
+
+        name = parser_dict.token('NAME')
+        seq_var = parser_dict.token('STAR') >> name
+
+        lpar = parser_dict.token('LPAR')
+        rpar = parser_dict.token('RPAR')
+        nested_stack_effect = lpar >> _stack_effect << rpar
+        type = name | parser_dict.token('BACKTICK') >> name >> parsy.success(
+            None) | nested_stack_effect
+        separator = parser_dict.token('MINUS').times(2)
+
+        item = parsy.seq(name, (parser_dict.token('COLON') >> type).optional())
+        items = item.many()
+
+        stack_effect = parsy.seq(  # type: ignore
+            seq_var.optional(), items << separator, seq_var.optional(), items)
+
+        a_bar_parsed, i, b_bar_parsed, o = yield stack_effect
+
+        a_bar = SequenceVariable()
+        b_bar = a_bar
+        if a_bar_parsed is not None:
+            if a_bar_parsed.value in env:
+                a_bar = cast(SequenceVariable, env[a_bar_parsed.value])
+            env[a_bar_parsed.value] = a_bar
+        if b_bar_parsed is not None:
+            if b_bar_parsed.value in env:
+                b_bar = cast(SequenceVariable, env[b_bar_parsed.value])
+            else:
+                b_bar = SequenceVariable()
+
+        in_types = [_ensure_type(item[1], env, item[0].value) for item in i]
+        out_types = [_ensure_type(item[1], env, item[0].value) for item in o]
+        return _Function([a_bar, *in_types], [b_bar, *out_types])
+
+    return _stack_effect
+
+
+def parse_stack_effect(tokens: List[concat.level0.lex.Token]) -> _Function:
+    env = Environment()
+
+    return _stack_effect(env).parse(tokens)
