@@ -326,3 +326,79 @@ class TestSubVisitors(unittest.TestCase):
         test('invert-word')
         test('operator-word')
         test('word')
+
+    def test_mul_word_visitor(self) -> None:
+        token = concat.level0.lex.Token()
+        token.start = (0, 0)
+        node = concat.level1.parse.MulWordNode(token)
+
+        def test(visitor: str) -> None:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by the {} visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            self.assertIsInstance(
+                py_node, ast.expr, msg='Python node is not an expression')
+
+        test('mul-word')
+        test('operator-word')
+        test('word')
+
+    def test_floor_div_word_visitor(self) -> None:
+        token = concat.level0.lex.Token()
+        token.start = (0, 0)
+        node = concat.level1.parse.FloorDivWordNode(token)
+
+        def test(visitor: str) -> None:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by the {} visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            self.assertIsInstance(
+                py_node, ast.expr, msg='Python node is not an expression')
+
+        test('floor-div-word')
+        test('operator-word')
+        test('word')
+
+    def test_div_word_visitor(self) -> None:
+        token = concat.level0.lex.Token()
+        token.start = (0, 0)
+        node = concat.level1.parse.DivWordNode(token)
+
+        def test(visitor: str) -> None:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by the {} visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            self.assertIsInstance(
+                py_node, ast.expr, msg='Python node is not an expression')
+
+        test('div-word')
+        test('operator-word')
+        test('word')
+
+    def test_mod_word_visitor(self) -> None:
+        token = concat.level0.lex.Token()
+        token.start = (0, 0)
+        node = concat.level1.parse.ModWordNode(token)
+
+        def test(visitor: str) -> None:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by the {} visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            self.assertIsInstance(
+                py_node, ast.expr, msg='Python node is not an expression')
+
+        test('mod-word')
+        test('operator-word')
+        test('word')
