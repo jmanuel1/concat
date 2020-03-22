@@ -30,6 +30,7 @@ from concat.astutils import (
     to_python_decorator,
     remove_leading_dots,
     count_leading_dots,
+    correct_magic_signature
 )
 from typing import cast
 
@@ -460,6 +461,7 @@ def level_1_extension(
         visitors['statement'],
         visitors.ref_visitor('del-statement'),
         visitors.ref_visitor('async-funcdef-statement'),
+        visitors.ref_visitor('classdef-statement'),
         visitors.ref_visitor('funcdef-statement')
     )
 
@@ -606,3 +608,29 @@ def level_1_extension(
             concat.level1.parse.ImportStatementNode
         ).then(import_statement_visitor)
     )
+
+    @FunctionalVisitor
+    def classdef_statement_visitor(node: concat.level1.parse.ClassdefStatementNode) -> ast.ClassDef:
+        py_body = [correct_magic_signature(statementfy(node)) for node in All(
+            alt(visitors['word'], visitors['statement'])).visit(node)]
+        py_decorators = [to_python_decorator(
+            word, visitors) for word in node.decorators]
+        py_decorators.reverse()
+        py_bases = []
+        for base in node.bases:
+            quotation = to_transpiled_quotation(base, node.location, visitors)
+            py_base = pack_expressions([quotation, pop_stack()])
+            py_bases.append(py_base)
+        py_keywords = []
+        for keyword_arg in node.keyword_args:
+            py_word = visitors['word'].visit(keyword_arg[1])
+            stack = ast.Name(id='stack', ctx=ast.Load())
+            stash = ast.Name(id='stash', ctx=ast.Load())
+            py_word_call = ast.Call(py_word, args=[stack, stash], keywords=[])
+            py_keyword_value = pack_expressions([py_word_call, pop_stack()])
+            py_keyword = ast.keyword(keyword_arg[0], py_keyword_value)
+            py_keywords.append(py_keyword)
+        return ast.ClassDef(node.class_name, bases=py_bases, keywords=py_keywords, body=py_body, decorator_list=py_decorators)
+
+    visitors['classdef-statement'] = assert_type(
+        concat.level1.parse.ClassdefStatementNode).then(classdef_statement_visitor)

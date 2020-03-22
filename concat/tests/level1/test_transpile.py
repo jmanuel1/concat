@@ -922,3 +922,97 @@ class TestSubVisitors(unittest.TestCase):
 
         test('import-statement')
         test('statement')
+
+    def test_classdef_statement_visitor(self) -> None:
+        node = concat.level1.parse.ClassdefStatementNode('A', [], (0, 0))
+
+        def test(visitor: str) -> None:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by the {} visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            self.assertIsInstance(
+                py_node,
+                ast.ClassDef,
+                msg='Python node is not a class definition')
+
+        test('classdef-statement')
+        test('statement')
+
+    def test_classdef_statement_visitor_with_decorators(self) -> None:
+        name = Token()
+        name.start, name.value = (0, 0), 'decorator'
+        decorator = concat.level0.parse.NameWordNode(name)
+        node = concat.level1.parse.ClassdefStatementNode(
+            'A', [], (0, 0), [decorator])
+
+        def test(visitor: str) -> None:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by the {} visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            self.assertIsInstance(
+                py_node,
+                ast.ClassDef,
+                msg='Python node is not a class definition')
+            self.assertIn('@', astunparse.unparse(py_node),
+                          msg='decorator was not transpiled')
+
+        test('classdef-statement')
+        test('statement')
+
+    def test_classdef_statement_visitor_with_bases(self) -> None:
+        name = Token()
+        name.start, name.value = (0, 0), 'base'
+        base = concat.level0.parse.NameWordNode(name)
+        node = concat.level1.parse.ClassdefStatementNode(
+            'A', [], (0, 0), [], [[base]])
+
+        def test(visitor: str) -> None:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by the {} visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            self.assertIsInstance(
+                py_node,
+                ast.ClassDef,
+                msg='Python node is not a class definition')
+            self.assertIn('(', astunparse.unparse(py_node),
+                          msg='bases were not transpiled')
+            self.assertIn('base', astunparse.unparse(py_node),
+                          msg='bases were not transpiled')
+
+        test('classdef-statement')
+        test('statement')
+
+    def test_classdef_statement_visitor_with_keyword_args(self) -> None:
+        name = Token()
+        name.start, name.value = (0, 0), 'meta'
+        word = concat.level0.parse.NameWordNode(name)
+        node = concat.level1.parse.ClassdefStatementNode(
+            'A', [], (0, 0), [], [], [('metaclass', word)])
+
+        def test(visitor: str) -> None:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by the {} visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            self.assertIsInstance(
+                py_node,
+                ast.ClassDef,
+                msg='Python node is not a class definition')
+            self.assertIn('(', astunparse.unparse(py_node),
+                          msg='keyword arguments were not transpiled')
+            self.assertIn('metaclass=', astunparse.unparse(
+                py_node), msg='keyword arguments were not transpiled')
+
+        test('classdef-statement')
+        test('statement')
