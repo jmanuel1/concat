@@ -274,6 +274,8 @@ def level_1_extension(
         visitors.ref_visitor('floor-div-word'),
         visitors.ref_visitor('div-word'),
         visitors.ref_visitor('mod-word'),
+        visitors.ref_visitor('add-word'),
+        visitors.ref_visitor('subtract-word'),
     )
 
     @FunctionalVisitor
@@ -302,6 +304,12 @@ def level_1_extension(
 
     visitors['mod-word'] = assert_type(
         concat.level1.parse.ModWordNode).then(binary_operator_visitor('%'))
+
+    visitors['add-word'] = assert_type(
+        concat.level1.parse.AddWordNode).then(binary_operator_visitor('+'))
+
+    visitors['subtract-word'] = assert_type(
+        concat.level1.parse.SubtractWordNode).then(binary_operator_visitor('-'))
 
     # NOTE on semantics: `yield` pushes the value it returns onto the stack.
     # `yield call` calls the value that is returned. `$yield` is a function
