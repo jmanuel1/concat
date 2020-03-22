@@ -36,6 +36,7 @@ def level_1_extension(
                                    visitors.ref_visitor('ellipsis-word'),
                                    visitors.ref_visitor('bytes-word'),
                                    visitors.ref_visitor('tuple-word'),
+                                   visitors.ref_visitor('list-word'),
                                    )
 
     # Converts a NoneWordNode to the Python expression `push(None)`.
@@ -120,6 +121,33 @@ def level_1_extension(
 
     visitors['tuple-word'] = assert_type(
         concat.level1.parse.TupleWordNode).then(tuple_word_visitor)
+
+    # Converts a ListWordNode to the Python expression
+    # `push([(Quotation([...1])(stack,stash),stack.pop())[-1],(Quotation([...2])(stack,stash),stack.pop())[-1],......])`.
+    @FunctionalVisitor
+    def list_word_visitor(node: concat.level1.parse.ListWordNode):
+        load = ast.Load()
+        elements = []
+        for words in node.list_children:
+            location = list(words)[0].location if words else node.location
+            quote = concat.level0.parse.QuoteWordNode(list(words), location)
+            py_quote = visitors['quote-word'].visit(quote)
+            stack = ast.Name(id='stack', ctx=load)
+            stash = ast.Name(id='stack', ctx=load)
+            quote_call = ast.Call(func=py_quote, args=[
+                                  stack, stash], keywords=[])
+            subtuple = ast.Tuple(elts=[quote_call, pop_stack()], ctx=load)
+            index = ast.Index(value=ast.Num(n=-1))
+            last = ast.Subscript(value=subtuple, slice=index, ctx=load)
+            elements.append(last)
+        lst = ast.List(elts=elements, ctx=load)
+        push_func = ast.Name(id='push', ctx=load)
+        py_node = ast.Call(func=push_func, args=[lst], keywords=[])
+        py_node.lineno, py_node.col_offset = node.location
+        return py_node
+
+    visitors['list-word'] = assert_type(
+        concat.level1.parse.ListWordNode).then(list_word_visitor)
     visitors['word'] = alt(
         visitors['word'],
         visitors.ref_visitor('subscription-word'),
