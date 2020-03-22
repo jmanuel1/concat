@@ -14,6 +14,7 @@ import concat.level1.stdlib.pyinterop.method
 import concat.level1.stdlib.pyinterop.coroutine
 import concat.level1.stdlib.pyinterop.math
 import concat.level1.stdlib.pyinterop.builtin_method
+import concat.level1.stdlib.pyinterop.module
 import concat.level1.stdlib.pyinterop.custom_class
 import concat.level1.stdlib.pyinterop.instance
 from typing import List, cast, Iterator, TextIO
@@ -442,6 +443,51 @@ class TestCallables(unittest.TestCase):
         self.assertEqual(stack, [], msg=message)
         message = 'call did not apply the callable to the stack and stash'
         callable.assert_called_with([], [])
+
+
+class TestModuleAttributeAccessors(unittest.TestCase):
+    def test_name(self) -> None:
+        """Test that module.name works."""
+        stack: List[object] = [builtins]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.module.name(stack, stash)
+        message = 'module.name has incorrect stack effect'
+        self.assertEqual(stack, [builtins.__name__], msg=message)
+
+    def test_doc(self) -> None:
+        """Test that module.doc works."""
+        stack: List[object] = [builtins]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.module.doc(stack, stash)
+        message = 'module.doc has incorrect stack effect'
+        self.assertEqual(stack, [builtins.__doc__], msg=message)
+
+    def test_annotations(self) -> None:
+        """Test that module.annotations works."""
+        builtins.__annotations__ = {}
+        stack: List[object] = [builtins]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.module.annotations(stack, stash)
+        message = 'module.annotations has incorrect stack effect'
+        self.assertEqual(stack, [builtins.__annotations__], msg=message)
+
+    def test_file(self) -> None:
+        """Test that module.file works."""
+        builtins.__file__ = 'builtins'
+        stack: List[object] = [builtins]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.module.file(stack, stash)
+        message = 'module.file has incorrect stack effect'
+        self.assertEqual(stack, [builtins.__file__], msg=message)
+
+    def test_dict(self) -> None:
+        """Test that module.dict works."""
+        builtins.__file__ = 'builtins'
+        stack: List[object] = [builtins]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.module.dict(stack, stash)
+        message = 'module.dict has incorrect stack effect'
+        self.assertEqual(stack, [builtins.__dict__], msg=message)
 
 
 class TestCustomClassAttributeAccessors(unittest.TestCase):
