@@ -23,9 +23,11 @@ from concat.visitors import (
 )
 from concat.transpile_visitors import node_to_py_string
 from concat.astutils import (
+    statementfy,
     pop_stack,
     to_transpiled_quotation,
     pack_expressions,
+    to_python_decorator,
 )
 from typing import cast
 
@@ -273,6 +275,8 @@ def level_1_extension(
     visitors['statement'] = alt(
         visitors['statement'],
         visitors.ref_visitor('del-statement'),
+        visitors.ref_visitor('async-funcdef-statement'),
+        visitors.ref_visitor('funcdef-statement')
     )
 
     # This converts a DelStatementNode to the Python statement `del
@@ -327,3 +331,63 @@ def level_1_extension(
 
     visitors['del-statement'] = assert_type(
         concat.level1.parse.DelStatementNode).then(del_statement_visitor)
+
+    # This converts an AsyncFuncdefStatementNode to the Python '@... @(lambda
+    # f: lambda s,_: s.append(f(s,_))) async def name(stack, stash) -> ...:
+    # ...'.
+    @FunctionalVisitor
+    def async_funcdef_statement_visitor(
+        node: concat.level1.parse.AsyncFuncdefStatementNode
+    ) -> ast.AsyncFunctionDef:
+        py_func_def = cast(
+            ast.FunctionDef, visitors['funcdef-statement'].visit(node))
+        py_node = ast.AsyncFunctionDef(
+            name=node.name,
+            args=py_func_def.args,
+            body=py_func_def.body,
+            decorator_list=py_func_def.decorator_list,
+            returns=py_func_def.returns)
+        coroutine_decorator_string = 'lambda f:lambda s,_:s.append(f(s,_))'
+        coroutine_decorator = cast(ast.Expression, ast.parse(
+            coroutine_decorator_string, mode='eval')).body
+        py_node.decorator_list.append(coroutine_decorator)
+        return py_node
+
+    visitors['async-funcdef-statement'] = assert_type(
+        concat.level1.parse.AsyncFuncdefStatementNode
+    ).then(async_funcdef_statement_visitor)
+
+    # This transpiles a FuncdefStatementNode to the Python statement '@... def
+    # name: ...'.
+    @FunctionalVisitor
+    def funcdef_statement_visitor(
+        node: concat.level1.parse.FuncdefStatementNode
+    ) -> ast.FunctionDef:
+        word_or_statement = alt(visitors['word'], visitors['statement'])
+        py_body = [statementfy(word_or_statement.visit(node))
+                   for node in node.body]
+        py_decorators = [to_python_decorator(
+            node, visitors) for node in node.decorators]
+        py_decorators.reverse()
+        py_annotation = None
+        if node.annotation is not None:
+            quote = to_transpiled_quotation(
+                [*node.annotation], node.location, visitors)
+            load = ast.Load()
+            stack = ast.Name(id='stack', ctx=load)
+            stash = ast.Name(id='stash', ctx=load)
+            quote_call = ast.Call(func=quote, args=[
+                                  stack, stash], keywords=[])
+            py_annotation = quote_call
+        stack_args = [ast.arg('stack', None), ast.arg('stash', None)]
+        arguments = ast.arguments(args=stack_args, vararg=None, kwonlyargs=[],
+                                  kwarg=None, defaults=[], kw_defaults=[])
+        py_node = ast.FunctionDef(
+            name=node.name, args=arguments, body=py_body,
+            decorator_list=py_decorators, returns=py_annotation)
+        py_node.lineno, py_node.col_offset = node.location
+        return py_node
+
+    visitors['funcdef-statement'] = assert_type(
+        concat.level1.parse.FuncdefStatementNode
+    ).then(funcdef_statement_visitor)
