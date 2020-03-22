@@ -289,6 +289,9 @@ def level_1_extension(
         visitors.ref_visitor('not-equal-to-word'),
         visitors.ref_visitor('is-word'),
         visitors.ref_visitor('in-word'),
+        visitors.ref_visitor('or-word'),
+        visitors.ref_visitor('and-word'),
+        visitors.ref_visitor('not-word')
     )
 
     @FunctionalVisitor
@@ -362,6 +365,18 @@ def level_1_extension(
 
     visitors['in-word'] = assert_type(
         concat.level1.parse.InWordNode).then(binary_operator_visitor('in'))
+
+    # NOTE: 'or' and 'and' are not short-circuited!
+
+    visitors['or-word'] = assert_type(
+        concat.level1.parse.OrWordNode).then(binary_operator_visitor('or'))
+
+    visitors['and-word'] = assert_type(
+        concat.level1.parse.AndWordNode).then(binary_operator_visitor('and'))
+
+    visitors['not-word'] = assert_type(
+        concat.level1.parse.NotWordNode).then(
+        node_to_py_string('lambda s,_:s.append(not s.pop())'))
 
     # NOTE on semantics: `yield` pushes the value it returns onto the stack.
     # `yield call` calls the value that is returned. `$yield` is a function
