@@ -22,6 +22,7 @@ from concat.visitors import (
     assert_type
 )
 from concat.astutils import (
+    pop_stack,
     pack_expressions,
 )
 from typing import cast
@@ -188,3 +189,61 @@ def level_1_extension(
 
     visitors['slice-word'] = assert_type(
         concat.level1.parse.SliceWordNode).then(slice_word_visitor)
+
+    visitors['statement'] = alt(
+        visitors['statement'],
+        visitors.ref_visitor('del-statement'),
+    )
+
+    # This converts a DelStatementNode to the Python statement `del
+    # ...1,......,...n`.
+    @FunctionalVisitor
+    def del_statement_visitor(node: concat.level1.parse.DelStatementNode) -> ast.Delete:
+        @FunctionalVisitor
+        def subscription_subvisitor(
+            node: concat.level1.parse.SubscriptionWordNode
+        ):
+            words = node.children
+            quote = concat.level0.parse.QuoteWordNode(
+                list(words), list(words)[0].location if words else node.location)
+            py_quote = visitors['quote-word'].visit(quote)
+            load = ast.Load()
+            stack = ast.Name(id='stack', ctx=load)
+            stash = ast.Name(id='stash', ctx=load)
+            quote_call = ast.Call(func=py_quote, args=[
+                                  stack, stash], keywords=[])
+            append_stash = ast.Attribute(value=stash, attr='append', ctx=load)
+            append_stash_call = ast.Call(func=append_stash, args=[
+                                         pop_stack()], ctx=load)
+            object = pack_expressions(
+                [quote_call, append_stash_call, pop_stack()])
+            pop_stash = ast.Attribute(value=stash, attr='pop', ctx=load)
+            pop_stash_call = ast.Call(func=pop_stash, args=[], keywords=[])
+            index = ast.Index(value=pop_stash_call)
+            target = ast.Subscript(value=object, slice=index, ctx=load)
+            return target
+
+        @FunctionalVisitor
+        def slice_subvisitor(node: concat.level1.parse.SliceWordNode):
+            to_slice_token = concat.level0.lex.Token()
+            to_slice_token.type, to_slice_token.value = 'NAME', 'to_slice'
+            to_slice = concat.level0.parse.NameWordNode(to_slice_token)
+            subscription = concat.level1.parse.SubscriptionWordNode(
+                [*node.step_children, *node.stop_children,
+                 *node.start_children,
+                 to_slice])
+            return subscription_subvisitor.visit(subscription)
+
+        subscription_subvisitor = assert_type(
+            concat.level1.parse.SubscriptionWordNode
+        ).then(subscription_subvisitor)
+        slice_subvisitor = assert_type(
+            concat.level1.parse.SliceWordNode
+        ).then(slice_subvisitor)
+        subvisitor = alt(visitors['name-word'], visitors['attribute-word'],
+                         subscription_subvisitor, slice_subvisitor)
+        targets = All(subvisitor).visit(node)
+        return ast.Delete(targets=targets)
+
+    visitors['del-statement'] = assert_type(
+        concat.level1.parse.DelStatementNode).then(del_statement_visitor)

@@ -159,3 +159,23 @@ class TestSubVisitors(unittest.TestCase):
 
         test('list-word')
         test('literal-word')
+
+    def test_del_statement_visitor(self) -> None:
+        name_token = concat.level0.lex.Token()
+        name_token.value, name_token.start = 'a', (0, 0)
+        name = concat.level0.parse.NameWordNode(name_token)
+        node = concat.level1.parse.DelStatementNode([name])
+
+        def test(visitor: str) -> None:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by the {} '
+                'visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            self.assertIsInstance(
+                py_node, ast.Delete, msg='Python node is not a del statement')
+
+        test('del-statement')
+        test('statement')
