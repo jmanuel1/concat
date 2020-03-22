@@ -32,6 +32,12 @@ from concat.astutils import (
 from typing import cast
 
 
+# This should stay in this module since it operates on level 1 types.
+def binary_operator_visitor(operator: str) -> Visitor['concat.level1.parse.OperatorWordNode', ast.expr]:
+    expression = 'lambda s,_:s.append(s.pop(-2) {} s.pop())'.format(operator)
+    return node_to_py_string(expression)
+
+
 def _literal_word_extension(
     visitors: VisitorDict[concat.level0.parse.Node, ast.AST]
 ) -> None:
@@ -221,6 +227,7 @@ def level_1_extension(
         visitors.ref_visitor('await-word'),
         visitors.ref_visitor('subscription-word'),
         visitors.ref_visitor('slice-word'),
+        visitors.ref_visitor('operator-word'),
     )
 
     visitors.extend_with(_literal_word_extension)
@@ -260,6 +267,12 @@ def level_1_extension(
     visitors['slice-word'] = assert_type(
         concat.level1.parse.SliceWordNode).then(slice_word_visitor)
 
+    visitors['operator-word'] = alt(
+        visitors.ref_visitor('power-word'),
+    )
+
+    visitors['power-word'] = assert_type(
+        concat.level1.parse.PowerWordNode).then(binary_operator_visitor('**'))
 
     # NOTE on semantics: `yield` pushes the value it returns onto the stack.
     # `yield call` calls the value that is returned. `$yield` is a function
