@@ -10,6 +10,7 @@ import builtins
 import io
 import concat.level1.stdlib.pyinterop
 import concat.level1.stdlib.pyinterop.builtin_function
+import concat.level1.stdlib.pyinterop.method
 import concat.level1.stdlib.pyinterop.coroutine
 import concat.level1.stdlib.pyinterop.math
 import concat.level1.stdlib.pyinterop.builtin_method
@@ -252,6 +253,53 @@ class TestBuiltinAnalogs(unittest.TestCase):
         self.assertEqual(
             cast(io.TextIOWrapper, stack[0]).fileno(), fd, msg=message)
         fileobj.close()
+
+
+class TestMethodAttributeAccessors(unittest.TestCase):
+    def dummy(self) -> None:
+        pass
+
+    def test_self(self) -> None:
+        """Test that method.self works."""
+        stack: List[object] = [self.dummy]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.method.self(stack, stash)
+        message = 'method.self has incorrect stack effect'
+        self.assertEqual(
+            stack, [cast(types.MethodType, self.dummy).__self__], msg=message)
+
+    def test_func(self) -> None:
+        """Test that method.func works."""
+        stack: List[object] = [self.dummy]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.method.func(stack, stash)
+        message = 'method.func has incorrect stack effect'
+        self.assertEqual(
+            stack, [cast(types.MethodType, self.dummy).__func__], msg=message)
+
+    def test_doc(self) -> None:
+        """Test that method.doc works."""
+        stack: List[object] = [self.dummy]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.method.doc(stack, stash)
+        message = 'method.doc has incorrect stack effect'
+        self.assertEqual(stack, [self.dummy.__doc__], msg=message)
+
+    def test_name(self) -> None:
+        """Test that method.name works."""
+        stack: List[object] = [self.dummy]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.method.name(stack, stash)
+        message = 'method.name has incorrect stack effect'
+        self.assertEqual(stack, [self.dummy.__name__], msg=message)
+
+    def test_module(self) -> None:
+        """Test that method.module works."""
+        stack: List[object] = [self.dummy]
+        stash: List[object] = []
+        concat.level1.stdlib.pyinterop.method.module(stack, stash)
+        message = 'method.module has incorrect stack effect'
+        self.assertEqual(stack, [self.dummy.__module__], msg=message)
 
 
 class DummyException(Exception):
