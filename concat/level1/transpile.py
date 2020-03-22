@@ -229,6 +229,7 @@ def level_1_extension(
         visitors.ref_visitor('slice-word'),
         visitors.ref_visitor('operator-word'),
         visitors.ref_visitor('assert-word'),
+        visitors.ref_visitor('raise-word'),
     )
 
     visitors.extend_with(_literal_word_extension)
@@ -412,6 +413,13 @@ def level_1_extension(
     visitors['assert-word'] = assert_type(
         concat.level1.parse.AssertWordNode).then(
         node_to_py_string('lambda s,_:exec("assert s.pop()")'))
+
+    # Converts an RaiseWordNode to the Python 'lambda s,_: exec("raise s.pop()
+    # from s.pop()")'.
+    visitors['raise-word'] = assert_type(
+        concat.level1.parse.RaiseWordNode).then(
+        node_to_py_string('lambda s,_:exec("raise s.pop() from s.pop()")'))
+
     visitors['statement'] = alt(
         visitors['statement'],
         visitors.ref_visitor('del-statement'),
