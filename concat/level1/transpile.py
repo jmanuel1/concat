@@ -40,6 +40,7 @@ def level_1_extension(
                                    visitors.ref_visitor('tuple-word'),
                                    visitors.ref_visitor('list-word'),
                                    visitors.ref_visitor('set-word'),
+                                   visitors.ref_visitor('dict-word')
                                    )
 
     # Converts a NoneWordNode to the Python expression `push(None)`.
@@ -97,6 +98,10 @@ def level_1_extension(
 
     visitors['bytes-word'] = assert_type(
         concat.level1.parse.BytesWordNode).then(bytes_word_visitor)
+
+    # FIXME: The iterable words should be transpiled to lambdas so that when
+    # they # are $-pushed, their insides are not evaluated. After all, they
+    # already push themselves.
 
     # Converts a TupleWordNode to the Python expression
     # `push(((Quotation([...1])(stack,stash),stack.pop())[-1],(Quotation([...2])(stack,stash),stack.pop())[-1],......))`.
@@ -174,6 +179,35 @@ def level_1_extension(
 
     visitors['set-word'] = assert_type(
         concat.level1.parse.SetWordNode).then(set_word_visitor)
+
+    # Converts a DictWordNode to the Python expression
+    # `push({(Quotation([...1])(stack,stash),stack.pop())[-1]:(Quotation([...2])(stack,stash),stack.pop())[-1],......})`.
+    @FunctionalVisitor
+    def dict_word_visitor(node: concat.level1.parse.DictWordNode):
+        load = ast.Load()
+        pairs = []
+        for key, value in node.dict_children:
+            key_quote = to_transpiled_quotation(key, node.location, visitors)
+            value_quote = to_transpiled_quotation(
+                value, node.location, visitors)
+            stack = ast.Name(id='stack', ctx=load)
+            stash = ast.Name(id='stash', ctx=load)
+            key_quote_call = ast.Call(func=key_quote, args=[
+                stack, stash], keywords=[])
+            value_quote_call = ast.Call(func=value_quote, args=[
+                stack, stash], keywords=[])
+            py_key = pack_expressions([key_quote_call, pop_stack()])
+            py_value = pack_expressions([value_quote_call, pop_stack()])
+            pairs.append((py_key, py_value))
+        dictionary = ast.Dict(keys=dict(pairs).keys(),  # FIXME: should be list
+                              values=dict(pairs).values())  # FIXME: ditto
+        push_func = ast.Name(id='push', ctx=load)
+        py_node = ast.Call(func=push_func, args=[dictionary], keywords=[])
+        py_node.lineno, py_node.col_offset = node.location
+        return py_node
+
+    visitors['dict-word'] = assert_type(
+        concat.level1.parse.DictWordNode).then(dict_word_visitor)
     visitors['word'] = alt(
         visitors['word'],
         visitors.ref_visitor('subscription-word'),

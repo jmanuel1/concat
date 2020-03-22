@@ -196,3 +196,19 @@ class TestSubVisitors(unittest.TestCase):
 
         test('set-word')
         test('literal-word')
+
+    def test_dict_word_visitor(self) -> None:
+        node = concat.level1.parse.DictWordNode((), (0, 0))
+
+        def test(visitor: str) -> None:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by the {} visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            self.assertIsInstance(
+                py_node, ast.Call, msg='Python node is not a call')
+
+        test('dict-word')
+        test('literal-word')
