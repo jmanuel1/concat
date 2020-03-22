@@ -1,4 +1,5 @@
-from typing import TypeVar, Iterable, Generic, Callable, Tuple, Union, Dict
+from typing import (
+    TypeVar, Iterable, Generic, Callable, Tuple, Union, Dict, Type)
 from typing_extensions import Protocol
 import abc
 import functools
@@ -162,6 +163,16 @@ class One(Visitor[InternalNode[NodeType1], ReturnType1]):
 
 def alt(*visitors):
     return functools.reduce(Choice, visitors)
+
+
+# Useful visitors
+
+def assert_type(type: Type[object]):
+    @FunctionalVisitor
+    def visitor(node: object) -> None:
+        if not isinstance(node, type):
+            raise VisitFailureException
+    return visitor
 
 
 T = TypeVar('T')
