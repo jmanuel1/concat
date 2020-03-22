@@ -231,6 +231,7 @@ def level_1_extension(
         visitors.ref_visitor('assert-word'),
         visitors.ref_visitor('raise-word'),
         visitors.ref_visitor('try-word'),
+        visitors.ref_visitor('with-word')
     )
 
     visitors.extend_with(_literal_word_extension)
@@ -424,7 +425,7 @@ def level_1_extension(
     # Converts a TryWordNode to the Python 'lambda s,t: exec("""
     #   import sys
     #   hs=s.pop(-2)
-    #   try:s.pop()(s,t)
+    #   try:s.pop()(s,t)  # QUESTION: What if this mutates the stack?
     #   except:
     #       h=[h for h in hs if isinstance(sys.exc_info[1], h[0])]
     #       if not h: raise
@@ -442,6 +443,15 @@ def level_1_extension(
            if not h: raise
            s.append(sys.exc_info[1])
            h[0][1](s,t)""")''')
+    )
+
+    # Converts a WithWordNode to the Python 'lambda s,_: exec("with s[-1] as
+    # c:s.pop(-2)(s,_)")'.
+    visitors['with-word'] = assert_type(
+        concat.level1.parse.WithWordNode
+    ).then(
+        node_to_py_string(
+            'lambda s,_: exec("with s[-1] as c:s.pop(-2)(s,_)")')
     )
 
     visitors['statement'] = alt(
