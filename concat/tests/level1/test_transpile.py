@@ -65,3 +65,15 @@ class TestSubVisitors(unittest.TestCase):
         message = 'The Python node within the call is not an Ellipsis'
         self.assertIsInstance(
             cast(ast.Call, py_node).args[0], ast.Ellipsis, msg=message)
+
+    def test_subscription_word_visitor(self) -> None:
+        node = concat.level1.parse.SubscriptionWordNode([])
+        for visitor in {'subscription-word', 'word'}:
+            try:
+                py_node = self.__visitors[visitor].visit(node)
+            except concat.visitors.VisitFailureException:
+                message_template = '{} was not accepted by {} visitor'
+                message = message_template.format(node, visitor)
+                self.fail(msg=message)
+            self.assertIsInstance(
+                py_node, ast.expr, msg='Python node is not a expression')

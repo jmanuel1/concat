@@ -21,6 +21,10 @@ from concat.visitors import (
     Visitor,
     assert_type
 )
+from concat.astutils import (
+    pack_expressions,
+)
+from typing import cast
 
 
 def level_1_extension(
@@ -73,3 +77,26 @@ def level_1_extension(
 
     visitors['ellipsis-word'] = assert_type(
         concat.level1.parse.EllipsisWordNode).then(ellipsis_word_visitor)
+    visitors['word'] = alt(
+        visitors['word'],
+        visitors.ref_visitor('subscription-word'),
+    )
+
+    # Converts a SubscriptionWordNode to the Python expression `(...,
+    # stack.pop(-2)[stack.pop()])[-1]`.
+    @FunctionalVisitor
+    def subscription_word_visitor(
+        node: concat.level1.parse.SubscriptionWordNode
+    ) -> ast.expr:
+        quotation = concat.level0.parse.QuoteWordNode(
+            node.children, node.location)
+        py_index = ast.Index(pop_stack())
+        subscription = ast.Subscript(pop_stack(-2), py_index, ast.Load())
+        py_quotation = cast(ast.expr, visitors['quote-word'].visit(quotation))
+        py_node = pack_expressions([py_quotation, subscription])
+        py_node.lineno, py_node.col_offset = node.location
+        return py_node
+
+    visitors['subscription-word'] = assert_type(
+        concat.level1.parse.SubscriptionWordNode).then(
+        subscription_word_visitor)
