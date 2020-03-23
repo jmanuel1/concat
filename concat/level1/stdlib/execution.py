@@ -34,9 +34,10 @@ def case(stack: List[object], stash: List[object]) -> None:
     choose(stack, stash)
 
 
+# We use a non-recursive implementation so that generators can work with loop.
 def loop(stack: List[object], stash: List[object]) -> None:
-    """$fun => fun $(fun loop) if_then"""
+    """$fun => fun `while stack.pop(): ` fun """
     fun = cast(Callable[[List[object], List[object]], None], stack.pop())
     fun(stack, stash)
-    stack.append(Quotation([fun, loop]))
-    if_then(stack, stash)
+    while stack.pop():
+        fun(stack, stash)
