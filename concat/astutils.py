@@ -81,6 +81,12 @@ def count_leading_dots(relative_module: str) -> int:
     return count
 
 
+# TODO: I think this is overly complicated. We should just establish a simple
+# calling convention, like:
+# With the arguments (self, *args, **kwargs) to a magic function, self is
+# pushed onto the stack, each of args is pushed onto the stack, then kwargs is
+# pushed onto the stack. There will have to be various exceptions to this (like
+# with __init__), but it will lead to a lot more consistency.
 def correct_magic_signature(statement: ast.stmt) -> ast.stmt:
     if isinstance(statement, ast.FunctionDef):
         name = statement.name
