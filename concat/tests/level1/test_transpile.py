@@ -1045,8 +1045,9 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
             name, [], None, [], (0, 0))
         node = concat.level1.parse.ClassdefStatementNode(
             'A', [new_def], (0, 0), [], [])
-        py_node = self.__visitors['classdef-statement'].visit(node)
-        py_new_def = py_node.body[0]
+        py_node = cast(
+            ast.ClassDef, self.__visitors['classdef-statement'].visit(node))
+        py_new_def = cast(ast.FunctionDef, py_node.body[0])
         py_args = [arg.arg for arg in py_new_def.args.args]
         self.assertEqual(
             py_args, ['cls', 'stack', 'stash'], msg='wrong arguments')
