@@ -7,8 +7,6 @@ import functools
 NodeType1 = TypeVar('NodeType1')
 NodeType1_co = TypeVar('NodeType1_co', covariant=True)
 NodeType1_contra = TypeVar('NodeType1_contra', contravariant=True)
-NodeType2 = TypeVar('NodeType2')
-NodeType3 = TypeVar('NodeType3')
 ReturnType1 = TypeVar('ReturnType1')
 ReturnType1_co = TypeVar('ReturnType1_co', covariant=True)
 ReturnType2 = TypeVar('ReturnType2')
