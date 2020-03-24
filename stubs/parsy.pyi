@@ -1,12 +1,20 @@
 """Type stubs for the parsy module."""
 
 
-from typing import TypeVar, List, Union, Generic, Callable, Generator, Optional
+from typing import (TypeVar, List, Union, Generic,
+                    Callable, Generator, Optional, Protocol, Iterable)
 
 
 T = TypeVar('T')
 U = TypeVar('U')
 V = TypeVar('V')
+W = TypeVar('W')
+
+
+class _SupportsPlus(Protocol):
+
+    def __add__(self, other: '_SupportsPlus') -> '_SupportsPlus':
+        ...
 
 
 class Parser(Generic[T, U]):
@@ -23,6 +31,20 @@ class Parser(Generic[T, U]):
     def map(self, fn: Callable[[U], V]) -> 'Parser[T, V]':
         ...
 
+    def sep_by(self,
+               sep: 'Parser[T, V]', min=0, max=float('inf')
+               ) -> 'Parser[T, List[U]]':
+        ...
+
+    def times(self, min: int, max: int = -1) -> 'Parser[T, List[U]]':
+        ...
+
+    def result(self, res: V) -> 'Parser[T, V]':
+        ...
+
+    def at_least(self, n: int) -> '_ParserOutputtingList[T, U]':
+        ...
+
     def __lshift__(self, other: 'Parser[T, V]') -> 'Parser[T, U]':
         ...
 
@@ -30,6 +52,17 @@ class Parser(Generic[T, U]):
         ...
 
     def __rshift__(self, other: 'Parser[T, V]') -> 'Parser[T, V]':
+        ...
+
+    def __add__(self,
+                other: 'Parser[T, _SupportsPlus]'
+                ) -> 'Parser[T, _SupportsPlus]':
+        ...
+
+
+class _ParserOutputtingList(Parser[T, List[U]]):
+
+    def combine(self, fn: Callable[..., V]) -> Parser[T, V]:
         ...
 
 
@@ -52,3 +85,16 @@ def generate(
 
 def alt(*parsers: Parser[T, U]) -> Parser[T, U]:
     ...
+
+
+def seq(*parsers: Parser[T, U]) -> _ParserOutputtingList[T, U]:
+    ...
+
+# there is another seq overload for Python 3.6+, but we support 3.5+
+
+
+def success(val: T) -> Parser[U, T]:
+    ...
+
+
+any_char: Parser
