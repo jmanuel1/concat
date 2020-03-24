@@ -36,7 +36,9 @@ from typing import cast
 
 
 # This should stay in this module since it operates on level 1 types.
-def binary_operator_visitor(operator: str) -> Visitor['concat.level1.parse.OperatorWordNode', ast.expr]:
+def binary_operator_visitor(operator: str) -> Visitor[
+    'concat.level1.parse.OperatorWordNode', ast.expr
+]:
     expression = 'lambda s,_:s.append(s.pop(-2) {} s.pop())'.format(operator)
     return node_to_py_string(expression)
 
@@ -221,7 +223,7 @@ def _literal_word_extension(
         concat.level1.parse.DictWordNode).then(dict_word_visitor)
 
 
-def level_1_extension(
+def _word_extension(
     visitors: VisitorDict[concat.level0.parse.Node, ast.AST]
 ) -> None:
     visitors['word'] = alt(
@@ -320,7 +322,8 @@ def level_1_extension(
         concat.level1.parse.MulWordNode).then(binary_operator_visitor('*'))
 
     visitors['floor-div-word'] = assert_type(
-        concat.level1.parse.FloorDivWordNode).then(binary_operator_visitor('//'))
+        concat.level1.parse.FloorDivWordNode).then(
+            binary_operator_visitor('//'))
 
     visitors['div-word'] = assert_type(
         concat.level1.parse.DivWordNode).then(binary_operator_visitor('/'))
@@ -332,40 +335,52 @@ def level_1_extension(
         concat.level1.parse.AddWordNode).then(binary_operator_visitor('+'))
 
     visitors['subtract-word'] = assert_type(
-        concat.level1.parse.SubtractWordNode).then(binary_operator_visitor('-'))
+        concat.level1.parse.SubtractWordNode).then(
+            binary_operator_visitor('-'))
 
     visitors['left-shift-word'] = assert_type(
-        concat.level1.parse.LeftShiftWordNode).then(binary_operator_visitor('<<'))
+        concat.level1.parse.LeftShiftWordNode).then(
+            binary_operator_visitor('<<'))
 
     visitors['right-shift-word'] = assert_type(
-        concat.level1.parse.RightShiftWordNode).then(binary_operator_visitor('>>'))
+        concat.level1.parse.RightShiftWordNode).then(
+            binary_operator_visitor('>>'))
 
     visitors['bitwise-and-word'] = assert_type(
-        concat.level1.parse.BitwiseAndWordNode).then(binary_operator_visitor('&'))
+        concat.level1.parse.BitwiseAndWordNode).then(
+            binary_operator_visitor('&'))
 
     visitors['bitwise-xor-word'] = assert_type(
-        concat.level1.parse.BitwiseXorWordNode).then(binary_operator_visitor('^'))
+        concat.level1.parse.BitwiseXorWordNode).then(
+            binary_operator_visitor('^'))
 
     visitors['bitwise-or-word'] = assert_type(
-        concat.level1.parse.BitwiseOrWordNode).then(binary_operator_visitor('|'))
+        concat.level1.parse.BitwiseOrWordNode).then(
+            binary_operator_visitor('|'))
 
     visitors['less-than-word'] = assert_type(
-        concat.level1.parse.LessThanWordNode).then(binary_operator_visitor('<'))
+        concat.level1.parse.LessThanWordNode).then(
+            binary_operator_visitor('<'))
 
     visitors['greater-than-word'] = assert_type(
-        concat.level1.parse.GreaterThanWordNode).then(binary_operator_visitor('>'))
+        concat.level1.parse.GreaterThanWordNode).then(
+            binary_operator_visitor('>'))
 
     visitors['equal-to-word'] = assert_type(
-        concat.level1.parse.EqualToWordNode).then(binary_operator_visitor('=='))
+        concat.level1.parse.EqualToWordNode).then(
+            binary_operator_visitor('=='))
 
     visitors['greater-than-or-equal-to-word'] = assert_type(
-        concat.level1.parse.GreaterThanOrEqualToWordNode).then(binary_operator_visitor('>='))
+        concat.level1.parse.GreaterThanOrEqualToWordNode).then(
+            binary_operator_visitor('>='))
 
     visitors['less-than-or-equal-to-word'] = assert_type(
-        concat.level1.parse.LessThanOrEqualToWordNode).then(binary_operator_visitor('<='))
+        concat.level1.parse.LessThanOrEqualToWordNode).then(
+            binary_operator_visitor('<='))
 
     visitors['not-equal-to-word'] = assert_type(
-        concat.level1.parse.NotEqualToWordNode).then(binary_operator_visitor('!='))
+        concat.level1.parse.NotEqualToWordNode).then(
+            binary_operator_visitor('!='))
 
     visitors['is-word'] = assert_type(
         concat.level1.parse.IsWordNode).then(binary_operator_visitor('is'))
@@ -457,6 +472,12 @@ def level_1_extension(
             'lambda s,_: exec("with s[-1] as c:s.pop(-2)(s,_)")')
     )
 
+
+def level_1_extension(
+    visitors: VisitorDict[concat.level0.parse.Node, ast.AST]
+) -> None:
+    visitors.extend_with(_word_extension)
+
     visitors['statement'] = alt(
         visitors['statement'],
         visitors.ref_visitor('del-statement'),
@@ -468,14 +489,17 @@ def level_1_extension(
     # This converts a DelStatementNode to the Python statement `del
     # ...1,......,...n`.
     @FunctionalVisitor
-    def del_statement_visitor(node: concat.level1.parse.DelStatementNode) -> ast.Delete:
+    def del_statement_visitor(
+        node: concat.level1.parse.DelStatementNode
+    ) -> ast.Delete:
         @FunctionalVisitor
         def subscription_subvisitor(
             node: concat.level1.parse.SubscriptionWordNode
         ):
             words = node.children
             quote = concat.level0.parse.QuoteWordNode(
-                list(words), list(words)[0].location if words else node.location)
+                list(words),
+                list(words)[0].location if words else node.location)
             py_quote = visitors['quote-word'].visit(quote)
             load = ast.Load()
             stack = ast.Name(id='stack', ctx=load)
@@ -610,7 +634,9 @@ def level_1_extension(
     )
 
     @FunctionalVisitor
-    def classdef_statement_visitor(node: concat.level1.parse.ClassdefStatementNode) -> ast.ClassDef:
+    def classdef_statement_visitor(
+        node: concat.level1.parse.ClassdefStatementNode
+    ) -> ast.ClassDef:
         py_body = [correct_magic_signature(statementfy(node)) for node in All(
             alt(visitors['word'], visitors['statement'])).visit(node)]
         py_decorators = [to_python_decorator(
@@ -630,7 +656,13 @@ def level_1_extension(
             py_keyword_value = pack_expressions([py_word_call, pop_stack()])
             py_keyword = ast.keyword(keyword_arg[0], py_keyword_value)
             py_keywords.append(py_keyword)
-        return ast.ClassDef(node.class_name, bases=py_bases, keywords=py_keywords, body=py_body, decorator_list=py_decorators)
+        return ast.ClassDef(
+            node.class_name,
+            bases=py_bases,
+            keywords=py_keywords,
+            body=py_body,
+            decorator_list=py_decorators)
 
     visitors['classdef-statement'] = assert_type(
-        concat.level1.parse.ClassdefStatementNode).then(classdef_statement_visitor)
+        concat.level1.parse.ClassdefStatementNode).then(
+        classdef_statement_visitor)
