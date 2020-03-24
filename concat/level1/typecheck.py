@@ -9,6 +9,7 @@ import dataclasses
 import builtins
 from typing import (List, Set, Tuple, Dict, Iterator, Union,
                     Optional, Generator, overload, cast)
+import concat.astutils
 import concat.level0.parse
 import concat.level1.parse
 import parsy
@@ -239,7 +240,7 @@ def _inst(sigma: ForAll) -> _Type:
 
 def infer(
     gamma: Environment,
-    e: 'concat.level1.parse.WordsOrStatements'
+    e: 'concat.astutils.WordsOrStatements'
 ) -> Tuple[_Substitutions, _Function]:
     """The infer function described by Kleffner."""
     e = list(e)

@@ -1,4 +1,4 @@
-from typing import Union, List, Tuple, Iterable, Optional, cast
+from typing import Union, List, Tuple, Iterable, Optional, Sequence, cast
 import ast
 import concat.visitors
 import concat.level0.parse
@@ -6,7 +6,7 @@ import concat.level0.parse
 
 # Typedefs
 
-WordsOrStatements = List[
+WordsOrStatements = Sequence[
     Union['concat.level0.parse.WordNode', 'concat.level0.parse.StatementNode']]
 Words = List['concat.level0.parse.WordNode']
 Location = Tuple[int, int]
