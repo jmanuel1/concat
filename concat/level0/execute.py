@@ -6,6 +6,12 @@ import concat.level0.stdlib.importlib
 from concat.level0.stdlib.pyinterop import py_call
 
 
+class ConcatRuntimeError(RuntimeError):
+    def __init__(self):
+        super().__init__()
+        # self.concat_traceback = traceback
+
+
 def _compile(filename: str, ast_: ast.Module) -> types.CodeType:
     return compile(ast_, filename, 'exec')
 
@@ -14,7 +20,12 @@ def _run(
     prog: types.CodeType,
     globals: Optional[Dict[str, object]] = None
 ) -> None:
-    exec(prog, {} if globals is None else globals)
+    try:
+        exec(prog, {} if globals is None else globals)
+    except Exception as e:
+        # throw away all of the traceback outside the code
+        # traceback = e.__traceback__.tb_next
+        raise ConcatRuntimeError from e
 
 
 def _do_preamble(globals: Dict[str, object], interactive=False) -> None:
