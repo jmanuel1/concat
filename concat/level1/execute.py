@@ -5,8 +5,15 @@ from typing import Dict
 import ast
 
 
-def _do_preamble(globals: Dict[str, object]) -> None:
-    """Run the level 1 preamble, which adds objects to the given dictionary."""
+def _do_preamble(globals: Dict[str, object], interactive=False) -> None:
+    """Run the level 1 preamble, which adds objects to the given dictionary.
+
+    The dict is not mutated if interactive is True and the dict has a truthy
+    '@@level-1-interactive' key."""
+    if interactive and globals.get('@@level-1-interactive', False):
+        return
+    if interactive:
+        globals['@@level-1-interactive'] = True
     globals['to_int'] = concat.level1.stdlib.pyinterop.to_int
     globals['to_bool'] = concat.level1.stdlib.pyinterop.to_bool
     globals['to_complex'] = concat.level1.stdlib.pyinterop.to_complex
@@ -27,8 +34,9 @@ def _do_preamble(globals: Dict[str, object]) -> None:
 def execute(
     filename: str,
     ast: ast.Module,
-    globals: Dict[str, object]
+    globals: Dict[str, object],
+    interactive=False
 ) -> None:
     """Run transpiled Concat level 1 code."""
-    _do_preamble(globals)
-    concat.level0.execute.execute(filename, ast, globals)
+    _do_preamble(globals, interactive)
+    concat.level0.execute.execute(filename, ast, globals, interactive)

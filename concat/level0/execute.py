@@ -17,10 +17,16 @@ def _run(
     exec(prog, {} if globals is None else globals)
 
 
-def _do_preamble(globals: Dict[str, object]) -> None:
+def _do_preamble(globals: Dict[str, object], interactive=False) -> None:
     """Add key-value pairs expected by Concat code to the passed-in mapping.
 
-    This mutates the mapping."""
+    This mutates the mapping, unless noth interactive and
+    globals['@@level-0-interactive'] are true."""
+    if interactive and globals.get('@@level-0-interactive', False):
+        return
+    if interactive:
+        globals['@@level-0-interactive'] = True
+
     globals['concat'] = concat
 
     globals['py_call'] = py_call
@@ -37,8 +43,9 @@ def _do_preamble(globals: Dict[str, object]) -> None:
 def execute(
     filename: str,
     ast: ast.Module,
-    globals: Dict[str, object]
+    globals: Dict[str, object],
+    interactive=False
 ) -> None:
-    _do_preamble(globals)
+    _do_preamble(globals, interactive)
 
     _run(_compile(filename, ast), globals)
