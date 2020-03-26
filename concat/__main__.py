@@ -38,6 +38,9 @@ def transpile(code: str) -> ast.Module:
     parser.extend_with(concat.level0.parse.level_0_extension)
     parser.extend_with(concat.level1.parse.level_1_extension)
     concat_ast = parser.parse(tokens)
+    # TODO: put names from the preamble into the type environment
+    concat.level1.typecheck.infer(
+        concat.level1.typecheck.Environment(), concat_ast.children)
     transpiler = concat.level0.transpile.VisitorDict[concat.level0.parse.Node, ast.AST](
     )
     transpiler.extend_with(concat.level0.transpile.level_0_extension)
