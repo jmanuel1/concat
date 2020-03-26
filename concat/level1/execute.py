@@ -10,6 +10,7 @@ import concat.level1.stdlib.pyinterop.instance
 import concat.level1.stdlib.compositional
 import concat.level1.stdlib.shuffle_words
 import concat.level1.stdlib.execution
+import concat.level1.stdlib.types
 from typing import Dict
 import ast
 
@@ -23,6 +24,10 @@ def _do_preamble(globals: Dict[str, object], interactive=False) -> None:
         return
     if interactive:
         globals['@@level-1-interactive'] = True
+
+    # needed by generated code to work
+    globals['concat'] = concat
+
     globals['to_int'] = concat.level1.stdlib.pyinterop.to_int
     globals['to_bool'] = concat.level1.stdlib.pyinterop.to_bool
     globals['to_complex'] = concat.level1.stdlib.pyinterop.to_complex
