@@ -1,1 +1,1 @@
-$() $('Startup file ran!') $print py_call
+[,] ['Startup file ran!',] $print py_call
