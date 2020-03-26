@@ -114,7 +114,6 @@ def level_0_extension(
         push_func = ast.Name(id='push', ctx=load)
         py_node = ast.Call(func=push_func, args=[child], keywords=[])
         py_node.lineno, py_node.col_offset = node.location
-        print(astunparse.dump(py_node))
         return py_node
 
     visitors['push-word'] = push_word_visitor
