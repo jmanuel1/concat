@@ -11,7 +11,7 @@ import concat.level1.stdlib.compositional
 import concat.level1.stdlib.shuffle_words
 import concat.level1.stdlib.execution
 import concat.level1.stdlib.types
-from typing import Dict
+from typing import Dict, Optional
 import ast
 
 
@@ -82,8 +82,10 @@ def execute(
     filename: str,
     ast: ast.Module,
     globals: Dict[str, object],
-    interactive=False
+    interactive=False,
+    locals: Optional[Dict[str, object]] = None
 ) -> None:
     """Run transpiled Concat level 1 code."""
     _do_preamble(globals, interactive)
-    concat.level0.execute.execute(filename, ast, globals, interactive)
+    concat.level0.execute.execute(
+        filename, ast, globals, interactive, locals)

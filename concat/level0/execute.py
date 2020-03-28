@@ -18,10 +18,12 @@ def _compile(filename: str, ast_: ast.Module) -> types.CodeType:
 
 def _run(
     prog: types.CodeType,
-    globals: Optional[Dict[str, object]] = None
+    globals: Optional[Dict[str, object]] = None,
+    locals: Optional[Dict[str, object]] = None
 ) -> None:
+    globals = {} if globals is None else globals
     try:
-        exec(prog, {} if globals is None else globals)
+        exec(prog, globals, globals if locals is None else locals)
     except Exception as e:
         # throw away all of the traceback outside the code
         # traceback = e.__traceback__.tb_next
@@ -55,8 +57,9 @@ def execute(
     filename: str,
     ast: ast.Module,
     globals: Dict[str, object],
-    interactive=False
+    interactive=False,
+    locals: Optional[Dict[str, object]] = None
 ) -> None:
     _do_preamble(globals, interactive)
 
-    _run(_compile(filename, ast), globals)
+    _run(_compile(filename, ast), globals, locals)
