@@ -20,3 +20,7 @@ class TestREPLFunctions(unittest.TestCase):
             stack,
             [concat.level1.stdlib.types.Quotation([some, words, here])],
             msg='read_quot has incorrect stack effect')
+
+    def test_do_return(self):
+        self.assertRaises(concat.level1.stdlib.repl.REPLExitException,
+                          concat.level1.stdlib.repl.do_return, [], [])

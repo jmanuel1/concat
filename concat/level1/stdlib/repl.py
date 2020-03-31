@@ -22,6 +22,10 @@ from typing import List, Dict, cast
 sys.modules[__name__].__class__ = concat.level0.stdlib.importlib.Module
 
 
+class REPLExitException(Exception):
+    pass
+
+
 def _tokenize(code: str) -> List[concat.level0.lex.Token]:
     lexer = concat.level1.lex.Lexer()
     lexer.input(code)
@@ -88,3 +92,9 @@ def read_quot(stack: List[object], stash: List[object]) -> None:
     caller_locals = caller_frame.f_locals
     concat.level1.execute.execute(
         '<stdin>', py_ast, caller_globals, True, caller_locals)
+
+
+# TODO: This is really meant to call a contuinuation, like in Factor. We don't
+# have continuations yet, so we'll just raise an exception.
+def do_return(stack: List[object], stash: List[object]) -> None:
+    raise REPLExitException
