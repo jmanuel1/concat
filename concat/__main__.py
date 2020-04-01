@@ -17,7 +17,7 @@ import argparse
 import sys
 import ast
 import traceback
-from typing import Callable, IO, AnyStr, cast, Dict, List, Set
+from typing import Callable, IO, AnyStr, cast, Dict, List, Set, NoReturn
 
 
 def tokenize(code: str) -> List[concat.level0.lex.Token]:
@@ -65,6 +65,11 @@ def file_type(mode: str) -> Callable[[str], IO[AnyStr]]:
     return func
 
 
+def exit_repl() -> NoReturn:
+    print('Bye!')
+    exit()
+
+
 arg_parser = argparse.ArgumentParser(description='Run a Concat program.')
 arg_parser.add_argument(
     'file',
@@ -76,15 +81,20 @@ arg_parser.add_argument('--debug', action='store_true',
                         default=False, help='turn stack debugging on')
 args = arg_parser.parse_args()
 
+globals: Dict[str, object] = {
+    'visible_vars': set(),
+    'show_var': show_var,
+    'concat': concat,
+    'return': concat.level1.stdlib.repl.do_return
+}
+locals: Dict[str, object] = {}
+version = concat.version
+py_version = sys.version
+intro_message = "Concat REPL (level 1, version {} on Python {}).".format(
+    version, py_version)
+
 # interactive mode
 if args.file is sys.stdin:
-    globals: Dict[str, object] = {
-        'visible_vars': set(), 'show_var': show_var, 'concat': concat}
-    locals: Dict[str, object] = {}
-    version = concat.version
-    py_version = sys.version
-    intro_message = "Concat REPL (level 1, version {} on Python {}).".format(
-        version, py_version)
     print(intro_message)
 
     print('Running startup initialization file...')
@@ -115,6 +125,8 @@ if args.file is sys.stdin:
             try:
                 try:
                     quotation(stack, cast(List[object], globals['stash']))
+                except concat.level1.stdlib.repl.REPLExitException:
+                    exit_repl()
                 except Exception as e:
                     raise concat.level0.execute.ConcatRuntimeError from e
             except concat.level0.execute.ConcatRuntimeError as e:
@@ -138,8 +150,7 @@ if args.file is sys.stdin:
             print(prompt, end='', flush=True)
     except KeyboardInterrupt:
         # catch ctrl-c to cleanly exit
-        print('Bye!')
-        exit()
+        exit_repl()
 else:
     python_ast = transpile(args.file.read())
     args.file.close()
