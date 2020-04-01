@@ -3,6 +3,7 @@
 It is like Factor's listener vocabulary."""
 
 
+import concat
 import concat.astutils
 import concat.level0.stdlib.importlib
 import concat.level0.parse
@@ -16,7 +17,8 @@ import sys
 import tokenize as tokize
 import ast
 import inspect
-from typing import List, Dict, cast
+import traceback
+from typing import List, Dict, Set, Callable, NoReturn, cast
 
 
 sys.modules[__name__].__class__ = concat.level0.stdlib.importlib.Module
@@ -96,5 +98,84 @@ def read_quot(stack: List[object], stash: List[object]) -> None:
 
 # TODO: This is really meant to call a contuinuation, like in Factor. We don't
 # have continuations yet, so we'll just raise an exception.
-def do_return(stack: List[object], stash: List[object]) -> None:
+def do_return(stack: List[object], stash: List[object]) -> NoReturn:
     raise REPLExitException
+
+
+def _exit_repl() -> NoReturn:
+    print('Bye!')
+    # TODO: Don't exit the whole program because we can nest REPLs.
+    exit()
+
+
+def repl(stack: List[object], stash: List[object], debug=False) -> None:
+    def show_var(stack: List[object], stash: List[object]):
+        cast(Set[str], globals['visible_vars']).add(cast(str, stack.pop()))
+
+    globals: Dict[str, object] = {
+        'visible_vars': set(),
+        'show_var': show_var,
+        'concat': concat,
+        'return': concat.level1.stdlib.repl.do_return
+    }
+    locals: Dict[str, object] = {}
+
+    intro_message = "Concat REPL (level 1, version {} on Python {}).".format(
+        concat.version, sys.version)
+
+    print(intro_message)
+
+    print('Running startup initialization file...')
+    init_file_name = '.concat-rc.cat'  # TODO: should be configurable
+    try:
+        with open(init_file_name) as init_file:
+            python_ast = _transpile(_parse(init_file.read()))
+    except FileNotFoundError:
+        print('No startup initialization file found.')
+    else:
+        concat.level1.execute.execute(
+            init_file_name, python_ast, globals, True, locals)
+    prompt = '>>> '
+    print(prompt, end='', flush=True)
+    try:
+        while True:
+            try:
+                # FIXME: we can't execute statements with this
+                eval("concat.level1.stdlib.repl.read_quot(stack, [])",
+                     globals, locals)
+            except EOFError:
+                break
+            stack = cast(List[object], globals['stack'])
+            quotation = cast(
+                Callable[[List[object], List[object]], None],
+                stack.pop()
+            )
+            try:
+                try:
+                    quotation(stack, cast(List[object], globals['stash']))
+                except concat.level1.stdlib.repl.REPLExitException:
+                    _exit_repl()
+                except Exception as e:
+                    raise concat.level0.execute.ConcatRuntimeError from e
+            except concat.level0.execute.ConcatRuntimeError as e:
+                value = e.__cause__
+                if value is None or value.__traceback__ is None:
+                    tb = None
+                else:
+                    tb = value.__traceback__.tb_next
+                traceback.print_exception(None, value, tb)
+            except KeyboardInterrupt:
+                # a ctrl-c during execution just cancels that execution
+                if globals.get('handle_ctrl_c', False):
+                    print('Concat was interrupted.')
+                else:
+                    raise
+            print('Stack:', globals['stack'])
+            if debug:
+                print('Stash:', globals['stash'])
+            for var in cast(Set[str], globals['visible_vars']):
+                print(var, '=', globals[var])
+            print(prompt, end='', flush=True)
+    except KeyboardInterrupt:
+        # catch ctrl-c to cleanly exit
+        _exit_repl()

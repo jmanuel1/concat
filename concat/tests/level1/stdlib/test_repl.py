@@ -33,3 +33,9 @@ class TestREPLFunctions(unittest.TestCase):
     def test_do_return(self):
         self.assertRaises(concat.level1.stdlib.repl.REPLExitException,
                           concat.level1.stdlib.repl.do_return, [], [])
+
+    def test_repl(self):
+        with replace_stdin(io.StringIO('[,] [,] $input py_call\nhi there')):
+            concat.level1.stdlib.repl.repl([], [])
+            self.assertEqual(sys.stdin.read(), '',
+                             msg='repl did not consume all input')
