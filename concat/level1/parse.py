@@ -531,7 +531,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['dict-word'] = dict_word_parser
 
     key_value_pair = parsy.seq(parsers.ref_parser('word').many(
-        ) << parsers.token('COLON'), parsers.ref_parser('word').many())
+    ) << parsers.token('COLON'), parsers.ref_parser('word').many())
 
     parsers['true-word'] = parsers.token('TRUE').map(TrueWordNode)
 
@@ -568,7 +568,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
 
     parsers['target-words'] = (parsers.ref_parser('target-word').sep_by(
         parsers.token('COMMA'), min=1) << parsers.token('COMMA').optional()
-        ).map(flatten)
+    ).map(flatten)
 
     parsers['target-word'] = parsy.alt(
         parsers.ref_parser('name-word'),
@@ -610,7 +610,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     # The stack effect syntax is defined within the .typecheck module.
     @parsy.generate('funcdef statement')
     def funcdef_statement_parser() -> Generator:
-        location = yield parsers.token('DEF')
+        location = (yield parsers.token('DEF')).start
         name = yield parsers.token('NAME')
         effect_tokens = None
         if (yield parsers.token('LPAR').optional()):
