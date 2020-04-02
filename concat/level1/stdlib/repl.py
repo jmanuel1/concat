@@ -76,24 +76,50 @@ def _read_until_complete_line() -> str:
     return line
 
 
-def read_quot(stack: List[object], stash: List[object]) -> None:
+def read_form(stack: List[object], stash: List[object]) -> None:
     string = _read_until_complete_line()
     ast = _parse(string)
     location = ast.children[0].location if ast.children else (0, 0)
-    # FIXME: Use parsers['word'].many instead of the top-level parser, or just
-    # wrap whatever expression we read in '$(' and ')'.
-    assert all(map(lambda c: isinstance(
-        c, concat.level0.parse.WordNode), ast.children))
-    ast.children = [concat.level0.parse.PushWordNode(
-        concat.level0.parse.QuoteWordNode(
-            cast(concat.astutils.Words, ast.children), location))]
-    py_ast = _transpile(ast)
+
     caller_frame = inspect.stack()[1].frame
     caller_globals: Dict[str, object] = {
         **caller_frame.f_globals, 'stack': stack, 'stash': stash}
     caller_locals = caller_frame.f_locals
-    concat.level1.execute.execute(
-        '<stdin>', py_ast, caller_globals, True, caller_locals)
+
+    # FIXME: Use parsers['word'].many instead of the top-level parser, or just
+    # wrap whatever expression we read in '$(' and ')'.
+    if all(map(lambda c: isinstance(
+            c, concat.level0.parse.WordNode), ast.children)):
+        ast.children = [concat.level0.parse.PushWordNode(
+            concat.level0.parse.QuoteWordNode(
+                cast(concat.astutils.Words, ast.children), location))]
+        py_ast = _transpile(ast)
+        concat.level1.execute.execute(
+            '<stdin>', py_ast, caller_globals, True, caller_locals)
+        return
+
+    # I don't think it makes sense for us to get multiple children if what we
+    # got was a statement, so we assert.
+    assert len(ast.children) == 1
+    py_ast = _transpile(ast)
+
+    def statement_function(stack: List[object], stash: List[object]):
+        concat.level1.execute.execute(
+            '<stdin>', py_ast, caller_globals, True, caller_locals)
+
+    stack.append(statement_function)
+
+
+def read_quot(stack: List[object], stash: List[object]) -> None:
+    caller_frame = inspect.stack()[1].frame
+    caller_globals: Dict[str, object] = {
+        **caller_frame.f_globals, 'stack': stack, 'stash': stash}
+    caller_locals = caller_frame.f_locals
+    exec('concat.level1.stdlib.repl.read_form(stack, stash)',
+         caller_globals, caller_locals)
+    if not isinstance(stack[-1], concat.level1.stdlib.types.Quotation):
+        stack.pop()
+        raise Exception('did not receive a quotation from standard input')
 
 
 # TODO: This is really meant to call a contuinuation, like in Factor. We don't
@@ -140,8 +166,7 @@ def repl(stack: List[object], stash: List[object], debug=False) -> None:
     try:
         while True:
             try:
-                # FIXME: we can't execute statements with this
-                eval("concat.level1.stdlib.repl.read_quot(stack, [])",
+                eval('concat.level1.stdlib.repl.read_form(stack, [])',
                      globals, locals)
             except EOFError:
                 break
