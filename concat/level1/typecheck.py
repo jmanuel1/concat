@@ -20,7 +20,13 @@ class TypeError(builtins.TypeError):
 
 
 class NameError(builtins.NameError):
-    pass
+    def __init__(self, name: concat.level0.parse.NameWordNode):
+        super().__init__(name)
+        self._name = name
+
+    def __str__(self):
+        return 'name "{}" not previously defined (error at {}:{})'.format(
+            self._name.value, *self._name.location)
 
 
 class _Type(abc.ABC):
@@ -281,7 +287,7 @@ def infer(
             phi = _unify(o, [a_bar, _Function([a_bar], [b_bar])])
             return phi(S), phi(_Function(i, [b_bar]))
         if not e[-1].value in gamma:
-            raise NameError
+            raise NameError(e[-1])
         type_of_name = _inst(gamma[e[-1].value].to_for_all())
         if not isinstance(type_of_name, _Function):
             raise NotImplementedError
