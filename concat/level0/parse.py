@@ -164,7 +164,7 @@ class ParserDict(Dict[str, parsy.Parser]):
 def level_0_extension(parsers: ParserDict) -> None:
     # This parses the top level of a file.
     # top level =
-    #   ENCODING, (word | statement, NEWLINE | NEWLINE)*, [ NEWLINE ],
+    #   ENCODING, (word | statement | NEWLINE)*, [ NEWLINE ],
     #   ENDMARKER ;
     @parsy.generate
     def top_level_parser() -> Generator[parsy.Parser, Any, TopLevelNode]:
@@ -172,7 +172,7 @@ def level_0_extension(parsers: ParserDict) -> None:
         newline = parsers.token('NEWLINE')
         statement = parsers['statement']
         word = parsers['word']
-        children = yield (word | (statement << newline) | newline).many()
+        children = yield (word | statement | newline).many()
         children = [
             child for child in children
             if not isinstance(child, concat.level0.lex.Token)]
