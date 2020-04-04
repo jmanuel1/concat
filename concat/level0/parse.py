@@ -30,8 +30,9 @@ import abc
 from typing import (Iterable, TypeVar, Any, Sequence, Tuple,
                     Dict, Generator, List, Callable)
 import concat.level0.lex
-import parsy
 import concat.astutils
+from concat.parser_combinators import desc_cumulatively
+import parsy
 
 
 class Node(abc.ABC):
@@ -154,7 +155,7 @@ class ParserDict(Dict[str, parsy.Parser]):
         return parsy.test_item(lambda token: token.type == typ, description)
 
     def ref_parser(self, name: str) -> parsy.Parser:
-        @parsy.generate(name.replace('-', ' '))
+        @parsy.generate
         def parser():
             return (yield self[name])
         return parser
@@ -165,7 +166,7 @@ def level_0_extension(parsers: ParserDict) -> None:
     # top level =
     #   ENCODING, (word | statement, NEWLINE | NEWLINE)*, [ NEWLINE ],
     #   ENDMARKER ;
-    @parsy.generate('top level')
+    @parsy.generate
     def top_level_parser() -> Generator[parsy.Parser, Any, TopLevelNode]:
         encoding = yield parsers.token('ENCODING')
         newline = parsers.token('NEWLINE')
@@ -178,7 +179,7 @@ def level_0_extension(parsers: ParserDict) -> None:
         yield parsers.token('ENDMARKER')
         return TopLevelNode(encoding, children)
 
-    parsers['top-level'] = top_level_parser
+    parsers['top-level'] = desc_cumulatively(top_level_parser, 'top level')
 
     # This parses one of many types of statement.
     # The specific statement node is returned.

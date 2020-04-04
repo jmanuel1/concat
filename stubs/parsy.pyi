@@ -2,7 +2,7 @@
 
 
 from typing import (TypeVar, List, Union, Generic,
-                    Callable, Generator, Optional, Protocol, Iterable)
+                    Callable, Generator, Optional, Protocol, overload)
 
 
 T = TypeVar('T')
@@ -17,7 +17,23 @@ class _SupportsPlus(Protocol):
         ...
 
 
+class Result:
+    status: bool
+    furthest: int
+    expected: str
+
+    @staticmethod
+    def failure(furthest: int, expected: str) -> 'Result':
+        ...
+
+
 class Parser(Generic[T, U]):
+
+    def __init__(
+        self,
+        func: Callable[[Union[str, List[T]], int], Result]
+    ) -> None:
+        ...
 
     def parse(self, string_or_list: Union[str, List[T]]) -> U:
         ...
@@ -59,6 +75,9 @@ class Parser(Generic[T, U]):
                 ) -> 'Parser[T, _SupportsPlus]':
         ...
 
+    def __call__(self, stream: Union[str, List[T]], index: int) -> Result:
+        ...
+
 
 class _ParserOutputtingList(Parser[T, List[U]]):
 
@@ -77,9 +96,15 @@ def test_item(func: Callable[[T], bool], description: str) -> Parser[T, T]:
 ParserGeneratingFunction = Callable[[], Generator[Parser[T, U], U, V]]
 
 
+@overload
 def generate(
     desc: str
 ) -> Callable[[ParserGeneratingFunction[T, U, V]], Parser[T, V]]:
+    ...
+
+
+@overload
+def generate(generator: ParserGeneratingFunction[T, U, V]) -> Parser[T, V]:
     ...
 
 
