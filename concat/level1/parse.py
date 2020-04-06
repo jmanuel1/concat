@@ -16,7 +16,8 @@ import parsy
 
 class ParseError(parsy.ParseError):
     def line_info(self):
-        return '{}:{}'.format(*self.stream[self.index].start)
+        return '{}:{} ({!r} here)'.format(
+            *self.stream[self.index].start, self.stream[self.index])
 
 
 # let's lie
