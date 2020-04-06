@@ -303,8 +303,8 @@ class TestUserDefinedFunctionAttributeAccessors(unittest.TestCase):
         concat.level1.stdlib.pyinterop.user_defined_function.defaults(
             stack, stash)
         message = 'user_defined_function.defaults has incorrect stack effect'
-        self.assertEqual(stack, [dummy.__defaults__],
-                         msg=message)  # type: ignore
+        self.assertEqual(stack, [dummy.__defaults__],  # type: ignore
+                         msg=message)
 
     def test_code(self) -> None:
         """Test that user_defined_function.code works."""
@@ -321,8 +321,8 @@ class TestUserDefinedFunctionAttributeAccessors(unittest.TestCase):
         concat.level1.stdlib.pyinterop.user_defined_function.globals(
             stack, stash)
         message = 'user_defined_function.globals has incorrect stack effect'
-        self.assertEqual(stack, [dummy.__globals__],
-                         msg=message)  # type: ignore
+        self.assertEqual(stack, [dummy.__globals__],  # type: ignore
+                         msg=message)
 
     def test_dict(self) -> None:
         """Test that user_defined_function.dict works."""
@@ -339,8 +339,8 @@ class TestUserDefinedFunctionAttributeAccessors(unittest.TestCase):
         concat.level1.stdlib.pyinterop.user_defined_function.closure(
             stack, stash)
         message = 'user_defined_function.closure has incorrect stack effect'
-        self.assertEqual(stack, [dummy.__closure__],
-                         msg=message)  # type: ignore
+        self.assertEqual(stack, [dummy.__closure__],   # type: ignore
+                         msg=message)
 
     def test_annotations(self) -> None:
         """Test that user_defined_function.annotations works."""
