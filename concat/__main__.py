@@ -1,7 +1,6 @@
 """The Concat Implementation."""
 
 
-import concat.visitors
 import concat.level0.lex
 import concat.level0.parse
 import concat.level0.transpile
