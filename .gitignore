@@ -112,3 +112,6 @@ $RECYCLE.BIN/
 # files made by ply
 parser.out
 parsetab.py
+
+# file made by mypy
+.mypy_cache/

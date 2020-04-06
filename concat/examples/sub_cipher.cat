@@ -1,3 +1,4 @@
+# IGNORE
 # IN: ''
 # OUT: 'The original is: A simple example.\nEncoding it with the key: |\nx$NB"uqbJK[\x0c7Q4,P0S?6@>Z^n)9=}\'mMV.X /*i;IOdc<Hl\rvFCwt2pY_fD#Wg&r3ajz1h-osT]%(\t\\{E~ykGA5UL:!`+eR\x0b8\nGives: .`)P6Z?7`7mJ6Z?7s\nDecoding it by the same key gives: A simple example.\n'
 # based on the python answer in rosetta code

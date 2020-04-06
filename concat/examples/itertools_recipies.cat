@@ -1,5 +1,4 @@
 # IGNORE
-# TODO: get this example to work
 # Python's itertools recipes
 from itertools import *  # mostly automatically turned into a concat interface
 import collections

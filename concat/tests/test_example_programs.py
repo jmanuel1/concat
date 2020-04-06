@@ -4,7 +4,7 @@ Example tests: make sure all examples work.
 NOTE: This must be run from project root!
 """
 
-from scripttest import TestFileEnvironment
+from scripttest import TestFileEnvironment   # type: ignore
 import unittest
 import os
 import sys
@@ -16,6 +16,7 @@ examples = [os.path.join(example_dir, x)
             for x in os.listdir(example_dir) if x.endswith('.cat')]
 
 
+# @unittest.skip("broken and not in level 0")
 class TestExamplePrograms(unittest.TestCase):
     """Test all the examples in concat/examples for correctness."""
 
@@ -46,7 +47,7 @@ class TestExamplePrograms(unittest.TestCase):
                     raise Exception(
                         'No output specified for file {}'.format(name))
                 out = eval(out[len(out_start):].strip())
-                # TODO: recover from scripttest's AssertionErrors
+                # scripttest fails loudly if concat exits with a nonzero code
                 actual = env.run(sys.executable, '-m', 'coverage', 'run',
                                  '-m',
                                  'concat',
