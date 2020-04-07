@@ -6,6 +6,7 @@ from concat.level0.lex import Token
 import concat.level0.parse
 import concat.level1.typecheck
 from concat.astutils import Words, Location, WordsOrStatements, flatten
+import concat.parser_combinators
 import abc
 import operator
 from typing import Iterable, List, Tuple, Sequence, Optional, Generator
@@ -609,7 +610,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     # suite = word* | statement
     #   | NEWLINE, INDENT, (word | statement, NEWLINE)+, DEDENT ;
     # The stack effect syntax is defined within the .typecheck module.
-    @parsy.generate('funcdef statement')
+    @parsy.generate
     def funcdef_statement_parser() -> Generator:
         location = (yield parsers.token('DEF')).start
         name = yield parsers.token('NAME')
@@ -629,7 +630,8 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         return FuncdefStatementNode(
             name, decorators, annotation, body, location, effect)
 
-    parsers['funcdef-statement'] = funcdef_statement_parser
+    parsers['funcdef-statement'] = concat.parser_combinators.desc_cumulatively(
+        funcdef_statement_parser, 'funcdef statement')
 
     decorator = parsers.token('AT') >> parsers.ref_parser('word')
 
