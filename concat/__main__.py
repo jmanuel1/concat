@@ -53,6 +53,10 @@ else:
         print(e, 'in line:')
         print(get_line_at(args.file, e.location), end='')
         print(' '*e.location[1] + '^')
+    except Exception:
+        print('An internal error has occurred.')
+        print('This is a bug in Concat.')
+        raise
     else:
         concat.level1.execute.execute(filename, python_ast, {})
     finally:
