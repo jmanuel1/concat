@@ -23,10 +23,11 @@ class NameError(builtins.NameError):
     def __init__(self, name: concat.level0.parse.NameWordNode):
         super().__init__(name)
         self._name = name
+        self.location = name.location
 
     def __str__(self):
         return 'name "{}" not previously defined (error at {}:{})'.format(
-            self._name.value, *self._name.location)
+            self._name.value, *self.location)
 
 
 class _Type(abc.ABC):

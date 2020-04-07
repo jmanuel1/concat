@@ -2,11 +2,14 @@
 
 
 from concat.transpile import transpile
+import concat.astutils
 import concat.level1.execute
+import concat.level1.typecheck
 import concat.level1.stdlib.repl
 import argparse
 import sys
-from typing import Callable, IO, AnyStr
+import io
+from typing import Callable, IO, AnyStr, TextIO
 
 
 filename = '<stdin>'
@@ -19,6 +22,12 @@ def file_type(mode: str) -> Callable[[str], IO[AnyStr]]:
         filename = name
         return open(name, mode=mode)
     return func
+
+
+def get_line_at(file: TextIO, location: concat.astutils.Location) -> str:
+    file.seek(0, io.SEEK_SET)
+    lines = [*file]
+    return lines[location[0] - 1]
 
 
 arg_parser = argparse.ArgumentParser(description='Run a Concat program.')
@@ -37,6 +46,14 @@ args = arg_parser.parse_args()
 if args.file is sys.stdin:  # FIXME: We should test for interactivity instead
     concat.level1.stdlib.repl.repl([], [], args.debug)
 else:
-    python_ast = transpile(args.file.read())
-    args.file.close()
-    concat.level1.execute.execute(filename, python_ast, {})
+    try:
+        python_ast = transpile(args.file.read())
+    except concat.level1.typecheck.NameError as e:
+        print('Error:\n')
+        print(e, 'in line:')
+        print(get_line_at(args.file, e.location), end='')
+        print(' '*e.location[1] + '^')
+    else:
+        concat.level1.execute.execute(filename, python_ast, {})
+    finally:
+        args.file.close()
