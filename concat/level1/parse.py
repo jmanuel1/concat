@@ -275,6 +275,7 @@ class FuncdefStatementNode(concat.level0.parse.StatementNode):
         location: Location,
         stack_effect: Optional[concat.level1.typecheck.StackEffect] = None
     ):
+        super().__init__()
         self.location = location
         self.name = name.value
         self.decorators = decorators
