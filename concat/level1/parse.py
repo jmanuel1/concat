@@ -614,8 +614,8 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     #   [ annotation ], COLON, suite ;
     # decorator = AT, word ;
     # annotation = RARROW, word* ;
-    # suite = word* | statement
-    #   | NEWLINE, INDENT, (word | statement, NEWLINE)+, DEDENT ;
+    # suite = NEWLINE, INDENT, (word | statement, NEWLINE)+, DEDENT | statement
+    #    | word+ ;
     # The stack effect syntax is defined within the .typecheck module.
     @parsy.generate
     def funcdef_statement_parser() -> Generator:
@@ -647,13 +647,14 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
 
     @parsy.generate('suite')
     def suite():
-        words = parsers['word'].many()
+        words = parsers['word'].at_least(1)
         statement = parsy.seq(parsers['statement'])
-        block_content = (parsers['word'] | parsers['statement']
-                         << parsers.token('NEWLINE')).at_least(1)
-        indented_block = parsers.token('NEWLINE') >> parsers.token(
+        block_content = (parsers['word'] << parsers.token('NEWLINE').optional()
+                         | parsers['statement'] << parsers.token('NEWLINE')
+                         ).at_least(1)
+        indented_block = parsers.token('NEWLINE').optional() >> parsers.token(
             'INDENT') >> block_content << parsers.token('DEDENT')
-        return (yield words | statement | indented_block)
+        return (yield indented_block | statement | words)
 
     @parsy.generate('module')
     def module():
