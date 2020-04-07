@@ -302,6 +302,12 @@ class ImportStatementNode(concat.level0.parse.ImportStatementNode):
         super().__init__(token, location)
         self.asname = asname
 
+    def __str__(self) -> str:
+        string = 'import {}'.format(self.value)
+        if self.asname is not None:
+            string += ' as {}'.format(self.asname)
+        return string
+
 
 class FromImportStatementNode(ImportStatementNode):
     def __init__(
