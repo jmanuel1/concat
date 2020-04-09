@@ -168,38 +168,45 @@ def repl(stack: List[object], stash: List[object], debug=False) -> None:
             try:
                 eval('concat.level1.stdlib.repl.read_form(stack, [])',
                      globals, locals)
+            except concat.level1.parse.ParseError as e:
+                print('Syntax error:\n')
+                print(e)
+            except concat.level0.execute.ConcatRuntimeError as e:
+                print('Runtime error:\n')
+                print(e)
             except EOFError:
                 break
-            stack = cast(List[object], globals['stack'])
-            quotation = cast(
-                Callable[[List[object], List[object]], None],
-                stack.pop()
-            )
-            try:
+            else:
+                stack = cast(List[object], globals['stack'])
+                quotation = cast(
+                    Callable[[List[object], List[object]], None],
+                    stack.pop()
+                )
                 try:
-                    quotation(stack, cast(List[object], globals['stash']))
-                except concat.level1.stdlib.repl.REPLExitException:
-                    _exit_repl()
-                except Exception as e:
-                    raise concat.level0.execute.ConcatRuntimeError from e
-            except concat.level0.execute.ConcatRuntimeError as e:
-                value = e.__cause__
-                if value is None or value.__traceback__ is None:
-                    tb = None
-                else:
-                    tb = value.__traceback__.tb_next
-                traceback.print_exception(None, value, tb)
-            except KeyboardInterrupt:
-                # a ctrl-c during execution just cancels that execution
-                if globals.get('handle_ctrl_c', False):
-                    print('Concat was interrupted.')
-                else:
-                    raise
-            print('Stack:', globals['stack'])
-            if debug:
-                print('Stash:', globals['stash'])
-            for var in cast(Set[str], globals['visible_vars']):
-                print(var, '=', globals[var])
+                    try:
+                        quotation(stack, cast(List[object], globals['stash']))
+                    except concat.level1.stdlib.repl.REPLExitException:
+                        _exit_repl()
+                    except Exception as e:
+                        raise concat.level0.execute.ConcatRuntimeError from e
+                except concat.level0.execute.ConcatRuntimeError as e:
+                    value = e.__cause__
+                    if value is None or value.__traceback__ is None:
+                        tb = None
+                    else:
+                        tb = value.__traceback__.tb_next
+                    traceback.print_exception(None, value, tb)
+                except KeyboardInterrupt:
+                    # a ctrl-c during execution just cancels that execution
+                    if globals.get('handle_ctrl_c', False):
+                        print('Concat was interrupted.')
+                    else:
+                        raise
+                print('Stack:', globals['stack'])
+                if debug:
+                    print('Stash:', globals['stash'])
+                for var in cast(Set[str], globals['visible_vars']):
+                    print(var, '=', globals[var])
     except KeyboardInterrupt:
         # catch ctrl-c to cleanly exit
         _exit_repl()
