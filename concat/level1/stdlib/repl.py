@@ -162,9 +162,9 @@ def repl(stack: List[object], stash: List[object], debug=False) -> None:
         concat.level1.execute.execute(
             init_file_name, python_ast, globals, True, locals)
     prompt = '>>> '
-    print(prompt, end='', flush=True)
     try:
         while True:
+            print(prompt, end='', flush=True)
             try:
                 eval('concat.level1.stdlib.repl.read_form(stack, [])',
                      globals, locals)
@@ -200,7 +200,6 @@ def repl(stack: List[object], stash: List[object], debug=False) -> None:
                 print('Stash:', globals['stash'])
             for var in cast(Set[str], globals['visible_vars']):
                 print(var, '=', globals[var])
-            print(prompt, end='', flush=True)
     except KeyboardInterrupt:
         # catch ctrl-c to cleanly exit
         _exit_repl()
