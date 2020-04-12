@@ -1,12 +1,17 @@
 # IGNORE
 import html
-import http
 import builtins
+# TODO: add requests to requirements.txt or some better of dev dependencies?
+import requests
+
+
+def http_get:
+    [,] [(),] requests$.get py_call (.text:str) cast
 
 
 def print:
     [,] [(),] builtins$.print py_call
 
 
-'https://www.sciencedirect.com/science/article/pii/S187704281302853X' http.get
-.body html.parse 'h1' html.query_selector .inner_HTML print
+'https://www.sciencedirect.com/science/article/pii/S187704281302853X' http_get
+$.text html.parse 'h1' html.query_selector .inner_HTML print
