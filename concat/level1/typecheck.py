@@ -7,6 +7,7 @@ A Foundation for Typed Concatenative Languages, April 2017."
 import abc
 import dataclasses
 import builtins
+import importlib
 from typing import (List, Set, Tuple, Dict, Iterator, Union,
                     Optional, Generator, overload, cast)
 import concat.astutils
@@ -30,34 +31,58 @@ class NameError(builtins.NameError):
             self._name.value, *self.location)
 
 
-class _Type(abc.ABC):
+class Type(abc.ABC):
     def to_for_all(self) -> 'ForAll':
         return ForAll([], self)
 
-    def is_subtype_of(self, supertype: '_Type') -> bool:
-        return supertype is self or supertype is PrimitiveTypes.object
+    def is_subtype_of(self, supertype: 'Type') -> bool:
+        if supertype is self or supertype is PrimitiveTypes.object:
+            return True
+        if isinstance(supertype, IndividualVariable):
+            return self.is_subtype_of(supertype.bound)
+        return False
+
+    def __and__(self, other: object) -> '_IntersectionType':
+        if not isinstance(other, Type):
+            return NotImplemented
+        return _IntersectionType(self, other)
 
 
 @dataclasses.dataclass
-class _PrimitiveInterface(_Type):
+class _IntersectionType(Type):
+    type_1: Type
+    type_2: Type
+
+    def __repr__(self) -> str:
+        return '{} & {}'.format(self.type_1, self.type_2)
+
+    def is_subtype_of(self, other: Type) -> bool:
+        return (super().is_subtype_of(other)
+                or self.type_1.is_subtype_of(other)
+                or self.type_2.is_subtype_of(other))
+
+
+@dataclasses.dataclass
+class _PrimitiveInterface(Type):
     _name: str = '<primitive_interface>'
 
 
-class _PrimitiveInterfaces:
+class PrimitiveInterfaces:
     invertible = _PrimitiveInterface('invertible')
 
 
 @dataclasses.dataclass
-class _BuiltinType(_Type):
+class _BuiltinType(Type):
     _name: str = '<primitive_type>'
-    _supertypes: Tuple[_Type, ...] = dataclasses.field(default_factory=tuple)
+    _supertypes: Tuple[Type, ...] = dataclasses.field(default_factory=tuple)
 
-    def is_subtype_of(self, supertype: _Type) -> bool:
-        return super().is_subtype_of(supertype) or supertype in self._supertypes
+    def is_subtype_of(self, supertype: Type) -> bool:
+        return super().is_subtype_of(
+            supertype) or supertype in self._supertypes
 
 
 class PrimitiveTypes:
-    int = _BuiltinType('int', (_PrimitiveInterfaces.invertible,))
+    int = _BuiltinType('int', (PrimitiveInterfaces.invertible,))
     bool = _BuiltinType('bool')
     object = _BuiltinType('object')
     context_manager = _BuiltinType('context_manager')
@@ -65,9 +90,12 @@ class PrimitiveTypes:
     dict = _BuiltinType('dict')
     file = _BuiltinType('file')
     str = _BuiltinType('str')
+    module = _BuiltinType('module')
+    list = _BuiltinType('list', (iterable,))
+    py_function = _BuiltinType('py_function')
 
 
-class _Variable(_Type, abc.ABC):
+class _Variable(Type, abc.ABC):
     """Objects that represent type variables.
 
     Every type variable object is assumed to be unique. Thus, fresh type
@@ -82,33 +110,34 @@ class SequenceVariable(_Variable):
 
 @dataclasses.dataclass
 class IndividualVariable(_Variable):
-    bound: _Type = PrimitiveTypes.object
+    bound: Type = PrimitiveTypes.object
 
-    def is_subtype_of(self, supertype: _Type):
-        return super().is_subtype_of(supertype) or self.bound.is_subtype_of(supertype)
+    def is_subtype_of(self, supertype: Type):
+        return super().is_subtype_of(supertype) or self.bound.is_subtype_of(
+            supertype)
 
     def __hash__(self) -> int:
         return hash(id(self))
 
 
 @dataclasses.dataclass
-class ForAll(_Type):
+class ForAll(Type):
     quantified_variables: List[_Variable]
-    type: _Type
+    type: Type
 
     def to_for_all(self) -> 'ForAll':
         return self
 
 
 @dataclasses.dataclass
-class _Function(_Type):
-    input: List[_Type]
-    output: List[_Type]
+class _Function(Type):
+    input: List[Type]
+    output: List[Type]
 
-    def __iter__(self) -> Iterator[List[_Type]]:
+    def __iter__(self) -> Iterator[List[Type]]:
         return iter((self.input, self.output))
 
-    def generalized_wrt(self, gamma: Dict[str, _Type]) -> ForAll:
+    def generalized_wrt(self, gamma: Dict[str, Type]) -> ForAll:
         return ForAll(list(_ftv(self) - _ftv(gamma)), self)
 
     def can_be_complete_program(self) -> bool:
@@ -156,17 +185,32 @@ class _Function(_Type):
         return NotImplemented  # no subtyping yet
 
 
+@dataclasses.dataclass
+class _TypeWithAttribute(Type):
+    attribute: str
+    attribute_type: Type
+
+    def is_subtype_of(self, supertype: Type) -> bool:
+        if super().is_subtype_of(supertype):
+            return True
+        elif isinstance(supertype, _TypeWithAttribute):
+            return (self.attribute == supertype.attribute
+                    and self.attribute_type.is_subtype_of(
+                        supertype.attribute_type))
+        raise NotImplementedError(supertype)
+
+
 # expose _Function as StackEffect
 StackEffect = _Function
 
 
-class Environment(Dict[str, _Type]):
+class Environment(Dict[str, Type]):
     pass
 
 
-class _Substitutions(Dict[_Variable, Union[_Type, List[_Type]]]):
+class _Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
 
-    _T = Union['_Substitutions', _Type, List[_Type], Environment]
+    _T = Union['_Substitutions', Type, List[Type], Environment]
 
     @overload
     def __call__(self, arg: '_Substitutions') -> '_Substitutions':
@@ -185,15 +229,19 @@ class _Substitutions(Dict[_Variable, Union[_Type, List[_Type]]]):
         ...
 
     @overload
-    def __call__(self, arg: _Variable) -> _Type:
+    def __call__(self, arg: IndividualVariable) -> Type:
         ...
 
     @overload
-    def __call__(self, arg: _Type) -> _Type:
+    def __call__(self, arg: SequenceVariable) -> List[Type]:
         ...
 
     @overload
-    def __call__(self, arg: List[_Type]) -> List[_Type]:
+    def __call__(self, arg: Type) -> Type:
+        ...
+
+    @overload
+    def __call__(self, arg: List[Type]) -> List[Type]:
         ...
 
     @overload
@@ -239,7 +287,7 @@ class _Substitutions(Dict[_Variable, Union[_Type, List[_Type]]]):
         return {*self}
 
 
-def _inst(sigma: ForAll) -> _Type:
+def _inst(sigma: ForAll) -> Type:
     """This is the inst function described by Kleffner."""
     subs = _Substitutions({a: type(a)() for a in sigma.quantified_variables})
     return subs(sigma.type)
@@ -287,18 +335,29 @@ def infer(
             a_bar, b_bar = SequenceVariable(), SequenceVariable()
             phi = _unify(o, [a_bar, _Function([a_bar], [b_bar])])
             return phi(S), phi(_Function(i, [b_bar]))
-        if not e[-1].value in gamma:
-            raise NameError(e[-1])
-        type_of_name = _inst(gamma[e[-1].value].to_for_all())
-        if not isinstance(type_of_name, _Function):
-            raise NotImplementedError
-        i2, o2 = type_of_name
         S, (i1, o1) = infer(gamma, e[:-1])
+        if not e[-1].value in S(gamma):
+            raise NameError(e[-1])
+        type_of_name = _inst(S(gamma)[e[-1].value].to_for_all())
+        if not isinstance(type_of_name, _Function):
+            raise NotImplementedError(
+                'name {} of type {}'.format(e[-1].value, type_of_name))
+        i2, o2 = type_of_name
         phi = _unify(o1, S(i2))
         return phi(S), phi(_Function(i1, S(o2)))
     elif isinstance(e[-1], concat.level0.parse.PushWordNode):
         pushed = cast(concat.level0.parse.PushWordNode, e[-1])
         S1, (i1, o1) = infer(gamma, e[:-1])
+        # special case for push an attribute accessor
+        child = pushed.children[0]
+        if isinstance(child, concat.level0.parse.AttributeWordNode):
+            attr_type_var = IndividualVariable()
+            top = IndividualVariable(_TypeWithAttribute(
+                child.value, attr_type_var))
+            rest = SequenceVariable()
+            S2 = _unify(o1, [rest, top])
+            attr_type = S2(attr_type_var)
+            return S2(S1), _Function(i1, [*S2(rest), attr_type])
         S2, (i2, o2) = infer(S1(gamma), pushed.children)
         return S2(S1), _Function(S2(i1), [*S2(o1), _Function(i2, o2)])
     elif isinstance(e[-1], concat.level0.parse.QuoteWordNode):
@@ -355,20 +414,62 @@ def infer(
             # drop the top of the stack to use as the value
             collected_type = _drop_last_from_type_seq(collected_type)
         return phi, phi(_Function(i, [*collected_type, PrimitiveTypes.dict]))
+    elif isinstance(e[-1], concat.level1.parse.ListWordNode):
+        S, (i, o) = infer(gamma, e[:-1])
+        phi = S
+        collected_type = o
+        for item in e[-1].list_children:
+            phi1, (i1, o1) = infer(phi(gamma), item)
+            R1 = _unify(collected_type, i1)
+            phi = R1(phi1(phi(S)))
+            collected_type = phi(o1)
+            # drop the top of the stack to use as the key
+            collected_type = _drop_last_from_type_seq(collected_type)
+        return phi, phi(_Function(i, [*collected_type, PrimitiveTypes.list]))
     elif isinstance(e[-1], concat.level1.parse.InvertWordNode):
         S, (i, o) = infer(gamma, e[:-1])
         out_var = SequenceVariable()
-        type_var = IndividualVariable(_PrimitiveInterfaces.invertible)
+        type_var = IndividualVariable(PrimitiveInterfaces.invertible)
         phi = _unify(o, [out_var, type_var])
         return phi(S), phi(_Function(i, [out_var, type_var]))
     elif isinstance(e[-1], concat.level0.parse.StringWordNode):
         S, (i, o) = infer(gamma, e[:-1])
         return S, _Function(i, [*o, PrimitiveTypes.str])
+    elif isinstance(e[-1], concat.level0.parse.AttributeWordNode):
+        S, (i, o) = infer(gamma, e[:-1])
+        out_var = SequenceVariable()
+        attr_type_var = IndividualVariable()
+        type_var = IndividualVariable(
+            _TypeWithAttribute(e[-1].value, attr_type_var))
+        phi = _unify(o, [out_var, type_var])
+        attr_type = phi(attr_type_var)
+        if not isinstance(attr_type, _Function):
+            print('type here is:', i, o)
+            message = '.{} is not a Concat function (has type {})'.format(
+                e[-1].value, attr_type)
+            raise TypeError(message)
+        R = _unify(phi(o), [*phi(out_var), *attr_type.input])
+        return R(phi(S)), R(phi(_Function(i, attr_type.output)))
+    elif isinstance(e[-1], concat.level0.parse.ImportStatementNode):
+        # TODO: Support all types of import correctly.
+        S, (i, o) = infer(gamma, e[:-1])
+        seq_var = SequenceVariable()
+        # FIXME: We should resolve imports as if we are the source file.
+        module = importlib.import_module(e[-1].value)
+        module_type: Type = PrimitiveTypes.module
+        for name in dir(module):
+            module_type = module_type & _TypeWithAttribute(
+                name, PrimitiveTypes.object)
+        # mutate type environment
+        gamma[e[-1].value] = _Function([seq_var],
+                                       [seq_var, module_type])
+        return S, _Function(i, o)
     else:
-        raise NotImplementedError(e[-1])
+        raise NotImplementedError(
+            "don't know how to handle '{}'".format(e[-1]))
 
 
-def _ftv(f: Union[_Type, List[_Type], Dict[str, _Type]]) -> Set[_Variable]:
+def _ftv(f: Union[Type, List[Type], Dict[str, Type]]) -> Set[_Variable]:
     """The ftv function described by Kleffner."""
     ftv: Set[_Variable]
     if isinstance(f, _BuiltinType):
@@ -389,13 +490,18 @@ def _ftv(f: Union[_Type, List[_Type], Dict[str, _Type]]) -> Set[_Variable]:
         for sigma in f.values():
             ftv |= _ftv(sigma)
         return ftv
+    elif isinstance(f, _IntersectionType):
+        return _ftv(f.type_1) | _ftv(f.type_2)
+    elif isinstance(f, _TypeWithAttribute):
+        return _ftv(f.attribute_type)
     else:
-        raise TypeError
+        raise TypeError(f)
 
 
-def _unify(i1: List[_Type], i2: List[_Type]) -> _Substitutions:
+def _unify(i1: List[Type], i2: List[Type]) -> _Substitutions:
     """The unify function described by Kleffner."""
-    IndividualTypes = (_BuiltinType, IndividualVariable, _Function)
+    IndividualTypes = (_BuiltinType, IndividualVariable,
+                       _Function, _IntersectionType)
     if (len(i1), len(i2)) == (0, 0):
         return _Substitutions({})
     elif len(i1) == 1:
@@ -415,13 +521,16 @@ def _unify(i1: List[_Type], i2: List[_Type]) -> _Substitutions:
     raise TypeError('cannot unify {} with {}'.format(i1, i2))
 
 
-IndividualType = Union[_BuiltinType, IndividualVariable, _Function]
+IndividualType = Union[_BuiltinType,
+                       IndividualVariable, _Function, _IntersectionType]
 
 
 def _unify_ind(t1: IndividualType, t2: IndividualType) -> _Substitutions:
-    """The unifyInd function described by Kleffner."""
-    if isinstance(t1, _BuiltinType):
-        if t1 is not t2:
+    """A modified version of the unifyInd function described by Kleffner."""
+    if isinstance(t1, _BuiltinType) and isinstance(t2, _BuiltinType):
+        # FIXME: The unifier needs to have some sense of which way the
+        # subtyping relation is allowed to go.
+        if not t1.is_subtype_of(t2):
             raise TypeError(
                 'Primitive type {} cannot unify with primitive type {}'
                 .format(t1, t2))
@@ -442,7 +551,7 @@ def _unify_ind(t1: IndividualType, t2: IndividualType) -> _Substitutions:
         raise NotImplementedError(t1, t2)
 
 
-def _drop_last_from_type_seq(l: List[_Type]) -> List[_Type]:
+def _drop_last_from_type_seq(l: List[Type]) -> List[Type]:
     kept = SequenceVariable()
     dropped = IndividualVariable()
     drop_sub = _unify(l, [kept, dropped])
@@ -453,7 +562,7 @@ def _ensure_type(
     typename: Union[Optional[concat.level0.lex.Token], _Function],
     env: Environment,
     obj_name: str
-) -> _Type:
+) -> Type:
     if obj_name in env:
         type = env[obj_name]
     elif typename is None:
