@@ -645,7 +645,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     annotation_parser = parsers.token(
         'RARROW') >> parsers.ref_parser('word').many()
 
-    @parsy.generate('suite')
+    @parsy.generate
     def suite():
         words = parsers['word'].at_least(1)
         statement = parsy.seq(parsers['statement'])
