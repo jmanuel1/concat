@@ -226,7 +226,7 @@ def level_0_extension(parsers: ParserDict) -> None:
     @parsy.generate('quote word')
     def quote_word_parser() -> Generator[parsy.Parser, Any, QuoteWordNode]:
         lpar = yield parsers.token('LPAR')
-        children = yield parsers.ref_parser('word').many()
+        children = yield parsers['word'].many()
         yield parsers.token('RPAR')
         return QuoteWordNode(children, lpar.start)
 
