@@ -11,6 +11,7 @@ import importlib
 from typing import (List, Set, Tuple, Dict, Iterator, Union,
                     Optional, Generator, overload, cast)
 import concat.astutils
+import concat.parser_combinators
 import concat.level0.parse
 import concat.level1.parse
 import parsy
@@ -556,6 +557,46 @@ def _drop_last_from_type_seq(l: List[Type]) -> List[Type]:
     dropped = IndividualVariable()
     drop_sub = _unify(l, [kept, dropped])
     return drop_sub([kept])
+
+
+# Parsing type annotations
+
+@dataclasses.dataclass
+class TypeNode(concat.level0.parse.Node, abc.ABC):
+    location: concat.astutils.Location
+
+
+@dataclasses.dataclass
+class AttributeTypeNode(TypeNode):
+    name: str
+    type: TypeNode
+
+
+@dataclasses.dataclass
+class NamedTypeNode(TypeNode):
+    name: str
+
+
+def typecheck_extension(parsers: concat.level0.parse.ParserDict) -> None:
+    @parsy.generate
+    def attribute_type_parser() -> Generator:
+        location = (yield parsers.token('DOT')).start
+        name = (yield parsers.token('NAME')).value
+        yield parsers.token('COLON')
+        type = yield parsers['type']
+        return AttributeTypeNode(location, name, type)
+
+    @parsy.generate
+    def named_type_parser() -> Generator:
+        name_token = yield parsers.token('NAME')
+        return NamedTypeNode(name_token.start, name_token.value)
+
+    parsers['type'] = parsy.alt(
+        concat.parser_combinators.desc_cumulatively(
+            attribute_type_parser, 'attribute type'),
+        concat.parser_combinators.desc_cumulatively(
+            named_type_parser, 'named type')
+    )
 
 
 def _ensure_type(

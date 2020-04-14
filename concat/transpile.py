@@ -13,6 +13,7 @@ def transpile(code: str) -> ast.Module:
     parser = concat.level0.parse.ParserDict()
     parser.extend_with(concat.level0.parse.level_0_extension)
     parser.extend_with(concat.level1.parse.level_1_extension)
+    parser.extend_with(concat.level1.typecheck.typecheck_extension)
     concat_ast = parser.parse(tokens)
     # TODO: put names from the preamble into the type environment
     # FIXME: Consider the type of everything entered interactively beforehand.
