@@ -9,7 +9,7 @@ import dataclasses
 import builtins
 import importlib
 from typing import (List, Set, Tuple, Dict, Iterator, Union,
-                    Optional, Generator, overload, cast)
+                    Optional, Generator, Callable, overload, cast)
 import concat.astutils
 import concat.parser_combinators
 import concat.level0.parse
@@ -296,7 +296,9 @@ def _inst(sigma: ForAll) -> Type:
 
 def infer(
     gamma: Environment,
-    e: 'concat.astutils.WordsOrStatements'
+    e: 'concat.astutils.WordsOrStatements',
+    extensions: Tuple[Callable[[
+        Environment, 'concat.astutils.WordsOrStatements'], Tuple[_Substitutions, _Function]]] = ()
 ) -> Tuple[_Substitutions, _Function]:
     """The infer function described by Kleffner."""
     e = list(e)
@@ -466,6 +468,11 @@ def infer(
                                        [seq_var, module_type])
         return S, _Function(i, o)
     else:
+        for extension in extensions:
+            try:
+                return extension(gamma, e)
+            except NotImplementedError:
+                pass
         raise NotImplementedError(
             "don't know how to handle '{}'".format(e[-1]))
 
