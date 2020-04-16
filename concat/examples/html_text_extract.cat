@@ -7,15 +7,15 @@ from pyquery import PyQuery
 
 
 def get_url:
-    [,] [(),] requests$.get py_call (.text:str) cast
+    [(),] [,] swap requests$.get py_call cast (.text:str)
 
 
 def print:
-    [,] [(),] builtins$.print py_call
+    [(),] [,] swap builtins$.print py_call
 
 
 def parse_html:
-    [,] [(),] $PyQuery py_call
+    [(),] [,] swap $PyQuery cast (py_function) py_call
 
 
 'https://www.sciencedirect.com/science/article/pii/S187704281302853X' get_url
