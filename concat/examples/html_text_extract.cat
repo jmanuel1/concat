@@ -1,11 +1,12 @@
 # IGNORE
 import html
 import builtins
-# TODO: add requests to requirements.txt or some better of dev dependencies?
+# TODO: add these to requirements.txt or some better of dev dependencies?
 import requests
+from pyquery import PyQuery
 
 
-def http_get:
+def get_url:
     [,] [(),] requests$.get py_call (.text:str) cast
 
 
@@ -13,5 +14,9 @@ def print:
     [,] [(),] builtins$.print py_call
 
 
-'https://www.sciencedirect.com/science/article/pii/S187704281302853X' http_get
-$.text html.parse 'h1' html.query_selector .inner_HTML print
+def parse_html:
+    [,] [(),] $PyQuery py_call
+
+
+'https://www.sciencedirect.com/science/article/pii/S187704281302853X' get_url
+$.text parse_html 'h1' html.query_selector .inner_HTML print
