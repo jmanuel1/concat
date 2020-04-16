@@ -168,7 +168,7 @@ class _Function(Type):
             return False
         # We can't use plain unification here because variables can only map to
         # variables of the same type.
-        subs = _Substitutions()
+        subs = Substitutions()
         type_pairs = zip(self.input + self.output, other.input + other.output)
         for type1, type2 in type_pairs:
             if isinstance(type1, IndividualVariable) and \
@@ -209,12 +209,12 @@ class Environment(Dict[str, Type]):
     pass
 
 
-class _Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
+class Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
 
-    _T = Union['_Substitutions', Type, List[Type], Environment]
+    _T = Union['Substitutions', Type, List[Type], Environment]
 
     @overload
-    def __call__(self, arg: '_Substitutions') -> '_Substitutions':
+    def __call__(self, arg: 'Substitutions') -> 'Substitutions':
         ...
 
     @overload
@@ -250,8 +250,8 @@ class _Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
         ...
 
     def __call__(self, arg: '_T') -> '_T':
-        if isinstance(arg, _Substitutions):
-            return _Substitutions({
+        if isinstance(arg, Substitutions):
+            return Substitutions({
                 **self,
                 **{a: self(i) for a, i in arg.items() if a not in self._dom()}
             })
@@ -262,7 +262,7 @@ class _Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
         elif isinstance(arg, ForAll):
             return ForAll(
                 arg.quantified_variables,
-                _Substitutions({
+                Substitutions({
                     a: i
                     for a, i in self.items()
                     if a not in arg.quantified_variables
@@ -290,21 +290,23 @@ class _Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
 
 def _inst(sigma: ForAll) -> Type:
     """This is the inst function described by Kleffner."""
-    subs = _Substitutions({a: type(a)() for a in sigma.quantified_variables})
+    subs = Substitutions({a: type(a)() for a in sigma.quantified_variables})
     return subs(sigma.type)
 
 
 def infer(
     gamma: Environment,
     e: 'concat.astutils.WordsOrStatements',
-    extensions: Tuple[Callable[[
-        Environment, 'concat.astutils.WordsOrStatements'], Tuple[_Substitutions, _Function]]] = ()
-) -> Tuple[_Substitutions, _Function]:
+    extensions: Optional[Tuple[Callable[[
+        Environment, 'concat.astutils.WordsOrStatements'], Tuple[Substitutions, _Function]]]] = None
+) -> Tuple[Substitutions, _Function]:
     """The infer function described by Kleffner."""
     e = list(e)
+    # HACK: For now this works, but I might want a better way to pass around the extensions later
+    infer._extensions = infer._extensions if extensions is None else extensions
     if len(e) == 0:
         a_bar = SequenceVariable()
-        return _Substitutions(), _Function([a_bar], [a_bar])
+        return Substitutions(), _Function([a_bar], [a_bar])
     elif isinstance(e[-1], concat.level0.parse.NumberWordNode):
         S, i_to_o = infer(gamma, e[:-1])
         if isinstance(e[-1].value, int):
@@ -477,6 +479,10 @@ def infer(
             "don't know how to handle '{}'".format(e[-1]))
 
 
+# Initialize the extensions
+infer._extensions = ()
+
+
 def _ftv(f: Union[Type, List[Type], Dict[str, Type]]) -> Set[_Variable]:
     """The ftv function described by Kleffner."""
     ftv: Set[_Variable]
@@ -506,20 +512,20 @@ def _ftv(f: Union[Type, List[Type], Dict[str, Type]]) -> Set[_Variable]:
         raise TypeError(f)
 
 
-def _unify(i1: List[Type], i2: List[Type]) -> _Substitutions:
+def _unify(i1: List[Type], i2: List[Type]) -> Substitutions:
     """The unify function described by Kleffner."""
     IndividualTypes = (_BuiltinType, IndividualVariable,
                        _Function, _IntersectionType)
     if (len(i1), len(i2)) == (0, 0):
-        return _Substitutions({})
+        return Substitutions({})
     elif len(i1) == 1:
         if isinstance(i1[0], SequenceVariable) and i1 == i2:
-            return _Substitutions({})
+            return Substitutions({})
         elif isinstance(i1[0], SequenceVariable) and i1[0] not in _ftv(i2):
-            return _Substitutions({i1[0]: i2})
+            return Substitutions({i1[0]: i2})
     elif len(i2) == 1 and isinstance(i2[0], SequenceVariable) and \
             i2[0] not in _ftv(i1):
-        return _Substitutions({i2[0]: i1})
+        return Substitutions({i2[0]: i1})
     elif len(i1) > 0 and len(i2) > 0 and \
             isinstance(i1[-1], IndividualTypes) and \
             isinstance(i2[-1], IndividualTypes):
@@ -533,7 +539,7 @@ IndividualType = Union[_BuiltinType,
                        IndividualVariable, _Function, _IntersectionType]
 
 
-def _unify_ind(t1: IndividualType, t2: IndividualType) -> _Substitutions:
+def _unify_ind(t1: IndividualType, t2: IndividualType) -> Substitutions:
     """A modified version of the unifyInd function described by Kleffner."""
     if isinstance(t1, _BuiltinType) and isinstance(t2, _BuiltinType):
         # FIXME: The unifier needs to have some sense of which way the
@@ -542,15 +548,15 @@ def _unify_ind(t1: IndividualType, t2: IndividualType) -> _Substitutions:
             raise TypeError(
                 'Primitive type {} cannot unify with primitive type {}'
                 .format(t1, t2))
-        return _Substitutions()
+        return Substitutions()
     elif isinstance(t1, IndividualVariable) and t1 not in _ftv(t2):
         if not t2.is_subtype_of(t1.bound):
             raise TypeError('{} is not a subtype of {}'.format(t2, t1.bound))
-        return _Substitutions({t1: t2})
+        return Substitutions({t1: t2})
     elif isinstance(t2, IndividualVariable) and t2 not in _ftv(t1):
         if not t1.is_subtype_of(t2.bound):
             raise TypeError('{} is not a subtype of {}'.format(t1, t2.bound))
-        return _Substitutions({t2: t1})
+        return Substitutions({t2: t1})
     elif isinstance(t1, _Function) and isinstance(t2, _Function):
         phi1 = _unify(t1.input, t2.input)
         phi2 = _unify(phi1(t1.output), phi1(t2.output))
