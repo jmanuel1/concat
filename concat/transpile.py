@@ -5,6 +5,8 @@ import concat.level0.transpile
 import concat.level1.parse
 import concat.level1.transpile
 import concat.level1.typecheck
+import concat.level2.parse
+import concat.level2.typecheck
 from typing import cast
 
 
@@ -13,7 +15,8 @@ def transpile(code: str) -> ast.Module:
     parser = concat.level0.parse.ParserDict()
     parser.extend_with(concat.level0.parse.level_0_extension)
     parser.extend_with(concat.level1.parse.level_1_extension)
-    parser.extend_with(concat.level1.typecheck.typecheck_extension)
+    parser.extend_with(concat.level2.typecheck.typecheck_extension)
+    parser.extend_with(concat.level2.parse.level_2_extension)
     concat_ast = parser.parse(tokens)
     # TODO: put names from the preamble into the type environment
     # FIXME: Consider the type of everything entered interactively beforehand.
