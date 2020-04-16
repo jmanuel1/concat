@@ -18,5 +18,9 @@ def parse_html:
     [(),] [,] swap $PyQuery cast (py_function) py_call
 
 
+def query_selector(py_query_obj selector -- py_query_result):
+    [(),] [,] swap pick py_call nip
+
+
 'https://www.sciencedirect.com/science/article/pii/S187704281302853X' get_url
-$.text parse_html 'h1' html.query_selector .inner_HTML print
+$.text parse_html 'h1' query_selector .inner_HTML print
