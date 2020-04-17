@@ -656,6 +656,8 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
             'INDENT') >> block_content << parsers.token('DEDENT')
         return (yield indented_block | statement | words)
 
+    suite = concat.parser_combinators.desc_cumulatively(suite, 'suite')
+
     @parsy.generate('module')
     def module():
         name = parsers.token('NAME').map(operator.attrgetter('value'))
