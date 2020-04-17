@@ -18,7 +18,7 @@ def parse_html:
     [(),] [,] swap $PyQuery cast (py_function) py_call
 
 
-def query_selector(py_query_obj selector -- py_query_result):
+def query_selector(py_query_obj:py_function selector -- py_query_result):
     [(),] [,] swap pick py_call nip
 
 
