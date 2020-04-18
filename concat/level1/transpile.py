@@ -621,7 +621,7 @@ def level_1_extension(
         names = [ast.alias(node.imported_name, node.asname)]
         level = count_leading_dots(node.value)
         from_import = ast.ImportFrom(module, names, level)
-        if_statement.body[0] = from_import
+        if_statement.body = [from_import]
         return if_statement
 
     visitors['import-statement'] = alt(
