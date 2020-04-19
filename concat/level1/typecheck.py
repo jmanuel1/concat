@@ -182,8 +182,25 @@ class _Function(Type):
                 return False
         return True
 
-    def __gt__(self, other: object) -> bool:
-        return NotImplemented  # no subtyping yet
+    def is_subtype_of(self, supertype: Type) -> bool:
+        if super().is_subtype_of(supertype):
+            return True
+        if isinstance(supertype, _Function):
+            if (len(self.input) != len(supertype.input)
+                    or len(self.output) != len(supertype.output)):
+                return False
+            # input types are contravariant
+            for type_from_self, type_from_supertype in zip(
+                    self.input, supertype.input):
+                if not type_from_supertype.is_subtype_of(type_from_self):
+                    return False
+            # output types are covariant
+            for type_from_self, type_from_supertype in zip(
+                    self.output, supertype.output):
+                if not type_from_self.is_subtype_of(type_from_supertype):
+                    return False
+            return True
+        return False
 
 
 @dataclasses.dataclass
