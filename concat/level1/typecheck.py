@@ -326,8 +326,11 @@ def infer(
 ) -> Tuple[Substitutions, _Function]:
     """The infer function described by Kleffner."""
     e = list(e)
-    # HACK: For now this works, but I might want a better way to pass around the extensions later
-    infer._extensions = infer._extensions if extensions is None else extensions
+    # HACK: For now this works, but I might want a better way to pass around
+    # the extensions later
+    infer._extensions = (   # type: ignore
+        infer._extensions  # type: ignore
+        if extensions is None else extensions)
     if len(e) == 0:
         a_bar = SequenceVariable()
         return Substitutions(), _Function([a_bar], [a_bar])
@@ -490,7 +493,7 @@ def infer(
 
 
 # Initialize the extensions
-infer._extensions = ()
+infer._extensions = ()  # type: ignore
 
 
 def _ftv(f: Union[Type, List[Type], Dict[str, Type]]) -> Set[_Variable]:
