@@ -307,6 +307,12 @@ class Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
         return {*self}
 
 
+_InferFunction = Callable[
+    [Environment, 'concat.astutils.WordsOrStatements'],
+    Tuple[Substitutions, _Function]
+]
+
+
 def _inst(sigma: ForAll) -> Type:
     """This is the inst function described by Kleffner."""
     subs = Substitutions({a: type(a)() for a in sigma.quantified_variables})
@@ -316,8 +322,7 @@ def _inst(sigma: ForAll) -> Type:
 def infer(
     gamma: Environment,
     e: 'concat.astutils.WordsOrStatements',
-    extensions: Optional[Tuple[Callable[[
-        Environment, 'concat.astutils.WordsOrStatements'], Tuple[Substitutions, _Function]]]] = None
+    extensions: Optional[Tuple[_InferFunction]] = None
 ) -> Tuple[Substitutions, _Function]:
     """The infer function described by Kleffner."""
     e = list(e)
