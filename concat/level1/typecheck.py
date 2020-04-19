@@ -7,7 +7,6 @@ A Foundation for Typed Concatenative Languages, April 2017."
 import abc
 import dataclasses
 import builtins
-import importlib
 from typing import (List, Set, Tuple, Dict, Iterator, Union,
                     Optional, Generator, Callable, overload, cast)
 import concat.astutils
@@ -204,14 +203,14 @@ class _Function(Type):
 
 
 @dataclasses.dataclass
-class _TypeWithAttribute(Type):
+class TypeWithAttribute(Type):
     attribute: str
     attribute_type: Type
 
     def is_subtype_of(self, supertype: Type) -> bool:
         if super().is_subtype_of(supertype):
             return True
-        elif isinstance(supertype, _TypeWithAttribute):
+        elif isinstance(supertype, TypeWithAttribute):
             return (self.attribute == supertype.attribute
                     and self.attribute_type.is_subtype_of(
                         supertype.attribute_type))
@@ -374,7 +373,7 @@ def infer(
         child = pushed.children[0]
         if isinstance(child, concat.level0.parse.AttributeWordNode):
             attr_type_var = IndividualVariable()
-            top = IndividualVariable(_TypeWithAttribute(
+            top = IndividualVariable(TypeWithAttribute(
                 child.value, attr_type_var))
             rest = SequenceVariable()
             S2 = _unify(o1, [rest, top])
@@ -462,7 +461,7 @@ def infer(
         out_var = SequenceVariable()
         attr_type_var = IndividualVariable()
         type_var = IndividualVariable(
-            _TypeWithAttribute(e[-1].value, attr_type_var))
+            TypeWithAttribute(e[-1].value, attr_type_var))
         phi = _unify(o, [out_var, type_var])
         attr_type = phi(attr_type_var)
         if not isinstance(attr_type, _Function):
@@ -472,20 +471,6 @@ def infer(
             raise TypeError(message)
         R = _unify(phi(o), [*phi(out_var), *attr_type.input])
         return R(phi(S)), R(phi(_Function(i, attr_type.output)))
-    elif isinstance(e[-1], concat.level0.parse.ImportStatementNode):
-        # TODO: Support all types of import correctly.
-        S, (i, o) = infer(gamma, e[:-1])
-        seq_var = SequenceVariable()
-        # FIXME: We should resolve imports as if we are the source file.
-        module = importlib.import_module(e[-1].value)
-        module_type: Type = PrimitiveTypes.module
-        for name in dir(module):
-            module_type = module_type & _TypeWithAttribute(
-                name, PrimitiveTypes.object)
-        # mutate type environment
-        gamma[e[-1].value] = _Function([seq_var],
-                                       [seq_var, module_type])
-        return S, _Function(i, o)
     else:
         for extension in extensions:
             try:
@@ -523,7 +508,7 @@ def _ftv(f: Union[Type, List[Type], Dict[str, Type]]) -> Set[_Variable]:
         return ftv
     elif isinstance(f, _IntersectionType):
         return _ftv(f.type_1) | _ftv(f.type_2)
-    elif isinstance(f, _TypeWithAttribute):
+    elif isinstance(f, TypeWithAttribute):
         return _ftv(f.attribute_type)
     else:
         raise TypeError(f)

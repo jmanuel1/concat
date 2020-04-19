@@ -1,9 +1,12 @@
 import concat.astutils
+import concat.level0.parse
 import concat.level1.typecheck
+import concat.level1.parse
 import concat.level2.parse
 from typing import Tuple, Generator
 import dataclasses
 import abc
+import importlib
 import parsy
 
 
@@ -29,6 +32,20 @@ def infer(env: concat.level1.typecheck.Environment, program: concat.astutils.Wor
         new_type = ast_to_type(program[-1].type, subs, env)
         rest = concat.level1.typecheck.drop_last_from_type_seq(output)
         return subs, concat.level1.typecheck.StackEffect(input, [*rest, new_type])
+    elif isinstance(program[-1], concat.level0.parse.ImportStatementNode):
+        # TODO: Support all types of import correctly.
+        sub_and_effect = concat.level1.typecheck.infer(env, program[:-1])
+        seq_var = concat.level1.typecheck.SequenceVariable()
+        # FIXME: We should resolve imports as if we are the source file.
+        module = importlib.import_module(program[-1].value)
+        module_type: concat.level1.typecheck.Type = concat.level1.typecheck.PrimitiveTypes.module
+        for name in dir(module):
+            module_type = module_type & concat.level1.typecheck.TypeWithAttribute(
+                name, concat.level1.typecheck.PrimitiveTypes.object)
+        # mutate type environment
+        env[program[-1].value] = concat.level1.typecheck.ForAll([seq_var], concat.level1.typecheck.StackEffect([seq_var],
+                                                                                                               [seq_var, module_type]))
+        return sub_and_effect
     else:
         raise NotImplementedError
 
