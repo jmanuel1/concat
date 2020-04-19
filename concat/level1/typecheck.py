@@ -389,7 +389,10 @@ def infer(
             rest = SequenceVariable()
             S2 = _unify(o1, [rest, top])
             attr_type = S2(attr_type_var)
-            return S2(S1), _Function(i1, [*S2(rest), attr_type])
+            rest_types = S2(rest)
+            if isinstance(rest_types, SequenceVariable):
+                rest_types = [rest_types]
+            return S2(S1), _Function(S2(i1), [*rest_types, attr_type])
         S2, (i2, o2) = infer(S1(gamma), pushed.children)
         return S2(S1), _Function(S2(i1), [*S2(o1), _Function(i2, o2)])
     elif isinstance(e[-1], concat.level0.parse.QuoteWordNode):
@@ -480,7 +483,10 @@ def infer(
             message = '.{} is not a Concat function (has type {})'.format(
                 e[-1].value, attr_type)
             raise TypeError(message)
-        R = _unify(phi(o), [*phi(out_var), *attr_type.input])
+        out_types = phi(out_var)
+        if isinstance(out_types, SequenceVariable):
+            out_types = [out_types]
+        R = _unify(phi(o), [*out_types, *attr_type.input])
         return R(phi(S)), R(phi(_Function(i, attr_type.output)))
     else:
         for extension in extensions:
