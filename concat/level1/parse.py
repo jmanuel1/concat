@@ -661,7 +661,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     @parsy.generate('module')
     def module():
         name = parsers.token('NAME').map(operator.attrgetter('value'))
-        return (yield name.sep_by(parsers.token('DOT'), min=1).concat())
+        return '.'.join((yield name.sep_by(parsers.token('DOT'), min=1)))
 
     # These following parsers parse import statements.
     # import statement = IMPORT, module, [ AS, NAME ]
