@@ -250,7 +250,10 @@ class Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
         ...
 
     @overload
-    def __call__(self, arg: SequenceVariable) -> List[Type]:
+    def __call__(
+        self,
+        arg: SequenceVariable
+    ) -> Union[SequenceVariable, List[Type]]:
         ...
 
     @overload
