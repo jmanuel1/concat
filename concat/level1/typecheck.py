@@ -147,7 +147,7 @@ class _Function(Type):
         """Returns true iff the function type unifies with ( -- *out)."""
         out_var = SequenceVariable()
         try:
-            _unify_ind(self, _Function([], [out_var]))
+            unify_ind(self, _Function([], [out_var]))
         except TypeError:
             return False
         return True
@@ -156,7 +156,7 @@ class _Function(Type):
         """Returns the type of applying self then other to a stack."""
         i2, o2 = other
         (i1, o1) = self
-        phi = _unify(o1, i2)
+        phi = unify(o1, i2)
         return phi(_Function(i1, o2))
 
     def __eq__(self, other: object) -> bool:
@@ -353,8 +353,8 @@ def infer(
         # for now, only works with ints
         S, (i, o) = infer(gamma, e[:-1])
         a_bar = SequenceVariable()
-        phi = _unify(o, [
-                     a_bar, PrimitiveTypes.int, PrimitiveTypes.int])
+        phi = unify(o, [
+            a_bar, PrimitiveTypes.int, PrimitiveTypes.int])
         return phi(S), phi(_Function(i, [a_bar, PrimitiveTypes.int]))
     elif isinstance(e[-1], concat.level0.parse.NameWordNode):
         # the type of if_then is built-in
@@ -362,13 +362,13 @@ def infer(
             S, (i, o) = infer(gamma, e[:-1])
             a_bar = SequenceVariable()
             b = IndividualVariable()
-            phi = _unify(o, [a_bar, b, b, PrimitiveTypes.bool])
+            phi = unify(o, [a_bar, b, b, PrimitiveTypes.bool])
             return phi(S), phi(_Function(i, [a_bar, b]))
         # the type of call is built-in
         elif e[-1].value == 'call':
             S, (i, o) = infer(gamma, e[:-1])
             a_bar, b_bar = SequenceVariable(), SequenceVariable()
-            phi = _unify(o, [a_bar, _Function([a_bar], [b_bar])])
+            phi = unify(o, [a_bar, _Function([a_bar], [b_bar])])
             return phi(S), phi(_Function(i, [b_bar]))
         S, (i1, o1) = infer(gamma, e[:-1])
         if not e[-1].value in S(gamma):
@@ -378,7 +378,9 @@ def infer(
             raise NotImplementedError(
                 'name {} of type {}'.format(e[-1].value, type_of_name))
         i2, o2 = type_of_name
-        phi = _unify(o1, S(i2))
+        print('name', repr(e[-1].value), 'at', e[-1].location)
+        print('unifying', o1, 'with', S(i2))
+        phi = unify(o1, S(i2))
         return phi(S), phi(_Function(i1, S(o2)))
     elif isinstance(e[-1], concat.level0.parse.PushWordNode):
         pushed = cast(concat.level0.parse.PushWordNode, e[-1])
@@ -390,12 +392,16 @@ def infer(
             top = IndividualVariable(TypeWithAttribute(
                 child.value, attr_type_var))
             rest = SequenceVariable()
-            S2 = _unify(o1, [rest, top])
+            S2 = unify(o1, [rest, top])
             attr_type = S2(attr_type_var)
             rest_types = S2(rest)
             if isinstance(rest_types, SequenceVariable):
                 rest_types = [rest_types]
             return S2(S1), _Function(S2(i1), [*rest_types, attr_type])
+        # special case for name words
+        elif isinstance(child, concat.level0.parse.NameWordNode):
+            name_type = gamma[child.value]
+            return S1, _Function(i1, [*o1, S1(name_type)])
         S2, (i2, o2) = infer(S1(gamma), pushed.children)
         return S2(S1), _Function(S2(i1), [*S2(o1), _Function(i2, o2)])
     elif isinstance(e[-1], concat.level0.parse.QuoteWordNode):
@@ -407,14 +413,14 @@ def infer(
     elif isinstance(e[-1], concat.level1.parse.WithWordNode):
         S, (i, o) = infer(gamma, e[:-1])
         a_bar, b_bar = SequenceVariable(), SequenceVariable()
-        phi = _unify(o, [a_bar, _Function([a_bar, PrimitiveTypes.object], [
-                     b_bar]), PrimitiveTypes.context_manager])
+        phi = unify(o, [a_bar, _Function([a_bar, PrimitiveTypes.object], [
+            b_bar]), PrimitiveTypes.context_manager])
         return phi(S), phi(_Function(i, [b_bar]))
     elif isinstance(e[-1], concat.level1.parse.TryWordNode):
         S, (i, o) = infer(gamma, e[:-1])
         a_bar, b_bar = SequenceVariable(), SequenceVariable()
-        phi = _unify(o, [a_bar, PrimitiveTypes.iterable,
-                         _Function([a_bar], [b_bar])])
+        phi = unify(o, [a_bar, PrimitiveTypes.iterable,
+                        _Function([a_bar], [b_bar])])
         return phi(S), phi(_Function(i, [b_bar]))
     elif isinstance(e[-1], concat.level1.parse.FuncdefStatementNode):
         S, f = infer(gamma, e[:-1])
@@ -422,8 +428,9 @@ def infer(
         declared_type = e[-1].stack_effect
         phi1, inferred_type = infer(S(gamma), e[-1].body)
         if declared_type is not None:
-            phi2 = _unify_ind(declared_type, inferred_type)
-            if phi2(declared_type) > phi2(inferred_type):
+            declared_type = S(declared_type)
+            phi2 = unify_ind(declared_type, inferred_type)
+            if not phi2(declared_type).is_subtype_of(phi2(inferred_type)):
                 message = ('declared function type {} is not compatible with '
                            'inferred type {}')
                 raise TypeError(message.format(
@@ -440,17 +447,21 @@ def infer(
         collected_type = o
         for key, value in e[-1].dict_children:
             phi1, (i1, o1) = infer(phi(gamma), key)
-            R1 = _unify(collected_type, i1)
+            R1 = unify(collected_type, i1)
             phi = R1(phi1(phi(S)))
             collected_type = phi(o1)
             # drop the top of the stack to use as the key
-            collected_type = _drop_last_from_type_seq(collected_type)
+            collected_type, collected_type_sub = drop_last_from_type_seq(
+                collected_type)
+            phi = collected_type_sub(phi)
             phi2, (i2, o2) = infer(phi(gamma), value)
-            R2 = _unify(collected_type, i2)
+            R2 = unify(collected_type, i2)
             phi = R2(phi2)
             collected_type = phi(o2)
             # drop the top of the stack to use as the value
-            collected_type = _drop_last_from_type_seq(collected_type)
+            collected_type, collected_type_sub = drop_last_from_type_seq(
+                collected_type)
+            phi = collected_type_sub(phi)
         return phi, phi(_Function(i, [*collected_type, PrimitiveTypes.dict]))
     elif isinstance(e[-1], concat.level1.parse.ListWordNode):
         S, (i, o) = infer(gamma, e[:-1])
@@ -458,17 +469,18 @@ def infer(
         collected_type = o
         for item in e[-1].list_children:
             phi1, (i1, o1) = infer(phi(gamma), item)
-            R1 = _unify(collected_type, i1)
-            phi = R1(phi1(phi(S)))
-            collected_type = phi(o1)
+            R1 = unify(collected_type, i1)
+            collected_type = R1(phi1(phi(o1)))
             # drop the top of the stack to use as the key
-            collected_type = _drop_last_from_type_seq(collected_type)
+            collected_type, collected_type_sub = drop_last_from_type_seq(
+                collected_type)
+            phi = collected_type_sub(R1(phi1(phi)))
         return phi, phi(_Function(i, [*collected_type, PrimitiveTypes.list]))
     elif isinstance(e[-1], concat.level1.parse.InvertWordNode):
         S, (i, o) = infer(gamma, e[:-1])
         out_var = SequenceVariable()
         type_var = IndividualVariable(PrimitiveInterfaces.invertible)
-        phi = _unify(o, [out_var, type_var])
+        phi = unify(o, [out_var, type_var])
         return phi(S), phi(_Function(i, [out_var, type_var]))
     elif isinstance(e[-1], concat.level0.parse.StringWordNode):
         S, (i, o) = infer(gamma, e[:-1])
@@ -479,7 +491,7 @@ def infer(
         attr_type_var = IndividualVariable()
         type_var = IndividualVariable(
             TypeWithAttribute(e[-1].value, attr_type_var))
-        phi = _unify(o, [out_var, type_var])
+        phi = unify(o, [out_var, type_var])
         attr_type = phi(attr_type_var)
         if not isinstance(attr_type, _Function):
             print('type here is:', i, o)
@@ -489,14 +501,17 @@ def infer(
         out_types = phi(out_var)
         if isinstance(out_types, SequenceVariable):
             out_types = [out_types]
-        R = _unify(phi(o), [*out_types, *attr_type.input])
+        R = unify(phi(o), [*out_types, *attr_type.input])
         return R(phi(S)), R(phi(_Function(i, attr_type.output)))
     else:
-        for extension in extensions:
+        for extension in infer._extensions:  # type: ignore
             try:
                 return extension(gamma, e)
-            except NotImplementedError:
+            except NotImplementedError as exc:
+                print('NotImplementedError', exc)
+                # print(exc.__traceback__)
                 pass
+        print(infer._extensions)
         raise NotImplementedError(
             "don't know how to handle '{}'".format(e[-1]))
 
@@ -508,7 +523,7 @@ infer._extensions = ()  # type: ignore
 def _ftv(f: Union[Type, List[Type], Dict[str, Type]]) -> Set[_Variable]:
     """The ftv function described by Kleffner."""
     ftv: Set[_Variable]
-    if isinstance(f, _BuiltinType):
+    if isinstance(f, (_BuiltinType, PrimitiveInterface)):
         return set()
     elif isinstance(f, _Variable):
         return {f}
@@ -531,13 +546,19 @@ def _ftv(f: Union[Type, List[Type], Dict[str, Type]]) -> Set[_Variable]:
     elif isinstance(f, TypeWithAttribute):
         return _ftv(f.attribute_type)
     else:
-        raise TypeError(f)
+        raise builtins.TypeError(f)
 
 
-def _unify(i1: List[Type], i2: List[Type]) -> Substitutions:
-    """The unify function described by Kleffner."""
+def unify(i1: List[Type], i2: List[Type]) -> Substitutions:
+    """The unify function described by Kleffner, but with support for subtyping.
+
+    Since subtyping is a directional relation, we say i1 is the input type, and
+    i2 is the output type. The subsitutions returned will make i1 a subtype of
+    i2. This is inspired by Polymorphism, Subtyping, and Type Inference in
+    MLsub (Dolan and Mycroft 2016)."""
+    # TODO: Make this an abstract class.
     IndividualTypes = (_BuiltinType, IndividualVariable,
-                       _Function, _IntersectionType)
+                       _Function, _IntersectionType, TypeWithAttribute, PrimitiveInterface)
     if (len(i1), len(i2)) == (0, 0):
         return Substitutions({})
     elif len(i1) == 1:
@@ -551,87 +572,54 @@ def _unify(i1: List[Type], i2: List[Type]) -> Substitutions:
     elif len(i1) > 0 and len(i2) > 0 and \
             isinstance(i1[-1], IndividualTypes) and \
             isinstance(i2[-1], IndividualTypes):
-        phi1 = _unify_ind(i1[-1], i2[-1])
-        phi2 = _unify(phi1(i1[:-1]), phi1(i2[:-1]))
+        phi1 = unify_ind(i1[-1], i2[-1])
+        phi2 = unify(phi1(i1[:-1]), phi1(i2[:-1]))
         return phi2(phi1)
     raise TypeError('cannot unify {} with {}'.format(i1, i2))
 
 
-IndividualType = Union[_BuiltinType,
-                       IndividualVariable, _Function, _IntersectionType]
+IndividualType = Union[_BuiltinType, IndividualVariable,
+                       _Function, _IntersectionType, TypeWithAttribute, PrimitiveInterface]
 
 
-def _unify_ind(t1: IndividualType, t2: IndividualType) -> Substitutions:
-    """A modified version of the unifyInd function described by Kleffner."""
-    if isinstance(t1, _BuiltinType) and isinstance(t2, _BuiltinType):
-        # FIXME: The unifier needs to have some sense of which way the
-        # subtyping relation is allowed to go.
+def unify_ind(t1: IndividualType, t2: IndividualType) -> Substitutions:
+    """A modified version of the unifyInd function described by Kleffner.
+
+    Since subtyping is a directional relation, we say t1 is the input type, and
+    t2 is the output type. The subsitutions returned will make t1 a subtype of
+    t2. This is inspired by Polymorphism, Subtyping, and Type Inference in
+    MLsub (Dolan and Mycroft 2016). Variables can be subsituted in either
+    direction."""
+    Primitive = (_BuiltinType, PrimitiveInterface)
+    if isinstance(t1, Primitive) and isinstance(t2, Primitive):
         if not t1.is_subtype_of(t2):
             raise TypeError(
                 'Primitive type {} cannot unify with primitive type {}'
                 .format(t1, t2))
         return Substitutions()
     elif isinstance(t1, IndividualVariable) and t1 not in _ftv(t2):
-        if not t2.is_subtype_of(t1.bound):
-            raise TypeError('{} is not a subtype of {}'.format(t2, t1.bound))
-        return Substitutions({t1: t2})
+        if t2.is_subtype_of(t1):
+            return Substitutions({t1: t2})
+        elif t1.is_subtype_of(t2):
+            return Substitutions()
+        raise TypeError('{} cannot unify with {}'.format(t1, t2))
     elif isinstance(t2, IndividualVariable) and t2 not in _ftv(t1):
-        if not t1.is_subtype_of(t2.bound):
-            raise TypeError('{} is not a subtype of {}'.format(t1, t2.bound))
-        return Substitutions({t2: t1})
+        if t1.is_subtype_of(t2):
+            return Substitutions({t2: t1})
+        raise TypeError('{} cannot unify with {}'.format(t1, t2))
     elif isinstance(t1, _Function) and isinstance(t2, _Function):
-        phi1 = _unify(t1.input, t2.input)
-        phi2 = _unify(phi1(t1.output), phi1(t2.output))
+        phi1 = unify(t1.input, t2.input)
+        phi2 = unify(phi1(t1.output), phi1(t2.output))
         return phi2(phi1)
     else:
-        raise NotImplementedError(t1, t2)
+        raise NotImplementedError('How do I unify these?', t1, t2)
 
 
-def _drop_last_from_type_seq(l: List[Type]) -> List[Type]:
+def drop_last_from_type_seq(l: List[Type]) -> Tuple[List[Type], Substitutions]:
     kept = SequenceVariable()
     dropped = IndividualVariable()
-    drop_sub = _unify(l, [kept, dropped])
-    return drop_sub([kept])
-
-
-# Parsing type annotations
-
-@dataclasses.dataclass
-class TypeNode(concat.level0.parse.Node, abc.ABC):
-    location: concat.astutils.Location
-
-
-@dataclasses.dataclass
-class AttributeTypeNode(TypeNode):
-    name: str
-    type: TypeNode
-
-
-@dataclasses.dataclass
-class NamedTypeNode(TypeNode):
-    name: str
-
-
-def typecheck_extension(parsers: concat.level0.parse.ParserDict) -> None:
-    @parsy.generate
-    def attribute_type_parser() -> Generator:
-        location = (yield parsers.token('DOT')).start
-        name = (yield parsers.token('NAME')).value
-        yield parsers.token('COLON')
-        type = yield parsers['type']
-        return AttributeTypeNode(location, name, type)
-
-    @parsy.generate
-    def named_type_parser() -> Generator:
-        name_token = yield parsers.token('NAME')
-        return NamedTypeNode(name_token.start, name_token.value)
-
-    parsers['type'] = parsy.alt(
-        concat.parser_combinators.desc_cumulatively(
-            attribute_type_parser, 'attribute type'),
-        concat.parser_combinators.desc_cumulatively(
-            named_type_parser, 'named type')
-    )
+    drop_sub = unify(l, [kept, dropped])
+    return drop_sub([kept]), drop_sub
 
 
 def _ensure_type(
@@ -642,6 +630,10 @@ def _ensure_type(
     if obj_name in env:
         type = env[obj_name]
     elif typename is None:
+        # TODO: If this is the output side of the stack effect, we should
+        # default to object. Otherwise, we can end up with sn unbound type
+        # variable which will be bound to the first type it's used as. That
+        # could lead to some suprising behavior.
         type = IndividualVariable()
     elif isinstance(typename, _Function):
         type = typename
@@ -654,6 +646,7 @@ def _ensure_type(
 def _stack_effect(
     env: Environment
 ) -> 'parsy.Parser[concat.level0.lex.Token, _Function]':
+    # TODO: Rewrite parser as a ParserDict extension.
     @parsy.generate('stack effect')
     def _stack_effect() -> Generator:
         parser_dict = concat.level0.parse.ParserDict()
@@ -683,6 +676,7 @@ def _stack_effect(
                 a_bar = cast(SequenceVariable, env[a_bar_parsed.value])
             env[a_bar_parsed.value] = a_bar
         if b_bar_parsed is not None:
+            print("explicit output sequence variable")
             if b_bar_parsed.value in env:
                 b_bar = cast(SequenceVariable, env[b_bar_parsed.value])
             else:
