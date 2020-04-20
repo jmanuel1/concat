@@ -63,12 +63,12 @@ class _IntersectionType(Type):
 
 
 @dataclasses.dataclass
-class _PrimitiveInterface(Type):
+class PrimitiveInterface(Type):
     _name: str = '<primitive_interface>'
 
 
 class PrimitiveInterfaces:
-    invertible = _PrimitiveInterface('invertible')
+    invertible = PrimitiveInterface('invertible')
 
 
 @dataclasses.dataclass
