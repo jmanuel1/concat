@@ -30,9 +30,11 @@ from concat.astutils import (
     to_python_decorator,
     remove_leading_dots,
     count_leading_dots,
-    correct_magic_signature
+    correct_magic_signature,
+    parse_py_qualified_name
 )
 from typing import cast
+import astunparse  # type: ignore
 
 
 # This should stay in this module since it operates on level 1 types.
@@ -610,6 +612,10 @@ def level_1_extension(
     ) -> ast.If:
         if_statement = cast(ast.If, old_import_statement.visit(node))
         cast(ast.Import, if_statement.body[0]).names[0].asname = node.asname
+        targets = cast(ast.Assign, if_statement.body[1]).targets
+        print(ast.dump(targets[0]))
+        targets[0] = parse_py_qualified_name(astunparse.unparse(targets[0]))
+        cast(ast.Attribute, targets[0]).ctx = ast.Store()
         return if_statement
 
     @FunctionalVisitor

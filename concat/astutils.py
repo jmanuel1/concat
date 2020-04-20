@@ -279,6 +279,10 @@ def statementfy(node: Union[ast.expr, ast.stmt]) -> ast.stmt:
     return node
 
 
+def parse_py_qualified_name(name: str) -> Union[ast.Name, ast.Attribute]:
+    return cast(Union[ast.Name, ast.Attribute], cast(ast.Expression, ast.parse(name, mode='eval')).body)
+
+
 def flatten(list: List[Union['concat.level0.parse.WordNode', Words]]) -> Words:
     flat_list: List[concat.level0.parse.WordNode] = []
     for el in list:
