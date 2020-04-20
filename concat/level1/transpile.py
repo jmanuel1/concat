@@ -212,8 +212,8 @@ def _literal_word_extension(
             py_key = pack_expressions([key_quote_call, pop_stack()])
             py_value = pack_expressions([value_quote_call, pop_stack()])
             pairs.append((py_key, py_value))
-        dictionary = ast.Dict(keys=dict(pairs).keys(),  # FIXME: should be list
-                              values=dict(pairs).values())  # FIXME: ditto
+        dictionary = ast.Dict(keys=[*dict(pairs)],
+                              values=[*dict(pairs).values()])
         push_func = ast.Name(id='push', ctx=load)
         py_node = ast.Call(func=push_func, args=[dictionary], keywords=[])
         py_node.lineno, py_node.col_offset = node.location
