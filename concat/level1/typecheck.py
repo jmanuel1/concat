@@ -90,7 +90,7 @@ class PrimitiveTypes:
     object = _BuiltinType('object')
     context_manager = _BuiltinType('context_manager')
     iterable = _BuiltinType('iterable')
-    dict = _BuiltinType('dict')
+    dict = _BuiltinType('dict', (iterable,))
     file = _BuiltinType('file')
     str = _BuiltinType('str')
     module = _BuiltinType('module')
