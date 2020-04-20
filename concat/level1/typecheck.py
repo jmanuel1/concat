@@ -80,6 +80,9 @@ class _BuiltinType(Type):
         return super().is_subtype_of(
             supertype) or supertype in self._supertypes
 
+    def add_supertype(self, supertype: Type) -> None:
+        self._supertypes += (supertype,)
+
 
 class PrimitiveTypes:
     int = _BuiltinType('int', (PrimitiveInterfaces.invertible,))
