@@ -39,7 +39,11 @@ arg_parser.add_argument(
     help='file to run')
 arg_parser.add_argument('--debug', action='store_true',
                         default=False, help='turn stack debugging on')
-args = arg_parser.parse_args()
+
+# We should pass any unknown args onto the program we're about to run. There
+# might be a better way to go about this, but I think this is fine for now.
+args, rest = arg_parser.parse_known_args()
+sys.argv = [sys.argv[0], *rest]
 
 
 # interactive mode
