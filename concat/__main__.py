@@ -3,9 +3,9 @@
 
 from concat.transpile import transpile
 import concat.astutils
-import concat.level1.execute
 import concat.level1.typecheck
 import concat.level1.stdlib.repl
+import concat.level2.execute
 import argparse
 import sys
 import io
@@ -58,6 +58,6 @@ else:
         print('This is a bug in Concat.')
         raise
     else:
-        concat.level1.execute.execute(filename, python_ast, {})
+        concat.level2.execute.execute(filename, python_ast, {})
     finally:
         args.file.close()
