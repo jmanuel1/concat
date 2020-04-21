@@ -292,6 +292,8 @@ class Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
             )
         elif isinstance(arg, _Variable) and arg in self:
             return self[arg]
+        elif isinstance(arg, IndividualVariable):
+            return IndividualVariable(self(arg.bound))
         elif isinstance(arg, list):
             subbed_types = []
             for type in arg:
@@ -303,6 +305,8 @@ class Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
             return subbed_types
         elif isinstance(arg, Environment):
             return Environment({name: self(t) for name, t in arg.items()})
+        elif isinstance(arg, TypeWithAttribute):
+            return TypeWithAttribute(arg.attribute, self(arg.attribute_type))
         else:
             return arg
 
