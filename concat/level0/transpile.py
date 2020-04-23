@@ -104,15 +104,18 @@ def level_0_extension(
 
     visitors['quote-word'] = quote_word_visitor
 
-    # Converts a PushWordNode to a Python call to stack.append
+    # Converts a PushWordNode to a Python lambda abstraction
     @FunctionalVisitor
-    def push_word_visitor(node: concat.level0.parse.Node) -> ast.Call:
+    def push_word_visitor(node: concat.level0.parse.Node) -> ast.expr:
         if not isinstance(node, concat.level0.parse.PushWordNode):
             raise VisitFailureException
         child = visitors.ref_visitor('word').visit(list(node.children)[0])
-        load = ast.Load()
-        push_func = ast.Name(id='push', ctx=load)
-        py_node = ast.Call(func=push_func, args=[child], keywords=[])
+        args = ast.arguments(args=[ast.arg('s', None), ast.arg(
+            't', None)], vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[])
+        stack_append = cast(ast.Expression, ast.parse(
+            's.append', mode='eval')).body
+        body = ast.Call(stack_append, [child], [])
+        py_node = ast.Lambda(args, body)
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
