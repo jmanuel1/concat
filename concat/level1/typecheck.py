@@ -54,6 +54,9 @@ class _IntersectionType(Type):
     type_2: Type
 
     def __repr__(self) -> str:
+        return '{!r} & {!r}'.format(self.type_1, self.type_2)
+
+    def __str__(self) -> str:
         return '{} & {}'.format(self.type_1, self.type_2)
 
     def is_subtype_of(self, other: Type) -> bool:
@@ -65,6 +68,9 @@ class _IntersectionType(Type):
 @dataclasses.dataclass
 class PrimitiveInterface(Type):
     _name: str = '<primitive_interface>'
+
+    def __str__(self) -> str:
+        return 'interface {}'.format(self._name)
 
 
 class PrimitiveInterfaces:
@@ -82,6 +88,9 @@ class _BuiltinType(Type):
 
     def add_supertype(self, supertype: Type) -> None:
         self._supertypes += (supertype,)
+
+    def __str__(self) -> str:
+        return self._name
 
 
 class PrimitiveTypes:
@@ -108,7 +117,8 @@ class _Variable(Type, abc.ABC):
 
 
 class SequenceVariable(_Variable):
-    pass
+    def __str__(self) -> str:
+        return '*t_{}'.format(id(self))
 
 
 @dataclasses.dataclass
@@ -122,6 +132,12 @@ class IndividualVariable(_Variable):
     def __hash__(self) -> int:
         return hash(id(self))
 
+    def __str__(self) -> str:
+        bound = ''
+        if self.bound is not PrimitiveTypes.object:
+            bound = ' (bound: {})'.format(self.bound)
+        return '`t_{}'.format(id(self)) + bound
+
 
 @dataclasses.dataclass
 class ForAll(Type):
@@ -130,6 +146,12 @@ class ForAll(Type):
 
     def to_for_all(self) -> 'ForAll':
         return self
+
+    def __str__(self) -> str:
+        string = 'for all '
+        string += ' '.join(map(str, self.quantified_variables))
+        string += '. {}'.format(self.type)
+        return string
 
 
 @dataclasses.dataclass
@@ -204,6 +226,11 @@ class _Function(Type):
             return True
         return False
 
+    def __str__(self) -> str:
+        in_types = ' '.join(map(str, self.input))
+        out_types = ' '.join(map(str, self.output))
+        return '({} -- {})'.format(in_types, out_types)
+
 
 @dataclasses.dataclass
 class TypeWithAttribute(Type):
@@ -218,6 +245,9 @@ class TypeWithAttribute(Type):
                     and self.attribute_type.is_subtype_of(
                         supertype.attribute_type))
         raise NotImplementedError(supertype)
+
+    def __str__(self) -> str:
+        return '.{}:{}'.format(self.attribute, self.attribute_type)
 
 
 # expose _Function as StackEffect
