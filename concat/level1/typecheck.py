@@ -83,8 +83,7 @@ class _BuiltinType(Type):
     _supertypes: Tuple[Type, ...] = dataclasses.field(default_factory=tuple)
 
     def is_subtype_of(self, supertype: Type) -> bool:
-        return super().is_subtype_of(
-            supertype) or supertype in self._supertypes
+        return super().is_subtype_of(supertype) or any(map(lambda t: t.is_subtype_of(supertype), self._supertypes))
 
     def add_supertype(self, supertype: Type) -> None:
         self._supertypes += (supertype,)
