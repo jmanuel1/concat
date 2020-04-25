@@ -26,15 +26,17 @@ class NamedTypeNode(TypeNode):
     name: str
 
 
-def infer(env: concat.level1.typecheck.Environment, program: concat.astutils.WordsOrStatements) -> Tuple[concat.level1.typecheck.Substitutions, concat.level1.typecheck.StackEffect]:
+def infer(env: concat.level1.typecheck.Environment, program: concat.astutils.WordsOrStatements, is_top_level=False) -> Tuple[concat.level1.typecheck.Substitutions, concat.level1.typecheck.StackEffect]:
     if isinstance(program[-1], concat.level2.parse.CastWordNode):
-        subs, (input, output) = concat.level1.typecheck.infer(env, program[:-1])
+        subs, (input, output) = concat.level1.typecheck.infer(
+            env, program[:-1], is_top_level=is_top_level)
         new_type = ast_to_type(program[-1].type, subs, env)
         rest = concat.level1.typecheck.drop_last_from_type_seq(output)
         return subs, concat.level1.typecheck.StackEffect(input, [*rest, new_type])
     elif isinstance(program[-1], concat.level0.parse.ImportStatementNode):
         # TODO: Support all types of import correctly.
-        sub_and_effect = concat.level1.typecheck.infer(env, program[:-1])
+        sub_and_effect = concat.level1.typecheck.infer(
+            env, program[:-1], is_top_level=is_top_level)
         seq_var = concat.level1.typecheck.SequenceVariable()
         # FIXME: We should resolve imports as if we are the source file.
         module = importlib.import_module(program[-1].value)
