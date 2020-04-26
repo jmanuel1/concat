@@ -47,6 +47,10 @@ class Type(abc.ABC):
             return NotImplemented
         return _IntersectionType(self, other)
 
+    def get_type_of_attribute(self, name: str) -> 'IndividualType':
+        raise TypeError(
+            'object of type {} has no attribute {}'.format(self, name))
+
 
 @dataclasses.dataclass
 class _IntersectionType(Type):
@@ -63,6 +67,12 @@ class _IntersectionType(Type):
         return (super().is_subtype_of(other)
                 or self.type_1.is_subtype_of(other)
                 or self.type_2.is_subtype_of(other))
+
+    def get_type_of_attribute(self, name: str) -> 'IndividualType':
+        try:
+            return self.type_1.get_type_of_attribute(name)
+        except TypeError:
+            return self.type_2.get_type_of_attribute(name)
 
 
 @dataclasses.dataclass
@@ -122,7 +132,7 @@ class SequenceVariable(_Variable):
 
 @dataclasses.dataclass
 class IndividualVariable(_Variable):
-    bound: Type = PrimitiveTypes.object
+    bound: 'IndividualType' = PrimitiveTypes.object
 
     def is_subtype_of(self, supertype: Type):
         return super().is_subtype_of(supertype) or self.bound.is_subtype_of(
@@ -136,6 +146,9 @@ class IndividualVariable(_Variable):
         if self.bound is not PrimitiveTypes.object:
             bound = ' (bound: {})'.format(self.bound)
         return '`t_{}'.format(id(self)) + bound
+
+    def get_type_of_attribute(self, name: str) -> 'IndividualType':
+        return self.bound.get_type_of_attribute(name)
 
 
 @dataclasses.dataclass
@@ -234,7 +247,7 @@ class _Function(Type):
 @dataclasses.dataclass
 class TypeWithAttribute(Type):
     attribute: str
-    attribute_type: Type
+    attribute_type: 'IndividualType'
 
     def is_subtype_of(self, supertype: Type) -> bool:
         if super().is_subtype_of(supertype):
@@ -247,7 +260,15 @@ class TypeWithAttribute(Type):
 
     def __str__(self) -> str:
         return '.{}:{}'.format(self.attribute, self.attribute_type)
+    def get_type_of_attribute(self, name: str) -> 'IndividualType':
+        if name != self.attribute:
+            raise TypeError(
+                'object of type {} does not have attribute {}'.format(self, name))
+        return self.attribute_type
 
+
+IndividualType = Union[_BuiltinType, IndividualVariable,
+                       _Function, _IntersectionType, TypeWithAttribute, PrimitiveInterface]
 
 # expose _Function as StackEffect
 StackEffect = _Function
@@ -611,10 +632,6 @@ def unify(i1: List[Type], i2: List[Type]) -> Substitutions:
         phi2 = unify(phi1(i1[:-1]), phi1(i2[:-1]))
         return phi2(phi1)
     raise TypeError('cannot unify {} with {}'.format(i1, i2))
-
-
-IndividualType = Union[_BuiltinType, IndividualVariable,
-                       _Function, _IntersectionType, TypeWithAttribute, PrimitiveInterface]
 
 
 def unify_ind(t1: IndividualType, t2: IndividualType) -> Substitutions:
