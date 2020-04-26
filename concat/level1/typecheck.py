@@ -58,10 +58,10 @@ class _IntersectionType(Type):
     type_2: Type
 
     def __repr__(self) -> str:
-        return '{!r} & {!r}'.format(self.type_1, self.type_2)
+        return '({!r} & {!r})'.format(self.type_1, self.type_2)
 
     def __str__(self) -> str:
-        return '{} & {}'.format(self.type_1, self.type_2)
+        return '({} & {})'.format(self.type_1, self.type_2)
 
     def is_subtype_of(self, other: Type) -> bool:
         return (super().is_subtype_of(other)
@@ -259,7 +259,11 @@ class TypeWithAttribute(Type):
         raise NotImplementedError(supertype)
 
     def __str__(self) -> str:
-        return '.{}:{}'.format(self.attribute, self.attribute_type)
+        type = ''
+        if self.attribute_type is not PrimitiveTypes.object:
+            type = ':' + str(self.attribute_type)
+        return '.{}'.format(self.attribute) + type
+
     def get_type_of_attribute(self, name: str) -> 'IndividualType':
         if name != self.attribute:
             raise TypeError(
