@@ -118,6 +118,8 @@ def _literal_word_extension(
     # they # are $-pushed, their insides are not evaluated. After all, they
     # already push themselves.
 
+    # TODO: Share code between iterable implementations.
+
     # Converts a TupleWordNode to the Python expression
     # `push(((Quotation([...1])(stack,stash),stack.pop())[-1],(Quotation([...2])(stack,stash),stack.pop())[-1],......))`.
     @FunctionalVisitor
@@ -145,10 +147,12 @@ def _literal_word_extension(
     visitors['tuple-word'] = assert_type(
         concat.level1.parse.TupleWordNode).then(tuple_word_visitor)
 
-    # Converts a ListWordNode to the Python expression
-    # `push([(Quotation([...1])(stack,stash),stack.pop())[-1],(Quotation([...2])(stack,stash),stack.pop())[-1],......])`.
+    # Converts a ListWordNode to the Python expression `lambda
+    # stack,stash:stack.append([(Quotation([...1])(stack,stash),stack.pop())[-1],(Quotation([...2])(stack,stash),stack.pop())[-1],......])`.
+    # Lambda is used so that the inside elements of the list are not evaluated
+    # immediately, even when the list is in a push word.
     @FunctionalVisitor
-    def list_word_visitor(node: concat.level1.parse.ListWordNode):
+    def list_word_visitor(node: concat.level1.parse.ListWordNode) -> ast.expr:
         load = ast.Load()
         elements = []
         for words in node.list_children:
@@ -156,7 +160,7 @@ def _literal_word_extension(
             quote = concat.level0.parse.QuoteWordNode(list(words), location)
             py_quote = visitors['quote-word'].visit(quote)
             stack = ast.Name(id='stack', ctx=load)
-            stash = ast.Name(id='stack', ctx=load)
+            stash = ast.Name(id='stash', ctx=load)
             quote_call = ast.Call(func=py_quote, args=[
                                   stack, stash], keywords=[])
             subtuple = ast.Tuple(elts=[quote_call, pop_stack()], ctx=load)
@@ -164,8 +168,12 @@ def _literal_word_extension(
             last = ast.Subscript(value=subtuple, slice=index, ctx=load)
             elements.append(last)
         lst = ast.List(elts=elements, ctx=load)
-        push_func = ast.Name(id='push', ctx=load)
-        py_node = ast.Call(func=push_func, args=[lst], keywords=[])
+        append_func = ast.Attribute(
+            ast.Name(id='stack', ctx=load), 'append', load)
+        body = ast.Call(append_func, [lst], [])
+        args = ast.arguments([ast.arg('stack', None), ast.arg(
+            'stash', None)], None, [], [], None, [])
+        py_node = ast.Lambda(args, body)
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
