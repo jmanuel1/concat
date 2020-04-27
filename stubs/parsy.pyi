@@ -122,4 +122,8 @@ def success(val: T) -> Parser[U, T]:
     ...
 
 
+def peek(parser: Parser[T, U]) -> Parser[T, U]:
+    ...
+
+
 any_char: Parser
