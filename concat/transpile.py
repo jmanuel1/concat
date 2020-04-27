@@ -7,6 +7,7 @@ import concat.level1.transpile
 import concat.level1.typecheck
 import concat.level2.preamble_types
 import concat.level2.parse
+import concat.level2.transpile
 import concat.level2.typecheck
 from typing import cast
 
@@ -30,4 +31,5 @@ def transpile(code: str) -> ast.Module:
                                                      ast.AST]()
     transpiler.extend_with(concat.level0.transpile.level_0_extension)
     transpiler.extend_with(concat.level1.transpile.level_1_extension)
+    transpiler.extend_with(concat.level2.transpile.level_2_extension)
     return cast(ast.Module, transpiler.visit(concat_ast))
