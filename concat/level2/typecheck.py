@@ -26,6 +26,12 @@ class NamedTypeNode(TypeNode):
     name: str
 
 
+class PrimitiveInterfaces:
+    subscriptable = concat.level1.typecheck.PrimitiveInterface('subscriptable')
+    concat.level1.typecheck.PrimitiveTypes.list.add_supertype(subscriptable)
+
+    subtractable = concat.level1.typecheck.PrimitiveInterface('subtractable')
+    concat.level1.typecheck.PrimitiveTypes.int.add_supertype(subtractable)
 def infer(env: concat.level1.typecheck.Environment, program: concat.astutils.WordsOrStatements, is_top_level=False) -> Tuple[concat.level1.typecheck.Substitutions, concat.level1.typecheck.StackEffect]:
     if isinstance(program[-1], concat.level2.parse.CastWordNode):
         subs, (input, output) = concat.level1.typecheck.infer(
