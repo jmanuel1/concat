@@ -26,6 +26,7 @@ parsy.ParseError = ParseError  # type: ignore
 
 
 class SimpleValueWordNode(concat.level0.parse.WordNode, abc.ABC):
+    @abc.abstractmethod
     def __init__(self, token: Token):
         super().__init__()
         self.location = token.start
@@ -33,19 +34,23 @@ class SimpleValueWordNode(concat.level0.parse.WordNode, abc.ABC):
 
 
 class NoneWordNode(SimpleValueWordNode):
-    pass
+    def __init__(self, token: Token):
+        super().__init__(token)
 
 
 class NotImplWordNode(SimpleValueWordNode):
-    pass
+    def __init__(self, token: Token):
+        super().__init__(token)
 
 
 class EllipsisWordNode(SimpleValueWordNode):
-    pass
+    def __init__(self, token: Token):
+        super().__init__(token)
 
 
 class TrueWordNode(SimpleValueWordNode):
-    pass
+    def __init__(self, token: Token):
+        super().__init__(token)
 
 
 class SubscriptionWordNode(concat.level0.parse.WordNode):
