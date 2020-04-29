@@ -22,5 +22,5 @@ setup(
     packages=find_packages(),  # type: ignore
     install_requires=['astunparse>=1.3.0,<2', 'parsy>=1.3.0,<2'],
     test_suite='nose.collector',
-    tests_require=['nose', 'scripttest']
+    tests_require=['nose', 'scripttest', 'hypothesis']
 )
