@@ -31,10 +31,6 @@ class TestREPLFunctions(unittest.TestCase):
             [concat.level1.stdlib.types.Quotation([some, words, here])],
             msg='read_quot has incorrect stack effect')
 
-    def test_do_return(self):
-        self.assertRaises(concat.level1.stdlib.repl.REPLExitException,
-                          concat.level1.stdlib.repl.do_return, [], [])
-
     def test_repl(self):
         with replace_stdin(io.StringIO('[,] [,] $input py_call\nhi there')):
             concat.level1.stdlib.repl.repl([], [])

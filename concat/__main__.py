@@ -4,7 +4,7 @@
 from concat.transpile import transpile
 import concat.astutils
 import concat.level1.typecheck
-import concat.level1.stdlib.repl
+import concat.level2.stdlib.repl
 import concat.level2.execute
 import argparse
 import sys
@@ -48,7 +48,7 @@ sys.argv = [sys.argv[0], *rest]
 
 # interactive mode
 if args.file is sys.stdin:  # FIXME: We should test for interactivity instead
-    concat.level1.stdlib.repl.repl([], [], args.debug)
+    concat.level2.stdlib.repl.repl([], [], args.debug)
 else:
     try:
         python_ast = transpile(args.file.read())

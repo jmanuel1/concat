@@ -24,10 +24,6 @@ from typing import List, Dict, Set, Callable, NoReturn, cast
 sys.modules[__name__].__class__ = concat.level0.stdlib.importlib.Module
 
 
-class REPLExitException(Exception):
-    pass
-
-
 def _tokenize(code: str) -> List[concat.level0.lex.Token]:
     lexer = concat.level1.lex.Lexer()
     lexer.input(code)
@@ -122,16 +118,14 @@ def read_quot(stack: List[object], stash: List[object]) -> None:
         raise Exception('did not receive a quotation from standard input')
 
 
-# TODO: This is really meant to call a contuinuation, like in Factor. We don't
-# have continuations yet, so we'll just raise an exception.
-def do_return(stack: List[object], stash: List[object]) -> NoReturn:
-    raise REPLExitException
-
-
 def _exit_repl() -> NoReturn:
-    print('Bye!')
+    print_exit_message()
     # TODO: Don't exit the whole program because we can nest REPLs.
     exit()
+
+
+def print_exit_message() -> None:
+    print('Bye!')
 
 
 def repl(stack: List[object], stash: List[object], debug=False) -> None:
@@ -183,12 +177,7 @@ def repl(stack: List[object], stash: List[object], debug=False) -> None:
                     stack.pop()
                 )
                 try:
-                    try:
-                        quotation(stack, cast(List[object], globals['stash']))
-                    except concat.level1.stdlib.repl.REPLExitException:
-                        _exit_repl()
-                    except Exception as e:
-                        raise concat.level0.execute.ConcatRuntimeError from e
+                    quotation(stack, cast(List[object], globals['stash']))
                 except concat.level0.execute.ConcatRuntimeError as e:
                     value = e.__cause__
                     if value is None or value.__traceback__ is None:
