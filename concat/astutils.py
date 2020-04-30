@@ -8,7 +8,7 @@ import concat.level0.parse
 
 WordsOrStatements = Sequence[
     Union['concat.level0.parse.WordNode', 'concat.level0.parse.StatementNode']]
-Words = List['concat.level0.parse.WordNode']
+Words = List[concat.level0.parse.WordNode]
 Location = Tuple[int, int]
 _TranspilerDict = concat.visitors.VisitorDict[
     'concat.level0.parse.Node', ast.AST]
