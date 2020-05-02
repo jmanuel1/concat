@@ -37,6 +37,7 @@ import parsy
 
 class Node(abc.ABC):
 
+    @abc.abstractmethod
     def __init__(self):
         self.location = (0, 0)
         self.children: Iterable[Node]
@@ -72,7 +73,7 @@ class ImportStatementNode(StatementNode):
         self.value = module.value
 
 
-class WordNode(Node):
+class WordNode(Node, abc.ABC):
     pass
 
 
