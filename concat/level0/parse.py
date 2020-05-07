@@ -91,7 +91,11 @@ class NumberWordNode(WordNode):
         super().__init__()
         self.location = number.start
         self.children: List[Node] = []
-        self.value = eval(number.value)
+        try:
+            self.value = eval(number.value)
+        except SyntaxError:
+            raise ValueError(
+                '{!r} cannot eval to a number'.format(number.value))
 
 
 class StringWordNode(WordNode):
@@ -100,7 +104,11 @@ class StringWordNode(WordNode):
         super().__init__()
         self.location = string.start
         self.children: List[Node] = []
-        self.value = eval(string.value)
+        try:
+            self.value = eval(string.value)
+        except SyntaxError:
+            raise ValueError(
+                '{!r} cannot eval to a string'.format(string.value))
 
 
 class QuoteWordNode(WordNode):
