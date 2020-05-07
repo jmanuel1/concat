@@ -190,6 +190,7 @@ class BytesWordNode(concat.level0.parse.WordNode):
 
 
 class IterableWordNode(concat.level0.parse.WordNode, abc.ABC):
+    @abc.abstractmethod
     def __init__(self, element_words: Iterable[Words], location: Location):
         super().__init__()
         self.children = []
