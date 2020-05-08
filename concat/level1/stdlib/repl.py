@@ -122,7 +122,7 @@ def print_exit_message() -> None:
     print('Bye!')
 
 
-def repl(stack: List[object], stash: List[object], debug=False) -> None:
+def repl(stack: List[object], stash: List[object], debug=False, initial_globals={}) -> None:
     def show_var(stack: List[object], stash: List[object]):
         cast(Set[str], globals['visible_vars']).add(cast(str, stack.pop()))
 
@@ -130,7 +130,7 @@ def repl(stack: List[object], stash: List[object], debug=False) -> None:
         'visible_vars': set(),
         'show_var': show_var,
         'concat': concat,
-        'return': concat.level1.stdlib.repl.do_return
+        **initial_globals
     }
     locals: Dict[str, object] = {}
 
