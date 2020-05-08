@@ -221,7 +221,10 @@ class DelStatementNode(concat.level0.parse.StatementNode):
     def __init__(self, targets: Sequence[concat.level0.parse.WordNode]):
         super().__init__()
         self.children = targets
-        self.location = targets[0].location
+        try:
+            self.location = targets[0].location
+        except IndexError:
+            raise ValueError('there must be at least one target')
 
 
 class DictWordNode(IterableWordNode):
