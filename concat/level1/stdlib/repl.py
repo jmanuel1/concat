@@ -73,37 +73,31 @@ def _read_until_complete_line() -> str:
 
 
 def read_form(stack: List[object], stash: List[object]) -> None:
-    string = _read_until_complete_line()
-    ast = _parse(string)
-    location = ast.children[0].location if ast.children else (0, 0)
-
     caller_frame = inspect.stack()[1].frame
     caller_globals: Dict[str, object] = {
-        **caller_frame.f_globals, 'stack': stack, 'stash': stash}
+        **caller_frame.f_globals}
     caller_locals = caller_frame.f_locals
+    scope = {**caller_globals, **caller_locals, 'stack': stack, 'stash': stash}
 
-    # FIXME: Use parsers['word'].many instead of the top-level parser, or just
-    # wrap whatever expression we read in '$(' and ')'.
-    if all(map(lambda c: isinstance(
-            c, concat.level0.parse.WordNode), ast.children)):
-        ast.children = [concat.level0.parse.PushWordNode(
-            concat.level0.parse.QuoteWordNode(
-                cast(concat.astutils.Words, ast.children), location))]
+    string = _read_until_complete_line()
+    try:
+        ast = _parse('$(' + string + ')')
+    except concat.level1.parse.ParseError:
+        ast = _parse(string)
+        # I don't think it makes sense for us to get multiple children if what
+        # we got was a statement, so we assert.
+        assert len(ast.children) == 1
+        py_ast = _transpile(ast)
+
+        def statement_function(stack: List[object], stash: List[object]):
+            concat.level1.execute.execute(
+                '<stdin>', py_ast, scope, True)
+
+        stack.append(statement_function)
+    else:
         py_ast = _transpile(ast)
         concat.level1.execute.execute(
-            '<stdin>', py_ast, caller_globals, True, caller_locals)
-        return
-
-    # I don't think it makes sense for us to get multiple children if what we
-    # got was a statement, so we assert.
-    assert len(ast.children) == 1
-    py_ast = _transpile(ast)
-
-    def statement_function(stack: List[object], stash: List[object]):
-        concat.level1.execute.execute(
-            '<stdin>', py_ast, caller_globals, True, caller_locals)
-
-    stack.append(statement_function)
+            '<stdin>', py_ast, scope, True)
 
 
 def read_quot(stack: List[object], stash: List[object]) -> None:
