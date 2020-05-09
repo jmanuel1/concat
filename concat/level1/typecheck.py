@@ -31,6 +31,16 @@ class NameError(builtins.NameError):
             self._name.value, *self.location)
 
 
+class AttributeError(builtins.AttributeError, TypeError):
+    def __init__(self, type: 'IndividualType', attribute: str) -> None:
+        super().__init__(type, attribute)
+        self._type = type
+        self._attribute = attribute
+
+    def __str__(self) -> str:
+        return 'object of type {} does not have attribute {}'.format(self._type, self._attribute)
+
+
 class Type(abc.ABC):
     def to_for_all(self) -> 'ForAll':
         return ForAll([], self)
@@ -266,8 +276,7 @@ class TypeWithAttribute(Type):
 
     def get_type_of_attribute(self, name: str) -> 'IndividualType':
         if name != self.attribute:
-            raise TypeError(
-                'object of type {} does not have attribute {}'.format(self, name))
+            raise AttributeError(self, name)
         return self.attribute_type
 
 
