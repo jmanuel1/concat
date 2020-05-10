@@ -42,6 +42,10 @@ class AttributeError(builtins.AttributeError, TypeError):
 
 
 class Type(abc.ABC):
+    @abc.abstractmethod
+    def __init__(self):
+        pass
+
     def to_for_all(self) -> 'ForAll':
         return ForAll([], self)
 
@@ -64,8 +68,9 @@ class Type(abc.ABC):
 
 @dataclasses.dataclass
 class _IntersectionType(Type):
-    type_1: Type
-    type_2: Type
+    def __init__(self, type_1: 'IndividualType', type_2: 'IndividualType') -> None:
+        self.type_1 = type_1
+        self.type_2 = type_2
 
     def __repr__(self) -> str:
         return '({!r} & {!r})'.format(self.type_1, self.type_2)
@@ -85,9 +90,10 @@ class _IntersectionType(Type):
             return self.type_2.get_type_of_attribute(name)
 
 
-@dataclasses.dataclass
 class PrimitiveInterface(Type):
-    _name: str = '<primitive_interface>'
+    def __init__(self, name: str = '<primitive_interface>', attributes: Optional[Dict[str, 'IndividualType']] = None) -> None:
+        self._name = name
+        self._attributes = {} if attributes is None else attributes
 
     def __str__(self) -> str:
         return 'interface {}'.format(self._name)
@@ -97,10 +103,11 @@ class PrimitiveInterfaces:
     invertible = PrimitiveInterface('invertible')
 
 
-@dataclasses.dataclass
-class _BuiltinType(Type):
-    _name: str = '<primitive_type>'
-    _supertypes: Tuple[Type, ...] = dataclasses.field(default_factory=tuple)
+class PrimitiveType(Type):
+    def __init__(self, name: str = '<primitive_type>', supertypes: Tuple[Type, ...] = (), attributes: Optional[Dict[str, 'IndividualType']] = None) -> None:
+        self._name = name
+        self._supertypes = supertypes
+        self._attributes = {} if attributes is None else attributes
 
     def is_subtype_of(self, supertype: Type) -> bool:
         return super().is_subtype_of(supertype) or any(map(lambda t: t.is_subtype_of(supertype), self._supertypes))
@@ -132,17 +139,23 @@ class _Variable(Type, abc.ABC):
     Every type variable object is assumed to be unique. Thus, fresh type
     variables can be made simply by creating new objects. They can also be
     compared by identity."""
-    pass
+    @abc.abstractmethod
+    def __init__(self) -> None:
+        super().__init__()
 
 
 class SequenceVariable(_Variable):
+    def __init__(self) -> None:
+        super().__init__()
+
     def __str__(self) -> str:
         return '*t_{}'.format(id(self))
 
 
-@dataclasses.dataclass
 class IndividualVariable(_Variable):
-    bound: 'IndividualType' = PrimitiveTypes.object
+    def __init__(self, bound: 'IndividualType' = PrimitiveTypes.object) -> None:
+        super().__init__()
+        self.bound = bound
 
     def is_subtype_of(self, supertype: Type):
         return super().is_subtype_of(supertype) or self.bound.is_subtype_of(
@@ -161,10 +174,11 @@ class IndividualVariable(_Variable):
         return self.bound.get_type_of_attribute(name)
 
 
-@dataclasses.dataclass
 class ForAll(Type):
-    quantified_variables: List[_Variable]
-    type: Type
+    def __init__(self, quantified_variables: List[_Variable], type: Type) -> None:
+        super().__init__()
+        self.quantified_variables = quantified_variables
+        self.type = type
 
     def to_for_all(self) -> 'ForAll':
         return self
@@ -176,10 +190,11 @@ class ForAll(Type):
         return string
 
 
-@dataclasses.dataclass
 class _Function(Type):
-    input: List[Type]
-    output: List[Type]
+    def __init__(self, input: Sequence[Union[SequenceVariable, 'IndividualType']], output: Sequence[Union[SequenceVariable, 'IndividualType']]) -> None:
+        super().__init__()
+        self.input = input
+        self.output = output
 
     def __iter__(self) -> Iterator[List[Type]]:
         return iter((self.input, self.output))
@@ -254,10 +269,11 @@ class _Function(Type):
         return '({} -- {})'.format(in_types, out_types)
 
 
-@dataclasses.dataclass
 class TypeWithAttribute(Type):
-    attribute: str
-    attribute_type: 'IndividualType'
+    def __init__(self, attribute: str, attribute_type: 'IndividualType') -> None:
+        super().__init__()
+        self.attribute = attribute
+        self.attribute_type = attribute_type
 
     def is_subtype_of(self, supertype: Type) -> bool:
         if super().is_subtype_of(supertype):
