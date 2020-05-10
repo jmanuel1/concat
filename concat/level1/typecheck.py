@@ -98,9 +98,14 @@ class PrimitiveInterface(Type):
     def __str__(self) -> str:
         return 'interface {}'.format(self._name)
 
+    def get_type_of_attribute(self, attribute: str) -> 'IndividualType':
+        try:
+            return self._attributes[attribute]
+        except KeyError:
+            raise AttributeError(self, attribute)
 
-class PrimitiveInterfaces:
-    invertible = PrimitiveInterface('invertible')
+    def add_attribute(self, attribute: str, type: 'IndividualType') -> None:
+        self._attributes[attribute] = type
 
 
 class PrimitiveType(Type):
@@ -117,6 +122,15 @@ class PrimitiveType(Type):
 
     def __str__(self) -> str:
         return self._name
+
+    def add_attribute(self, attribute: str, type: 'IndividualType') -> None:
+        self._attributes[attribute] = type
+
+    def get_type_of_attribute(self, attribute: str) -> 'IndividualType':
+        try:
+            return self._attributes[attribute]
+        except KeyError:
+            raise AttributeError(self, attribute)
 
 
 class PrimitiveTypes:
@@ -267,6 +281,11 @@ class _Function(Type):
         in_types = ' '.join(map(str, self.input))
         out_types = ' '.join(map(str, self.output))
         return '({} -- {})'.format(in_types, out_types)
+
+    def get_type_of_attribute(self, name: str) -> '_Function':
+        if name == '__call__':
+            return self
+        raise AttributeError(self, name)
 
 
 class TypeWithAttribute(Type):
