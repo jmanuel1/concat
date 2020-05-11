@@ -134,17 +134,18 @@ class PrimitiveType(Type):
 
 
 class PrimitiveTypes:
-    int = _BuiltinType('int', (PrimitiveInterfaces.invertible,))
-    bool = _BuiltinType('bool')
-    object = _BuiltinType('object')
-    context_manager = _BuiltinType('context_manager')
-    iterable = _BuiltinType('iterable')
-    dict = _BuiltinType('dict', (iterable,))
-    file = _BuiltinType('file')
-    str = _BuiltinType('str')
-    module = _BuiltinType('module')
-    list = _BuiltinType('list', (iterable,))
-    py_function = _BuiltinType('py_function')
+    int = PrimitiveType('int')
+    bool = PrimitiveType('bool')
+    object = PrimitiveType('object')
+    context_manager = PrimitiveType('context_manager')
+    # TODO: Make this a primtive interface.
+    iterable = PrimitiveType('iterable')
+    dict = PrimitiveType('dict', (iterable,))
+    str = PrimitiveType('str')
+    module = PrimitiveType('module')
+    list = PrimitiveType('list', (iterable,))
+    py_function = PrimitiveType('py_function')
+    file = PrimitiveType('file', (iterable,), {'seek': py_function})
 
 
 class _Variable(Type, abc.ABC):
@@ -315,8 +316,11 @@ class TypeWithAttribute(Type):
         return self.attribute_type
 
 
-IndividualType = Union[_BuiltinType, IndividualVariable,
+IndividualType = Union[PrimitiveType, IndividualVariable,
                        _Function, _IntersectionType, TypeWithAttribute, PrimitiveInterface]
+# TODO: Make this an abstract class.
+IndividualTypes = (PrimitiveType, IndividualVariable,
+                   _Function, _IntersectionType, TypeWithAttribute, PrimitiveInterface)
 
 # expose _Function as StackEffect
 StackEffect = _Function
@@ -335,7 +339,7 @@ class Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
         ...
 
     @overload
-    def __call__(self, arg: _BuiltinType) -> _BuiltinType:
+    def __call__(self, arg: PrimitiveType) -> PrimitiveType:
         ...
 
     @overload
@@ -375,8 +379,6 @@ class Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
                 **self,
                 **{a: self(i) for a, i in arg.items() if a not in self._dom()}
             })
-        elif isinstance(arg, _BuiltinType):
-            return arg
         elif isinstance(arg, _Function):
             return _Function(self(arg.input), self(arg.output))
         elif isinstance(arg, ForAll):
@@ -406,6 +408,7 @@ class Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
         elif isinstance(arg, TypeWithAttribute):
             return TypeWithAttribute(arg.attribute, self(arg.attribute_type))
         else:
+        elif isinstance(arg, (PrimitiveType, PrimitiveInterface, SequenceVariable)):
             return arg
 
     def _dom(self) -> Set[_Variable]:
@@ -627,7 +630,7 @@ infer._extensions = ()  # type: ignore
 def _ftv(f: Union[Type, List[Type], Dict[str, Type]]) -> Set[_Variable]:
     """The ftv function described by Kleffner."""
     ftv: Set[_Variable]
-    if isinstance(f, (_BuiltinType, PrimitiveInterface)):
+    if isinstance(f, (PrimitiveType, PrimitiveInterface)):
         return set()
     elif isinstance(f, _Variable):
         return {f}
@@ -660,9 +663,7 @@ def unify(i1: List[Type], i2: List[Type]) -> Substitutions:
     i2 is the output type. The subsitutions returned will make i1 a subtype of
     i2. This is inspired by Polymorphism, Subtyping, and Type Inference in
     MLsub (Dolan and Mycroft 2016)."""
-    # TODO: Make this an abstract class.
-    IndividualTypes = (_BuiltinType, IndividualVariable,
-                       _Function, _IntersectionType, TypeWithAttribute, PrimitiveInterface)
+
     if (len(i1), len(i2)) == (0, 0):
         return Substitutions({})
     elif len(i1) == 1:
@@ -690,7 +691,7 @@ def unify_ind(t1: IndividualType, t2: IndividualType) -> Substitutions:
     t2. This is inspired by Polymorphism, Subtyping, and Type Inference in
     MLsub (Dolan and Mycroft 2016). Variables can be subsituted in either
     direction."""
-    Primitive = (_BuiltinType, PrimitiveInterface)
+    Primitive = (PrimitiveType, PrimitiveInterface)
     if isinstance(t1, Primitive) and isinstance(t2, Primitive):
         if not t1.is_subtype_of(t2):
             raise TypeError(
