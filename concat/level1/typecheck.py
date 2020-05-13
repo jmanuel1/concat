@@ -177,7 +177,7 @@ class IndividualVariable(_Variable):
             supertype)
 
     def __hash__(self) -> int:
-        return hash(id(self))
+        return hash((id(self), self.bound))
 
     def __str__(self) -> str:
         bound = ''
