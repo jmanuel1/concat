@@ -32,6 +32,13 @@ class PrimitiveInterfaces:
 
     subtractable = concat.level1.typecheck.PrimitiveInterface('subtractable')
     concat.level1.typecheck.PrimitiveTypes.int.add_supertype(subtractable)
+
+
+class PrimitiveTypes:
+    tuple = concat.level1.typecheck.PrimitiveType(
+        'tuple', (concat.level1.typecheck.PrimitiveTypes.iterable, PrimitiveInterfaces.subscriptable))
+
+
 def infer(env: concat.level1.typecheck.Environment, program: concat.astutils.WordsOrStatements, is_top_level=False) -> Tuple[concat.level1.typecheck.Substitutions, concat.level1.typecheck.StackEffect]:
     if isinstance(program[-1], concat.level2.parse.CastWordNode):
         subs, (input, output) = concat.level1.typecheck.infer(
