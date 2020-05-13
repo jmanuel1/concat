@@ -7,8 +7,9 @@ A Foundation for Typed Concatenative Languages, April 2017."
 import abc
 import dataclasses
 import builtins
+import collections.abc
 from typing import (List, Set, Tuple, Dict, Iterator, Union,
-                    Optional, Generator, Callable, overload, cast)
+                    Optional, Generator, Callable, Sequence, overload, cast)
 import concat.astutils
 import concat.parser_combinators
 import concat.level0.parse
@@ -206,12 +207,12 @@ class ForAll(Type):
 
 
 class _Function(Type):
-    def __init__(self, input: Sequence[Union[SequenceVariable, 'IndividualType']], output: Sequence[Union[SequenceVariable, 'IndividualType']]) -> None:
+    def __init__(self, input: Sequence['StackItemType'], output: Sequence['StackItemType']) -> None:
         super().__init__()
         self.input = input
         self.output = output
 
-    def __iter__(self) -> Iterator[List[Type]]:
+    def __iter__(self) -> Iterator[Sequence['StackItemType']]:
         return iter((self.input, self.output))
 
     def generalized_wrt(self, gamma: Dict[str, Type]) -> ForAll:
@@ -230,7 +231,7 @@ class _Function(Type):
         """Returns the type of applying self then other to a stack."""
         i2, o2 = other
         (i1, o1) = self
-        phi = unify(o1, i2)
+        phi = unify(list(o1), list(i2))
         return phi(_Function(i1, o2))
 
     def __eq__(self, other: object) -> bool:
@@ -245,7 +246,8 @@ class _Function(Type):
         # We can't use plain unification here because variables can only map to
         # variables of the same type.
         subs = Substitutions()
-        type_pairs = zip(self.input + self.output, other.input + other.output)
+        type_pairs = zip([*self.input, *self.output],
+                         [*other.input, *other.output])
         for type1, type2 in type_pairs:
             if isinstance(type1, IndividualVariable) and \
                     isinstance(type2, IndividualVariable):
@@ -253,7 +255,7 @@ class _Function(Type):
             elif isinstance(type1, SequenceVariable) and \
                     isinstance(type2, SequenceVariable):
                 subs[type2] = type1
-            type2 = subs(type2)
+            type2 = subs(type2)  # type: ignore
             if type1 != type2:
                 return False
         return True
@@ -322,6 +324,9 @@ IndividualType = Union[PrimitiveType, IndividualVariable,
 IndividualTypes = (PrimitiveType, IndividualVariable,
                    _Function, _IntersectionType, TypeWithAttribute, PrimitiveInterface)
 
+StackItemType = Union[SequenceVariable, IndividualType]
+
+
 # expose _Function as StackEffect
 StackEffect = _Function
 
@@ -332,7 +337,7 @@ class Environment(Dict[str, Type]):
 
 class Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
 
-    _T = Union['Substitutions', Type, List[Type], Environment]
+    _T = Union['Substitutions', Type, Sequence[StackItemType], Environment]
 
     @overload
     def __call__(self, arg: 'Substitutions') -> 'Substitutions':
@@ -351,22 +356,30 @@ class Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
         ...
 
     @overload
-    def __call__(self, arg: IndividualVariable) -> Type:
+    def __call__(self, arg: IndividualVariable) -> IndividualType:
+        ...
+
+    @overload
+    def __call__(self, arg: TypeWithAttribute) -> TypeWithAttribute:
+        ...
+
+    @overload
+    def __call__(self, arg: _IntersectionType) -> _IntersectionType:
+        ...
+
+    @overload
+    def __call__(self, arg: PrimitiveInterface) -> PrimitiveInterface:
         ...
 
     @overload
     def __call__(
         self,
         arg: SequenceVariable
-    ) -> Union[SequenceVariable, List[Type]]:
+    ) -> Union[SequenceVariable, List[StackItemType]]:
         ...
 
     @overload
-    def __call__(self, arg: Type) -> Type:
-        ...
-
-    @overload
-    def __call__(self, arg: List[Type]) -> List[Type]:
+    def __call__(self, arg: Sequence[StackItemType]) -> List[StackItemType]:
         ...
 
     @overload
@@ -394,8 +407,8 @@ class Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
             return self[arg]
         elif isinstance(arg, IndividualVariable):
             return IndividualVariable(self(arg.bound))
-        elif isinstance(arg, list):
-            subbed_types = []
+        elif isinstance(arg, collections.abc.Sequence):
+            subbed_types: List[StackItemType] = []
             for type in arg:
                 subbed_type = self(type)
                 if isinstance(subbed_type, list):
@@ -500,14 +513,14 @@ def infer(
                 child.value, attr_type_var))
             rest = SequenceVariable()
             S2 = unify(o1, [rest, top])
-            attr_type = S2(attr_type_var)
+            attr_type = _inst(S2(attr_type_var).to_for_all())
             rest_types = S2(rest)
             if isinstance(rest_types, SequenceVariable):
                 rest_types = [rest_types]
             return S2(S1), _Function(S2(i1), [*rest_types, attr_type])
         # special case for name words
         elif isinstance(child, concat.level0.parse.NameWordNode):
-            name_type = gamma[child.value]
+            name_type = _inst(gamma[child.value].to_for_all())
             return S1, _Function(i1, [*o1, S1(name_type)])
         S2, (i2, o2) = infer(S1(gamma), pushed.children)
         return S2(S1), _Function(S2(i1), [*S2(o1), _Function(i2, o2)])
@@ -580,14 +593,14 @@ def infer(
             collected_type = R1(phi1(phi(o1)))
             # drop the top of the stack to use as the key
             collected_type, collected_type_sub = drop_last_from_type_seq(
-                collected_type)
+                list(collected_type))
             phi = collected_type_sub(R1(phi1(phi)))
         return phi, phi(_Function(i, [*collected_type, PrimitiveTypes.list]))
     elif isinstance(e[-1], concat.level1.parse.InvertWordNode):
         S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
         out_var = SequenceVariable()
         type_var = IndividualVariable(PrimitiveInterfaces.invertible)
-        phi = unify(o, [out_var, type_var])
+        phi = unify(list(o), [out_var, type_var])
         return phi(S), phi(_Function(i, [out_var, type_var]))
     elif isinstance(e[-1], concat.level0.parse.StringWordNode):
         S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
@@ -598,7 +611,7 @@ def infer(
         attr_type_var = IndividualVariable()
         type_var = IndividualVariable(
             TypeWithAttribute(e[-1].value, attr_type_var))
-        phi = unify(o, [out_var, type_var])
+        phi = unify(list(o), [out_var, type_var])
         attr_type = phi(attr_type_var)
         if not isinstance(attr_type, _Function):
             print('type here is:', i, o)
@@ -635,7 +648,7 @@ def _ftv(f: Union[Type, List[Type], Dict[str, Type]]) -> Set[_Variable]:
     elif isinstance(f, _Variable):
         return {f}
     elif isinstance(f, _Function):
-        return _ftv(f.input) | _ftv(f.output)
+        return _ftv(list(f.input)) | _ftv(list(f.output))
     elif isinstance(f, list):
         ftv = set()
         for t in f:
@@ -709,14 +722,14 @@ def unify_ind(t1: IndividualType, t2: IndividualType) -> Substitutions:
             return Substitutions({t2: t1})
         raise TypeError('{} cannot unify with {}'.format(t1, t2))
     elif isinstance(t1, _Function) and isinstance(t2, _Function):
-        phi1 = unify(t1.input, t2.input)
-        phi2 = unify(phi1(t1.output), phi1(t2.output))
+        phi1 = unify(list(t2.input), list(t1.input))
+        phi2 = unify(list(phi1(t1.output)), list(phi1(t2.output)))
         return phi2(phi1)
     else:
         raise NotImplementedError('How do I unify these?', t1, t2)
 
 
-def drop_last_from_type_seq(l: List[Type]) -> Tuple[List[Type], Substitutions]:
+def drop_last_from_type_seq(l: List[Type]) -> Tuple[List[StackItemType], Substitutions]:
     kept = SequenceVariable()
     dropped = IndividualVariable()
     drop_sub = unify(l, [kept, dropped])
@@ -725,9 +738,10 @@ def drop_last_from_type_seq(l: List[Type]) -> Tuple[List[Type], Substitutions]:
 
 def _ensure_type(
     typename: Union[Optional[concat.level0.lex.Token], _Function],
-    env: Environment,
+    env: Dict[str, StackItemType],
     obj_name: str
-) -> Type:
+) -> StackItemType:
+    type: StackItemType
     if obj_name in env:
         type = env[obj_name]
     elif typename is None:
@@ -745,7 +759,7 @@ def _ensure_type(
 
 
 def _stack_effect(
-    env: Environment
+    env: Dict[str, StackItemType]
 ) -> 'parsy.Parser[concat.level0.lex.Token, _Function]':
     # TODO: Rewrite parser as a ParserDict extension.
     @parsy.generate('stack effect')
@@ -791,6 +805,6 @@ def _stack_effect(
 
 
 def parse_stack_effect(tokens: List[concat.level0.lex.Token]) -> _Function:
-    env = Environment()
+    env: Dict[str, StackItemType] = {}
 
     return _stack_effect(env).parse(tokens)
