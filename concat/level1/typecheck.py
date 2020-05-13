@@ -304,6 +304,12 @@ class TypeWithAttribute(Type):
             return (self.attribute == supertype.attribute
                     and self.attribute_type.is_subtype_of(
                         supertype.attribute_type))
+        elif isinstance(supertype, IndividualTypes):
+            try:
+                # REVIEW: I feel like this really tests if we're the supertype.
+                return self.attribute_type.is_subtype_of(supertype.get_type_of_attribute(self.attribute))
+            except TypeError:
+                return False
         raise NotImplementedError(supertype)
 
     def __str__(self) -> str:
