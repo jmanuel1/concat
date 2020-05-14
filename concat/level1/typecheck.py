@@ -333,6 +333,15 @@ IndividualTypes = (PrimitiveType, IndividualVariable,
 StackItemType = Union[SequenceVariable, IndividualType]
 
 
+class PrimitiveInterfaces:
+    invertible = PrimitiveInterface('invertible')
+    __rest_var = SequenceVariable()
+    # FIXME: This should be a type scheme. I don't know how that will work.
+    invertible.add_attribute('__invert__', _Function(
+        [__rest_var, invertible], [__rest_var, IndividualVariable()]))
+    PrimitiveTypes.int.add_supertype(invertible)
+
+
 # expose _Function as StackEffect
 StackEffect = _Function
 
