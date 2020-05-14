@@ -445,9 +445,12 @@ class Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
             return Environment({name: self(t) for name, t in arg.items()})
         elif isinstance(arg, TypeWithAttribute):
             return TypeWithAttribute(arg.attribute, self(arg.attribute_type))
-        else:
+        elif isinstance(arg, _IntersectionType):
+            return self(arg.type_1) & self(arg.type_2)
         elif isinstance(arg, (PrimitiveType, PrimitiveInterface, SequenceVariable)):
             return arg
+        else:
+            raise builtins.TypeError(arg)
 
     def _dom(self) -> Set[_Variable]:
         return {*self}
