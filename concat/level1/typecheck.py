@@ -401,6 +401,8 @@ class Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
     def __call__(self, arg: Environment) -> Environment:
         ...
 
+    # REVIEW: I think these branches might be better off as methods (with the
+    # exception of the list case).
     def __call__(self, arg: '_T') -> '_T':
         if isinstance(arg, Substitutions):
             return Substitutions({
@@ -421,7 +423,15 @@ class Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
         elif isinstance(arg, _Variable) and arg in self:
             return self[arg]
         elif isinstance(arg, IndividualVariable):
-            return IndividualVariable(self(arg.bound))
+            # If our bound won't change, return the same variable. Without
+            # handling this case, parts of unify_ind don't work since it starts
+            # returning substitutions from type variables it wasn't originally
+            # given.
+            bound = self(arg.bound)
+            if bound == arg.bound:
+                return arg
+            # NOTE: This returns a new, distinct type variable!
+            return IndividualVariable(bound)
         elif isinstance(arg, collections.abc.Sequence):
             subbed_types: List[StackItemType] = []
             for type in arg:
