@@ -574,25 +574,6 @@ def infer(
         phi = unify(o, [a_bar, PrimitiveTypes.iterable,
                         _Function([a_bar], [b_bar])])
         return phi(S), phi(_Function(i, [b_bar]))
-    elif isinstance(e[-1], concat.level1.parse.FuncdefStatementNode):
-        S, f = infer(gamma, e[:-1], is_top_level=is_top_level)
-        name = e[-1].name
-        declared_type = e[-1].stack_effect
-        phi1, inferred_type = infer(S(gamma), e[-1].body)
-        if declared_type is not None:
-            declared_type = S(declared_type)
-            phi2 = unify_ind(declared_type, inferred_type)
-            if not phi2(declared_type).is_subtype_of(phi2(inferred_type)):
-                message = ('declared function type {} is not compatible with '
-                           'inferred type {}')
-                raise TypeError(message.format(
-                    declared_type, inferred_type))
-            type = declared_type
-        else:
-            type = inferred_type
-        # we *mutate* the type environment
-        gamma[name] = type.generalized_wrt(S(gamma))
-        return S, f
     elif isinstance(e[-1], concat.level1.parse.DictWordNode):
         S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
         phi = S
@@ -766,77 +747,3 @@ def drop_last_from_type_seq(l: List[Type]) -> Tuple[List[StackItemType], Substit
     dropped = IndividualVariable()
     drop_sub = unify(l, [kept, dropped])
     return drop_sub([kept]), drop_sub
-
-
-def _ensure_type(
-    typename: Union[Optional[concat.level0.lex.Token], _Function],
-    env: Dict[str, StackItemType],
-    obj_name: str
-) -> StackItemType:
-    type: StackItemType
-    if obj_name in env:
-        type = env[obj_name]
-    elif typename is None:
-        # TODO: If this is the output side of the stack effect, we should
-        # default to object. Otherwise, we can end up with sn unbound type
-        # variable which will be bound to the first type it's used as. That
-        # could lead to some suprising behavior.
-        type = IndividualVariable()
-    elif isinstance(typename, _Function):
-        type = typename
-    else:
-        type = getattr(PrimitiveTypes, typename.value)
-    env[obj_name] = type
-    return type
-
-
-def _stack_effect(
-    env: Dict[str, StackItemType]
-) -> 'parsy.Parser[concat.level0.lex.Token, _Function]':
-    # TODO: Rewrite parser as a ParserDict extension.
-    @parsy.generate('stack effect')
-    def _stack_effect() -> Generator:
-        parser_dict = concat.level0.parse.ParserDict()
-
-        name = parser_dict.token('NAME')
-        seq_var = parser_dict.token('STAR') >> name
-
-        lpar = parser_dict.token('LPAR')
-        rpar = parser_dict.token('RPAR')
-        nested_stack_effect = lpar >> _stack_effect << rpar
-        type = name | parser_dict.token('BACKTICK') >> name >> parsy.success(
-            None) | nested_stack_effect
-        separator = parser_dict.token('MINUS').times(2)
-
-        item = parsy.seq(name, (parser_dict.token('COLON') >> type).optional())
-        items = item.many()
-
-        stack_effect = parsy.seq(  # type: ignore
-            seq_var.optional(), items << separator, seq_var.optional(), items)
-
-        a_bar_parsed, i, b_bar_parsed, o = yield stack_effect
-
-        a_bar = SequenceVariable()
-        b_bar = a_bar
-        if a_bar_parsed is not None:
-            if a_bar_parsed.value in env:
-                a_bar = cast(SequenceVariable, env[a_bar_parsed.value])
-            env[a_bar_parsed.value] = a_bar
-        if b_bar_parsed is not None:
-            print("explicit output sequence variable")
-            if b_bar_parsed.value in env:
-                b_bar = cast(SequenceVariable, env[b_bar_parsed.value])
-            else:
-                b_bar = SequenceVariable()
-
-        in_types = [_ensure_type(item[1], env, item[0].value) for item in i]
-        out_types = [_ensure_type(item[1], env, item[0].value) for item in o]
-        return _Function([a_bar, *in_types], [b_bar, *out_types])
-
-    return _stack_effect
-
-
-def parse_stack_effect(tokens: List[concat.level0.lex.Token]) -> _Function:
-    env: Dict[str, StackItemType] = {}
-
-    return _stack_effect(env).parse(tokens)

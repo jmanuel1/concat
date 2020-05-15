@@ -11,7 +11,7 @@ import parsy
 
 
 class CastWordNode(concat.level0.parse.WordNode):
-    def __init__(self, type: concat.level2.typecheck.TypeNode, location: Location):
+    def __init__(self, type: 'concat.level2.typecheck.IndividualTypeNode', location: Location):
         super().__init__()
         self.location = location
         self.children = []

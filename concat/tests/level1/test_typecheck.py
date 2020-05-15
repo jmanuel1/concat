@@ -1,74 +1,25 @@
-import concat.level0.lex
+import concat.lex
 import concat.level0.parse
-import concat.level1.lex as lex
 import concat.level1.parse
 import concat.level1.typecheck
 import unittest
-from typing import Dict, List, cast
-import parsy
-
-
-def lex_string(string: str) -> List[concat.level0.lex.Token]:
-    tokens = []
-    lex.lexer.input(string)
-    while True:
-        token = lex.lexer.token()
-        if token is None:
-            break
-        tokens.append(token)
-    return tokens
+from typing import cast
 
 
 def parse(string: str) -> concat.level0.parse.TopLevelNode:
-    tokens = lex_string(string)
-    parsers = concat.level0.parse.ParserDict()
-    parsers.extend_with(concat.level0.parse.level_0_extension)
-    parsers.extend_with(concat.level1.parse.level_1_extension)
+    tokens = concat.lex.tokenize(string)
+    parsers = build_parsers()
     tree = cast(concat.level0.parse.TopLevelNode, parsers.parse(tokens))
     return tree
 
 
-class TestStackEffectParser(unittest.TestCase):
-    _a_bar = concat.level1.typecheck.SequenceVariable()
-    _d_bar = concat.level1.typecheck.SequenceVariable()
-    _b = concat.level1.typecheck.IndividualVariable()
-    _c = concat.level1.typecheck.IndividualVariable()
-    examples: Dict[str, concat.level1.typecheck.StackEffect] = {
-        'a b -- b a': concat.level1.typecheck.StackEffect(
-            [_a_bar, _b, _c], [_a_bar, _c, _b]),
-        'a -- a a': concat.level1.typecheck.StackEffect(
-            [_a_bar, _b],
-            [_a_bar, _b, _b]),
-        'a --': concat.level1.typecheck.StackEffect(
-            [_a_bar, _b], [_a_bar]),
-        'a:object b:object -- b a': concat.level1.typecheck.StackEffect(
-            [
-                _a_bar,
-                concat.level1.typecheck.PrimitiveTypes.object,
-                concat.level1.typecheck.PrimitiveTypes.object
-            ], [_a_bar, *[concat.level1.typecheck.PrimitiveTypes.object] * 2]),
-        'a:`t -- a a': concat.level1.typecheck.StackEffect(
-            [_a_bar, _b], [_a_bar, _b, _b]),
-        '*i -- *i a': concat.level1.typecheck.StackEffect(
-            [_a_bar], [_a_bar, _b]
-        ),
-        '*i fun:(*i -- *o) -- *o': concat.level1.typecheck.StackEffect(
-            [_a_bar, concat.level1.typecheck.StackEffect([_a_bar], [_d_bar])],
-            [_d_bar]
-        )
-    }
-
-    def test_examples(self) -> None:
-        for example in self.examples:
-            with self.subTest(example=example):
-                tokens = lex_string(example)
-                # exclude ENCODING, NEWLINE and ENDMARKER
-                tokens = tokens[1:-2]
-                try:
-                    effect = concat.level1.typecheck.parse_stack_effect(tokens)
-                except parsy.ParseError as e:
-                    self.fail('could not parse {}\n{}'.format(example, e))
-                self.assertEqual(effect, self.examples[example])
+def build_parsers() -> concat.level0.parse.ParserDict:
+    parsers = concat.level0.parse.ParserDict()
+    parsers.extend_with(concat.level0.parse.level_0_extension)
+    parsers.extend_with(concat.level1.parse.level_1_extension)
+    parsers.extend_with(concat.level2.typecheck.typecheck_extension)
+    parsers.extend_with(concat.level2.parse.level_2_extension)
+    return parsers
 
 
 in_var = concat.level1.typecheck.SequenceVariable()
@@ -117,12 +68,6 @@ class TestStackEffectProperties(unittest.TestCase):
 
 class TestTypeChecker(unittest.TestCase):
 
-    def test_function_with_stack_effect(self) -> None:
-        funcdef = 'def f(a b -- c): ()\n'
-        tree = parse(funcdef)
-        self.assertRaises(concat.level1.typecheck.TypeError,
-                          concat.level1.typecheck.infer, {}, tree.children)
-
     def test_with_word(self) -> None:
         wth = '$() ctxmgr with\n'
         tree = parse(wth)
@@ -130,10 +75,10 @@ class TestTypeChecker(unittest.TestCase):
         self.assertRaises(
             concat.level1.typecheck.TypeError,
             concat.level1.typecheck.infer,
-            {'ctxmgr': concat.level1.typecheck.ForAll(
+            concat.level1.typecheck.Environment({'ctxmgr': concat.level1.typecheck.ForAll(
                 [a_bar],
                 concat.level1.typecheck.StackEffect([a_bar], [
-                  a_bar, concat.level1.typecheck.PrimitiveTypes.object]))},
+                    a_bar, concat.level1.typecheck.PrimitiveTypes.object]))}),
             tree.children)
 
     @unittest.skip('needs subtyping to succeed')
