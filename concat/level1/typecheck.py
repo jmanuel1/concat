@@ -692,15 +692,15 @@ def unify(i1: List[Type], i2: List[Type]) -> Substitutions:
 
     if (len(i1), len(i2)) == (0, 0):
         return Substitutions({})
-    elif len(i1) == 1:
+    if len(i1) == 1:
         if isinstance(i1[0], SequenceVariable) and i1 == i2:
             return Substitutions({})
         elif isinstance(i1[0], SequenceVariable) and i1[0] not in _ftv(i2):
-            return Substitutions({i1[0]: i2})
-    elif len(i2) == 1 and isinstance(i2[0], SequenceVariable) and \
+            return Substitutions({i1[0]: [*i2]})
+    if len(i2) == 1 and isinstance(i2[0], SequenceVariable) and \
             i2[0] not in _ftv(i1):
-        return Substitutions({i2[0]: i1})
-    elif len(i1) > 0 and len(i2) > 0 and \
+        return Substitutions({i2[0]: [*i1]})
+    if len(i1) > 0 and len(i2) > 0 and \
             isinstance(i1[-1], IndividualTypes) and \
             isinstance(i2[-1], IndividualTypes):
         phi1 = unify_ind(i1[-1], i2[-1])
