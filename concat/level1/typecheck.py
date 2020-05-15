@@ -347,7 +347,8 @@ StackEffect = _Function
 
 
 class Environment(Dict[str, Type]):
-    pass
+    def copy(self) -> 'Environment':
+        return Environment(super().copy())
 
 
 class Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
