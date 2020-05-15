@@ -456,6 +456,9 @@ class Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
     def _dom(self) -> Set[_Variable]:
         return {*self}
 
+    def __str__(self) -> str:
+        return '{' + ',\n'.join(map(lambda i: '{}: {}'.format(i[0], i[1]), self.items())) + '}'
+
 
 _InferFunction = Callable[
     [Environment, 'concat.astutils.WordsOrStatements'],
