@@ -9,7 +9,7 @@ import dataclasses
 import builtins
 import collections.abc
 from typing import (List, Set, Tuple, Dict, Iterator, Union,
-                    Optional, Generator, Callable, Sequence, overload, cast)
+                    Optional, Generator, Callable, Sequence, NoReturn, overload, cast)
 import concat.astutils
 import concat.parser_combinators
 import concat.level0.parse
@@ -58,7 +58,7 @@ class Type(abc.ABC):
         return False
 
     def __and__(self, other: object) -> '_IntersectionType':
-        if not isinstance(other, Type):
+        if not isinstance(other, IndividualTypes) or not isinstance(self, IndividualTypes):
             return NotImplemented
         return _IntersectionType(self, other)
 
@@ -191,7 +191,7 @@ class IndividualVariable(_Variable):
 
 
 class ForAll(Type):
-    def __init__(self, quantified_variables: List[_Variable], type: Type) -> None:
+    def __init__(self, quantified_variables: List[_Variable], type: 'IndividualType') -> None:
         super().__init__()
         self.quantified_variables = quantified_variables
         self.type = type
@@ -351,7 +351,7 @@ class Environment(Dict[str, Type]):
         return Environment(super().copy())
 
 
-class Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
+class Substitutions(Dict[_Variable, Union[Type, List[StackItemType]]]):
 
     _T = Union['Substitutions', Type, Sequence[StackItemType], Environment]
 
@@ -395,6 +395,14 @@ class Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
         ...
 
     @overload
+    def __call__(self, arg: IndividualType) -> IndividualType:
+        ...
+
+    @overload
+    def __call__(self, arg: Type) -> NoReturn:
+        ...
+
+    @overload
     def __call__(self, arg: Sequence[StackItemType]) -> List[StackItemType]:
         ...
 
@@ -428,7 +436,7 @@ class Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
             # handling this case, parts of unify_ind don't work since it starts
             # returning substitutions from type variables it wasn't originally
             # given.
-            bound = self(arg.bound)
+            bound: IndividualType = self(arg.bound)
             if bound == arg.bound:
                 return arg
             # NOTE: This returns a new, distinct type variable!
@@ -436,7 +444,8 @@ class Substitutions(Dict[_Variable, Union[Type, List[Type]]]):
         elif isinstance(arg, collections.abc.Sequence):
             subbed_types: List[StackItemType] = []
             for type in arg:
-                subbed_type = self(type)
+                subbed_type: Union[StackItemType,
+                                   List[StackItemType]] = self(type)
                 if isinstance(subbed_type, list):
                     subbed_types += subbed_type
                 else:
@@ -466,7 +475,7 @@ _InferFunction = Callable[
 ]
 
 
-def _inst(sigma: ForAll) -> Type:
+def _inst(sigma: ForAll) -> IndividualType:
     """This is the inst function described by Kleffner."""
     subs = Substitutions({a: type(a)() for a in sigma.quantified_variables})
     return subs(sigma.type)
@@ -492,22 +501,20 @@ def infer(
             [a_bar], [a_bar])
         return Substitutions(), effect
     elif isinstance(e[-1], concat.level0.parse.NumberWordNode):
-        S, i_to_o = infer(gamma, e[:-1], is_top_level=is_top_level)
+        S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
         if isinstance(e[-1].value, int):
-            i_to_o.output.append(PrimitiveTypes.int)
-            return S, i_to_o
+            return S, _Function(i, [*o, PrimitiveTypes.int])
         else:
             raise NotImplementedError
     # there's no False word at the moment
     elif isinstance(e[-1], concat.level1.parse.TrueWordNode):
-        S, i_to_o = infer(gamma, e[:-1], is_top_level=is_top_level)
-        i_to_o.output.append(PrimitiveTypes.bool)
-        return S, i_to_o
+        S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
+        return S, _Function(i, [*o, PrimitiveTypes.bool])
     elif isinstance(e[-1], concat.level1.parse.AddWordNode):
         # for now, only works with ints
         S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
         a_bar = SequenceVariable()
-        phi = unify(o, [
+        phi = unify(list(o), [
             a_bar, PrimitiveTypes.int, PrimitiveTypes.int])
         return phi(S), phi(_Function(i, [a_bar, PrimitiveTypes.int]))
     elif isinstance(e[-1], concat.level0.parse.NameWordNode):
@@ -522,7 +529,7 @@ def infer(
         elif e[-1].value == 'call':
             S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
             a_bar, b_bar = SequenceVariable(), SequenceVariable()
-            phi = unify(o, [a_bar, _Function([a_bar], [b_bar])])
+            phi = unify(list(o), [a_bar, _Function([a_bar], [b_bar])])
             return phi(S), phi(_Function(i, [b_bar]))
         S, (i1, o1) = infer(gamma, e[:-1], is_top_level=is_top_level)
         if not e[-1].value in S(gamma):
@@ -532,7 +539,9 @@ def infer(
             raise NotImplementedError(
                 'name {} of type {}'.format(e[-1].value, type_of_name))
         i2, o2 = type_of_name
-        phi = unify(o1, S(i2))
+        print('trying to unify using name', e[-1].value)
+        print(*o1)
+        phi = unify(list(o1), S(i2))
         return phi(S), phi(_Function(i1, S(o2)))
     elif isinstance(e[-1], concat.level0.parse.PushWordNode):
         pushed = cast(concat.level0.parse.PushWordNode, e[-1])
@@ -544,7 +553,7 @@ def infer(
             top = IndividualVariable(TypeWithAttribute(
                 child.value, attr_type_var))
             rest = SequenceVariable()
-            S2 = unify(o1, [rest, top])
+            S2 = unify(list(o1), [rest, top])
             attr_type = _inst(S2(attr_type_var).to_for_all())
             rest_types = S2(rest)
             if isinstance(rest_types, SequenceVariable):
@@ -565,14 +574,14 @@ def infer(
     elif isinstance(e[-1], concat.level1.parse.WithWordNode):
         S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
         a_bar, b_bar = SequenceVariable(), SequenceVariable()
-        phi = unify(o, [a_bar, _Function([a_bar, PrimitiveTypes.object], [
+        phi = unify(list(o), [a_bar, _Function([a_bar, PrimitiveTypes.object], [
             b_bar]), PrimitiveTypes.context_manager])
         return phi(S), phi(_Function(i, [b_bar]))
     elif isinstance(e[-1], concat.level1.parse.TryWordNode):
         S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
         a_bar, b_bar = SequenceVariable(), SequenceVariable()
-        phi = unify(o, [a_bar, PrimitiveTypes.iterable,
-                        _Function([a_bar], [b_bar])])
+        phi = unify(list(o), [a_bar, PrimitiveTypes.iterable,
+                              _Function([a_bar], [b_bar])])
         return phi(S), phi(_Function(i, [b_bar]))
     elif isinstance(e[-1], concat.level1.parse.DictWordNode):
         S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
@@ -644,7 +653,6 @@ def infer(
                 print('NotImplementedError', exc)
                 # print(exc.__traceback__)
                 pass
-        print(infer._extensions)
         raise NotImplementedError(
             "don't know how to handle '{}'".format(e[-1]))
 
@@ -653,7 +661,7 @@ def infer(
 infer._extensions = ()  # type: ignore
 
 
-def _ftv(f: Union[Type, List[Type], Dict[str, Type]]) -> Set[_Variable]:
+def _ftv(f: Union[Type, List[StackItemType], Dict[str, Type]]) -> Set[_Variable]:
     """The ftv function described by Kleffner."""
     ftv: Set[_Variable]
     if isinstance(f, (PrimitiveType, PrimitiveInterface)):
@@ -682,7 +690,7 @@ def _ftv(f: Union[Type, List[Type], Dict[str, Type]]) -> Set[_Variable]:
         raise builtins.TypeError(f)
 
 
-def unify(i1: List[Type], i2: List[Type]) -> Substitutions:
+def unify(i1: List[StackItemType], i2: List[StackItemType]) -> Substitutions:
     """The unify function described by Kleffner, but with support for subtyping.
 
     Since subtyping is a directional relation, we say i1 is the input type, and
@@ -742,7 +750,7 @@ def unify_ind(t1: IndividualType, t2: IndividualType) -> Substitutions:
         raise NotImplementedError('How do I unify these?', t1, t2)
 
 
-def drop_last_from_type_seq(l: List[Type]) -> Tuple[List[StackItemType], Substitutions]:
+def drop_last_from_type_seq(l: List[StackItemType]) -> Tuple[List[StackItemType], Substitutions]:
     kept = SequenceVariable()
     dropped = IndividualVariable()
     drop_sub = unify(l, [kept, dropped])
