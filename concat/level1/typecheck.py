@@ -580,16 +580,16 @@ def infer(
         collected_type = o
         for key, value in e[-1].dict_children:
             phi1, (i1, o1) = infer(phi(gamma), key)
-            R1 = unify(collected_type, i1)
-            phi = R1(phi1(phi(S)))
+            R1 = unify(phi1(collected_type), list(i1))
+            phi = R1(phi1(phi))
             collected_type = phi(o1)
             # drop the top of the stack to use as the key
             collected_type, collected_type_sub = drop_last_from_type_seq(
                 collected_type)
             phi = collected_type_sub(phi)
             phi2, (i2, o2) = infer(phi(gamma), value)
-            R2 = unify(collected_type, i2)
-            phi = R2(phi2)
+            R2 = unify(phi2(collected_type), list(i2))
+            phi = R2(phi2(phi))
             collected_type = phi(o2)
             # drop the top of the stack to use as the value
             collected_type, collected_type_sub = drop_last_from_type_seq(
@@ -602,7 +602,7 @@ def infer(
         collected_type = o
         for item in e[-1].list_children:
             phi1, (i1, o1) = infer(phi(gamma), item)
-            R1 = unify(collected_type, i1)
+            R1 = unify(phi1(phi(collected_type)), list(i1))
             collected_type = R1(phi1(phi(o1)))
             # drop the top of the stack to use as the key
             collected_type, collected_type_sub = drop_last_from_type_seq(
@@ -634,7 +634,7 @@ def infer(
         out_types = phi(out_var)
         if isinstance(out_types, SequenceVariable):
             out_types = [out_types]
-        R = unify(phi(o), [*out_types, *attr_type.input])
+        R = unify(phi(o), phi([*out_types, *attr_type.input]))
         return R(phi(S)), R(phi(_Function(i, attr_type.output)))
     else:
         for extension in infer._extensions:  # type: ignore
