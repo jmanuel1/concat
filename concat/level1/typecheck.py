@@ -522,9 +522,9 @@ def infer(
         if e[-1].value == 'if_then':
             S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
             a_bar = SequenceVariable()
-            b = IndividualVariable()
-            phi = unify(o, [a_bar, b, b, PrimitiveTypes.bool])
-            return phi(S), phi(_Function(i, [a_bar, b]))
+            b = _Function([a_bar], [a_bar])
+            phi = unify(list(o), [a_bar, PrimitiveTypes.bool, b])
+            return phi(S), phi(_Function(i, [a_bar]))
         # the type of call is built-in
         elif e[-1].value == 'call':
             S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
