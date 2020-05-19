@@ -733,14 +733,24 @@ def unify_ind(t1: IndividualType, t2: IndividualType) -> Substitutions:
                 .format(t1, t2))
         return Substitutions()
     elif isinstance(t1, IndividualVariable) and t1 not in _ftv(t2):
+        phi = None
+        if t1.is_subtype_of(t2):
+            if isinstance(t2, IndividualVariable):
+                phi = unify_ind(t1.bound, t2.bound)
+            else:
+                phi = unify_ind(t1.bound, t2)
         if t2.is_subtype_of(t1):
-            return Substitutions({t1: t2})
-        elif t1.is_subtype_of(t2):
-            return Substitutions()
-        raise TypeError('{} cannot unify with {}'.format(t1, t2))
+            phi = Substitutions({t1: IndividualVariable(t2)})(
+                phi or Substitutions())
+        if phi is None:
+            raise TypeError('{} cannot unify with {}'.format(t1, t2))
+
+        return phi
     elif isinstance(t2, IndividualVariable) and t2 not in _ftv(t1):
         if t1.is_subtype_of(t2):
-            return Substitutions({t2: t1})
+            phi = Substitutions({t2: t1})
+            phi = (unify_ind(phi(t1), phi(t2.bound)))(phi)
+            return phi
         raise TypeError('{} cannot unify with {}'.format(t1, t2))
     elif isinstance(t1, _Function) and isinstance(t2, _Function):
         phi1 = unify(list(t2.input), list(t1.input))
