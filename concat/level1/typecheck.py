@@ -643,7 +643,7 @@ def infer(
         out_types = phi(out_var)
         if isinstance(out_types, SequenceVariable):
             out_types = [out_types]
-        R = unify(phi(o), phi([*out_types, *attr_type.input]))
+        R = unify(out_types, phi([*attr_type.input]))
         return R(phi(S)), R(phi(_Function(i, attr_type.output)))
     else:
         for extension in infer._extensions:  # type: ignore
