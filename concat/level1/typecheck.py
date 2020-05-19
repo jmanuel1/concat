@@ -90,6 +90,9 @@ class _IntersectionType(Type):
         except TypeError:
             return self.type_2.get_type_of_attribute(name)
 
+    def __hash__(self) -> int:
+        return hash((self.type_1, self.type_2))
+
 
 class PrimitiveInterface(Type):
     def __init__(self, name: str = '<primitive_interface>', attributes: Optional[Dict[str, 'IndividualType']] = None) -> None:
