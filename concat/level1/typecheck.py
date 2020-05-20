@@ -149,7 +149,8 @@ class PrimitiveTypes:
     module = PrimitiveType('module')
     list = PrimitiveType('list', (iterable,))
     py_function = PrimitiveType('py_function')
-    file = PrimitiveType('file', (iterable,), {'seek': py_function})
+    file = PrimitiveType('file', (iterable,), {
+                         'seek': py_function, 'read': py_function})
 
 
 class _Variable(Type, abc.ABC):
