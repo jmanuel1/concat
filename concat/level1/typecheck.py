@@ -515,12 +515,18 @@ def infer(
         S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
         return S, _Function(i, [*o, PrimitiveTypes.bool])
     elif isinstance(e[-1], concat.level1.parse.AddWordNode):
-        # for now, only works with ints
+        # for now, only works with ints and strings
         S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
         a_bar = SequenceVariable()
-        phi = unify(list(o), [
-            a_bar, PrimitiveTypes.int, PrimitiveTypes.int])
-        return phi(S), phi(_Function(i, [a_bar, PrimitiveTypes.int]))
+        try:
+            phi = unify(list(o), [
+                a_bar, PrimitiveTypes.int, PrimitiveTypes.int])
+        except TypeError:
+            phi = unify(list(o), [
+                a_bar, PrimitiveTypes.str, PrimitiveTypes.str])
+            return phi(S), phi(_Function(i, [a_bar, PrimitiveTypes.str]))
+        else:
+            return phi(S), phi(_Function(i, [a_bar, PrimitiveTypes.int]))
     elif isinstance(e[-1], concat.level0.parse.NameWordNode):
         # the type of if_then is built-in
         if e[-1].value == 'if_then':
