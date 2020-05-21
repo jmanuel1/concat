@@ -33,7 +33,7 @@ class NameError(builtins.NameError):
 
 
 class AttributeError(builtins.AttributeError, TypeError):
-    def __init__(self, type: 'IndividualType', attribute: str) -> None:
+    def __init__(self, type: 'Type', attribute: str) -> None:
         super().__init__(type, attribute)
         self._type = type
         self._attribute = attribute
@@ -55,6 +55,12 @@ class Type(abc.ABC):
             return True
         if isinstance(supertype, IndividualVariable):
             return self.is_subtype_of(supertype.bound)
+        if isinstance(supertype, TypeWithAttribute):
+            try:
+                attr_type = self.get_type_of_attribute(supertype.attribute)
+            except AttributeError:
+                return False
+            return attr_type.is_subtype_of(supertype.attribute_type)
         return False
 
     def __and__(self, other: object) -> '_IntersectionType':
@@ -63,8 +69,7 @@ class Type(abc.ABC):
         return _IntersectionType(self, other)
 
     def get_type_of_attribute(self, name: str) -> 'IndividualType':
-        raise TypeError(
-            'object of type {} has no attribute {}'.format(self, name))
+        raise AttributeError(self, name)
 
 
 @dataclasses.dataclass
