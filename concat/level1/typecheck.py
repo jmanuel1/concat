@@ -788,6 +788,8 @@ def unify_ind(t1: IndividualType, t2: IndividualType) -> Substitutions:
     elif isinstance(t2, TypeWithAttribute):
         attr_type = t1.get_type_of_attribute(t2.attribute)
         return unify_ind(attr_type, t2.attribute_type)
+    elif t1.is_subtype_of(t2):
+        return Substitutions()
     else:
         raise NotImplementedError('How do I unify these?', t1, t2)
 
