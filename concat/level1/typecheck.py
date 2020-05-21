@@ -755,7 +755,11 @@ def unify_ind(t1: IndividualType, t2: IndividualType) -> Substitutions:
             phi = Substitutions({t1: IndividualVariable(t2)})(
                 phi or Substitutions())
         if phi is None:
-            raise TypeError('{} cannot unify with {}'.format(t1, t2))
+            if isinstance(t2, IndividualVariable):
+                new_var = IndividualVariable(t1.bound & t2.bound)
+                phi = Substitutions({t1: new_var, t2: new_var})
+            else:
+                raise TypeError('{} cannot unify with {}'.format(t1, t2))
 
         return phi
     elif isinstance(t2, IndividualVariable) and t2 not in _ftv(t1):
