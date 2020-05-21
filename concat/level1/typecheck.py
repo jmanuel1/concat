@@ -791,7 +791,7 @@ def unify_ind(t1: IndividualType, t2: IndividualType) -> Substitutions:
     elif t1.is_subtype_of(t2):
         return Substitutions()
     else:
-        raise NotImplementedError('How do I unify these?', t1, t2)
+        raise TypeError('{} cannot unify with {}'.format(t1, t2))
 
 
 def drop_last_from_type_seq(l: List[StackItemType]) -> Tuple[List[StackItemType], Substitutions]:
