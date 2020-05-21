@@ -777,6 +777,17 @@ def unify_ind(t1: IndividualType, t2: IndividualType) -> Substitutions:
         phi1 = unify(list(t2.input), list(t1.input))
         phi2 = unify(list(phi1(t1.output)), list(phi1(t2.output)))
         return phi2(phi1)
+    elif isinstance(t1, TypeWithAttribute):
+        if t1.is_subtype_of(t2):
+            try:
+                attr_type = t2.get_type_of_attribute(t1.attribute)
+            except TypeError:
+                return Substitutions()
+            return unify_ind(t1.attribute_type, attr_type)
+        raise TypeError('{} cannot unify with {}'.format(t1, t2))
+    elif isinstance(t2, TypeWithAttribute):
+        attr_type = t1.get_type_of_attribute(t2.attribute)
+        return unify_ind(attr_type, t2.attribute_type)
     else:
         raise NotImplementedError('How do I unify these?', t1, t2)
 
