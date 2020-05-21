@@ -571,6 +571,8 @@ def infer(
             return S2(S1), _Function(S2(i1), [*rest_types, attr_type])
         # special case for name words
         elif isinstance(child, concat.level0.parse.NameWordNode):
+            if child.value not in gamma:
+                raise NameError(child)
             name_type = _inst(gamma[child.value].to_for_all())
             return S1, _Function(i1, [*o1, S1(name_type)])
         S2, (i2, o2) = infer(S1(gamma), pushed.children)
