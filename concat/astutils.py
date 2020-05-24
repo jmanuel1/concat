@@ -271,10 +271,7 @@ def correct_magic_signature(statement: ast.stmt) -> ast.stmt:
 
 def statementfy(node: Union[ast.expr, ast.stmt]) -> ast.stmt:
     if isinstance(node, ast.expr):
-        load = ast.Load()
-        stack = ast.Name(id='stack', ctx=load)
-        stash = ast.Name(id='stash', ctx=load)
-        call_node = ast.Call(func=node, args=[stack, stash], keywords=[])
+        call_node = call_concat_function(node)
         return ast.Expr(value=call_node)
     return node
 
@@ -301,3 +298,18 @@ def flatten(list: List[Union['concat.level0.parse.WordNode', Words]]) -> Words:
         else:
             flat_list.extend(el)
     return flat_list
+
+
+def call_concat_function(func: ast.expr) -> ast.Call:
+    load = ast.Load()
+    stack = ast.Name(id='stack', ctx=load)
+    stash = ast.Name(id='stash', ctx=load)
+    call_node = ast.Call(func=func, args=[stack, stash], keywords=[])
+    return call_node
+
+
+def abstract(func: ast.expr) -> ast.Lambda:
+    args = ast.arguments([ast.arg('stack', None), ast.arg(
+        'stash', None)], None, [], [], None, [])
+    py_node = ast.Lambda(args, func)
+    return py_node
