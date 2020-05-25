@@ -563,11 +563,11 @@ def infer(
         S1, (i1, o1) = infer(gamma, e[:-1], is_top_level=is_top_level)
         # special case for push an attribute accessor
         child = pushed.children[0]
+        rest = SequenceVariable()
         if isinstance(child, concat.level0.parse.AttributeWordNode):
             attr_type_var = IndividualVariable()
             top = IndividualVariable(TypeWithAttribute(
                 child.value, attr_type_var))
-            rest = SequenceVariable()
             S2 = unify(list(o1), [rest, top])
             attr_type = _inst(S2(attr_type_var).to_for_all())
             rest_types = S2(rest)
@@ -580,6 +580,13 @@ def infer(
                 raise NameError(child)
             name_type = _inst(gamma[child.value].to_for_all())
             return S1, _Function(i1, [*o1, S1(name_type)])
+        # special case for subscription words
+        elif isinstance(child, concat.level1.parse.SubscriptionWordNode):
+            S2, (i2, o2) = infer(S1(gamma), child.children)
+            phi1 = unify(S2(o1), S1(i2))
+            phi2 = unify(
+                phi1(S1(o2)), [rest, PrimitiveTypes.list, PrimitiveTypes.int])
+            return phi2(phi1(S2(S1))), phi2(phi1(S2(S1((_Function(i1, [rest, PrimitiveTypes.str]))))))
         S2, (i2, o2) = infer(S1(gamma), pushed.children)
         return S2(S1), _Function(S2(i1), [*S2(o1), _Function(i2, o2)])
     elif isinstance(e[-1], concat.level0.parse.QuoteWordNode):
