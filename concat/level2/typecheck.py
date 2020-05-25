@@ -118,6 +118,20 @@ def infer(env: concat.level1.typecheck.Environment, program: concat.astutils.Wor
         # we *mutate* the type environment
         env[name] = effect.generalized_wrt(S(env))
         return S, f
+    elif isinstance(program[-1], concat.level0.parse.PushWordNode):
+        subs, (input, output) = concat.level1.typecheck.infer(env, program[:-1])
+        child = program[-1].children[0]
+        rest = concat.level1.typecheck.SequenceVariable()
+        # special case for subscription words
+        if isinstance(child, concat.level1.parse.SubscriptionWordNode):
+            S2, (i2, o2) = concat.level1.typecheck.infer(
+                subs(env), child.children)
+            phi1 = concat.level1.typecheck.unify(S2(output), subs(i2))
+            phi2 = concat.level1.typecheck.unify(
+                phi1(subs(o2)), [rest, PrimitiveInterfaces.subscriptable, concat.level1.typecheck.PrimitiveTypes.int])
+            return phi2(phi1(S2(subs))), phi2(phi1(S2(subs((concat.level1.typecheck.StackEffect(input, [rest, concat.level1.typecheck.PrimitiveTypes.str]))))))
+        else:
+            raise NotImplementedError(child)
     else:
         raise NotImplementedError
 
