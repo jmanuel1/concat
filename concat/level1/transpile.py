@@ -31,7 +31,9 @@ from concat.astutils import (
     remove_leading_dots,
     count_leading_dots,
     correct_magic_signature,
-    parse_py_qualified_name
+    parse_py_qualified_name,
+    call_concat_function,
+    abstract
 )
 from typing import cast
 import astunparse  # type: ignore
@@ -251,8 +253,10 @@ def _word_extension(
 
     visitors.extend_with(_literal_word_extension)
 
-    # Converts a SubscriptionWordNode to the Python expression `(...,
-    # stack.pop(-2)[stack.pop()])[-1]`.
+    # Converts a SubscriptionWordNode to the Python expression `lambda
+    # stack,stash:(...(stack,stash),
+    # stack.pop(-2)[stack.pop()])[-1](stack,stash)`.
+    # NOTE: The result of the subscript is called by default.
     @FunctionalVisitor
     def subscription_word_visitor(
         node: concat.level1.parse.SubscriptionWordNode
@@ -262,7 +266,8 @@ def _word_extension(
         py_index = ast.Index(pop_stack())
         subscription = ast.Subscript(pop_stack(-2), py_index, ast.Load())
         py_quotation = cast(ast.expr, visitors['quote-word'].visit(quotation))
-        py_node = pack_expressions([py_quotation, subscription])
+        py_node = abstract(call_concat_function(pack_expressions(
+            [call_concat_function(py_quotation), subscription])))
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
