@@ -17,6 +17,9 @@ class CastWordNode(concat.level0.parse.WordNode):
         self.children = []
         self.type = type
 
+    def __repr__(self) -> str:
+        return '{}({!r}, {!r})'.format(type(self).__qualname__, self.type, self.location)
+
 
 def level_2_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['word'] |= parsers.ref_parser('cast-word')
