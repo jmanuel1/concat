@@ -1,4 +1,4 @@
-from typing import Union, List, Tuple, Iterable, Optional, Sequence, cast
+from typing import Union, List, Tuple, Iterable, Optional, Sequence, Iterator, cast
 import ast
 import concat.visitors
 import concat.level0.parse
@@ -313,3 +313,17 @@ def abstract(func: ast.expr) -> ast.Lambda:
         'stash', None)], None, [], [], None, [])
     py_node = ast.Lambda(args, func)
     return py_node
+
+
+def assign_self_pushing_module_type_to_all_components(qualified_name: str) -> Iterator[ast.Assign]:
+    qualified_name = qualified_name.strip()
+    components = tuple(qualified_name.split('.'))
+    if qualified_name.endswith('.__class__'):
+        components = components[:-1]
+    assert components
+    for i in range(1, len(components) + 1):
+        target = '.'.join(components[:i])
+        assert target
+        assignment = '{}.__class__ = concat.level0.stdlib.importlib.Module'.format(
+            target)
+        yield ast.parse(assignment, mode='exec').body[0]  # type: ignore
