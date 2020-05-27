@@ -47,7 +47,7 @@ sys.argv = [sys.argv[0], *rest]
 
 
 # interactive mode
-if args.file is sys.stdin:  # FIXME: We should test for interactivity instead
+if args.file.isatty():
     concat.level2.stdlib.repl.repl([], [], args.debug)
 else:
     try:
