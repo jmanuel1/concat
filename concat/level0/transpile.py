@@ -120,10 +120,10 @@ def level_0_extension(
             raise VisitFailureException
         child = Choice(assert_type(concat.level0.parse.AttributeWordNode).then(pushed_attribute_visitor),
                        visitors['word']).visit(list(node.children)[0])
-        args = ast.arguments(args=[ast.arg('s', None), ast.arg(
-            't', None)], vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[])
+        args = ast.arguments(args=[ast.arg('stack', None), ast.arg(
+            'stash', None)], vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[])
         stack_append = cast(ast.Expression, ast.parse(
-            's.append', mode='eval')).body
+            'stack.append', mode='eval')).body
         body = ast.Call(stack_append, [child], [])
         py_node = ast.Lambda(args, body)
         py_node.lineno, py_node.col_offset = node.location
