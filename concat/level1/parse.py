@@ -198,6 +198,7 @@ class IterableWordNode(concat.level0.parse.WordNode, abc.ABC):
         self.location = location
         for children in element_words:
             self.children += list(children)
+        self.element_words = element_words
 
 
 class TupleWordNode(IterableWordNode):
