@@ -5,6 +5,7 @@ It is like Factor's listener vocabulary."""
 
 import concat
 import concat.astutils
+import concat.typecheck
 import concat.level0.stdlib.importlib
 import concat.level0.parse
 import concat.level0.transpile
@@ -13,6 +14,7 @@ import concat.level1.lex
 import concat.level1.parse
 import concat.level1.transpile
 import concat.level1.execute
+import concat.level1.typecheck
 import sys
 import tokenize as tokize
 import ast
@@ -41,10 +43,9 @@ def _parse(code: str) -> concat.level0.parse.TopLevelNode:
     parser = concat.level0.parse.ParserDict()
     parser.extend_with(concat.level0.parse.level_0_extension)
     parser.extend_with(concat.level1.parse.level_1_extension)
+    # FIXME: Level 2 parser extension and typechecker extensions should be
+    # here.
     concat_ast = parser.parse(tokens)
-    # TODO: enable type checking from within read_quot.
-    # concat.level1.typecheck.infer(
-    #     concat.level1.typecheck.Environment(), concat_ast.children)
     return concat_ast
 
 
@@ -84,6 +85,8 @@ def read_form(stack: List[object], stash: List[object]) -> None:
         ast = _parse('$(' + string + ')')
     except concat.level1.parse.ParseError:
         ast = _parse(string)
+        concat.typecheck.check(
+            caller_globals['@@extra_env'], ast.children)
         # I don't think it makes sense for us to get multiple children if what
         # we got was a statement, so we assert.
         assert len(ast.children) == 1
@@ -95,15 +98,17 @@ def read_form(stack: List[object], stash: List[object]) -> None:
 
         stack.append(statement_function)
     else:
+        concat.typecheck.check(
+            caller_globals['@@extra_env'], ast.children)
         py_ast = _transpile(ast)
         concat.level1.execute.execute(
             '<stdin>', py_ast, scope, True)
 
 
-def read_quot(stack: List[object], stash: List[object]) -> None:
+def read_quot(stack: List[object], stash: List[object], extra_env: concat.level1.typecheck.Environment = concat.level1.typecheck.Environment()) -> None:
     caller_frame = inspect.stack()[1].frame
     caller_globals: Dict[str, object] = {
-        **caller_frame.f_globals, 'stack': stack, 'stash': stash}
+        **caller_frame.f_globals, 'stack': stack, 'stash': stash, '@@extra_env': extra_env}
     caller_locals = caller_frame.f_locals
     exec('concat.level1.stdlib.repl.read_form(stack, stash)',
          caller_globals, caller_locals)
@@ -130,6 +135,7 @@ def repl(stack: List[object], stash: List[object], debug=False, initial_globals=
         'visible_vars': set(),
         'show_var': show_var,
         'concat': concat,
+        '@@extra_env': concat.level1.typecheck.Environment(),
         **initial_globals
     }
     locals: Dict[str, object] = {}

@@ -3,6 +3,7 @@ import io
 import sys
 import contextlib
 import concat.level1.parse
+import concat.level1.typecheck
 import concat.level1.stdlib.types
 import concat.level1.stdlib.repl
 from typing import TextIO, Iterator
@@ -25,7 +26,11 @@ class TestREPLFunctions(unittest.TestCase):
         # Like in Factor, read_quot will search its caller's scope for objects.
         some, words, here = object(), object(), object()
         with replace_stdin(io.StringIO('some words here')):
-            concat.level1.stdlib.repl.read_quot(stack, [])
+            concat.level1.stdlib.repl.read_quot(stack, [], extra_env=concat.level1.typecheck.Environment({
+                'some': concat.level1.typecheck.StackEffect([], []),
+                'words': concat.level1.typecheck.StackEffect([], []),
+                'here': concat.level1.typecheck.StackEffect([], [])
+            }))
         self.assertEqual(
             stack,
             [concat.level1.stdlib.types.Quotation([some, words, here])],
