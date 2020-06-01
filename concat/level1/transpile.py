@@ -35,7 +35,7 @@ from concat.astutils import (
     call_concat_function,
     abstract
 )
-from typing import cast
+from typing import Type, cast
 import astunparse  # type: ignore
 
 
@@ -120,15 +120,14 @@ def _literal_word_extension(
     # they # are $-pushed, their insides are not evaluated. After all, they
     # already push themselves.
 
-    # TODO: Share code between iterable implementations.
+    # TODO: Share code between set word and iterable implementations.
 
-    # Converts a TupleWordNode to the Python expression
-    # `push(((Quotation([...1])(stack,stash),stack.pop())[-1],(Quotation([...2])(stack,stash),stack.pop())[-1],......))`.
-    @FunctionalVisitor
-    def tuple_word_visitor(node: concat.level1.parse.TupleWordNode):
+    # Converts a IterableWordNode to a Python expression.
+
+    def iterable_word_visitor(node: concat.level1.parse.IterableWordNode, kind: Type[ast.expr]) -> ast.expr:
         load = ast.Load()
         elements = []
-        for words in node.tuple_children:
+        for words in node.element_words:
             location = list(words)[0].location if words else node.location
             quote = concat.level0.parse.QuoteWordNode(list(words), location)
             py_quote = visitors['quote-word'].visit(quote)
@@ -140,11 +139,17 @@ def _literal_word_extension(
             index = ast.Index(value=ast.Num(n=-1))
             last = ast.Subscript(value=subtuple, slice=index, ctx=load)
             elements.append(last)
-        tuple = ast.Tuple(elts=elements, ctx=load)
+        tuple = kind(elts=elements, ctx=load)
         push_func = ast.Name(id='push', ctx=load)
         py_node = ast.Call(func=push_func, args=[tuple], keywords=[])
         py_node.lineno, py_node.col_offset = node.location
         return py_node
+
+    # Converts a TupleWordNode to the Python expression
+    # `push(((Quotation([...1])(stack,stash),stack.pop())[-1],(Quotation([...2])(stack,stash),stack.pop())[-1],......))`.
+    @FunctionalVisitor
+    def tuple_word_visitor(node: concat.level1.parse.TupleWordNode):
+        return iterable_word_visitor(node, ast.Tuple)
 
     visitors['tuple-word'] = assert_type(
         concat.level1.parse.TupleWordNode).then(tuple_word_visitor)
@@ -155,29 +160,7 @@ def _literal_word_extension(
     # immediately, even when the list is in a push word.
     @FunctionalVisitor
     def list_word_visitor(node: concat.level1.parse.ListWordNode) -> ast.expr:
-        load = ast.Load()
-        elements = []
-        for words in node.list_children:
-            location = list(words)[0].location if words else node.location
-            quote = concat.level0.parse.QuoteWordNode(list(words), location)
-            py_quote = visitors['quote-word'].visit(quote)
-            stack = ast.Name(id='stack', ctx=load)
-            stash = ast.Name(id='stash', ctx=load)
-            quote_call = ast.Call(func=py_quote, args=[
-                                  stack, stash], keywords=[])
-            subtuple = ast.Tuple(elts=[quote_call, pop_stack()], ctx=load)
-            index = ast.Index(value=ast.Num(n=-1))
-            last = ast.Subscript(value=subtuple, slice=index, ctx=load)
-            elements.append(last)
-        lst = ast.List(elts=elements, ctx=load)
-        append_func = ast.Attribute(
-            ast.Name(id='stack', ctx=load), 'append', load)
-        body = ast.Call(append_func, [lst], [])
-        args = ast.arguments([ast.arg('stack', None), ast.arg(
-            'stash', None)], None, [], [], None, [])
-        py_node = ast.Lambda(args, body)
-        py_node.lineno, py_node.col_offset = node.location
-        return py_node
+        return iterable_word_visitor(node, ast.List)
 
     visitors['list-word'] = assert_type(
         concat.level1.parse.ListWordNode).then(list_word_visitor)
