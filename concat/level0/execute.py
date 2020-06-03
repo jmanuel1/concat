@@ -7,9 +7,13 @@ from concat.level0.stdlib.pyinterop import py_call
 
 
 class ConcatRuntimeError(RuntimeError):
-    def __init__(self):
-        super().__init__()
-        # self.concat_traceback = traceback
+    def __init__(self, stack: List[object], stash: List[object]) -> None:
+        super().__init__(stack, stash)
+        self._stack = stack
+        self._stash = stash
+
+    def __str__(self) -> str:
+        return 'Stack: {!r}, Stash: {!r}'.format(self._stack, self._stash)
 
 
 def _compile(filename: str, ast_: ast.Module) -> types.CodeType:
@@ -27,7 +31,7 @@ def _run(
     except Exception as e:
         # throw away all of the traceback outside the code
         # traceback = e.__traceback__.tb_next
-        raise ConcatRuntimeError from e
+        raise ConcatRuntimeError(globals['stack'], globals['stash']) from e
 
 
 def _do_preamble(globals: Dict[str, object]) -> None:
