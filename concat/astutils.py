@@ -327,3 +327,9 @@ def assign_self_pushing_module_type_to_all_components(qualified_name: str) -> It
         assignment = '{}.__class__ = concat.level0.stdlib.importlib.Module'.format(
             target)
         yield ast.parse(assignment, mode='exec').body[0]  # type: ignore
+
+
+def append_to_stack(expr: ast.expr) -> ast.expr:
+    push_func = ast.Attribute(ast.Name(id='stack', ctx=ast.Load()), 'append', ctx=ast.Load())
+    py_node = ast.Call(func=push_func, args=[expr], keywords=[])
+    return py_node
