@@ -31,9 +31,9 @@ from concat.astutils import (
     remove_leading_dots,
     count_leading_dots,
     correct_magic_signature,
-    parse_py_qualified_name,
     call_concat_function,
     abstract,
+    assign_self_pushing_module_type_to_all_components,
     append_to_stack
 )
 from typing import Type, cast
@@ -397,7 +397,6 @@ def _word_extension(
 
     # Converts an AwaitWordNode to a Python expression that awaits the object
     # at the top of the stack.
-    # QUESTION: How do we handle stack mutation?
     visitors['await-word'] = assert_type(
         concat.level1.parse.AwaitWordNode).then(
         node_to_py_string('''lambda s,_:exec("""
@@ -519,7 +518,7 @@ def level_1_extension(
         concat.level1.parse.DelStatementNode).then(del_statement_visitor)
 
     # This converts an AsyncFuncdefStatementNode to the Python '@... @(lambda
-    # f: lambda s,_: s.append(f(s,_))) async def name(stack, stash) -> ...:
+    # f: lambda s,t: s.append(f(s[:],t[:]))) async def name(stack, stash) -> ...:
     # ...'.
     @FunctionalVisitor
     def async_funcdef_statement_visitor(
@@ -533,7 +532,8 @@ def level_1_extension(
             body=py_func_def.body,
             decorator_list=py_func_def.decorator_list,
             returns=py_func_def.returns)
-        coroutine_decorator_string = 'lambda f:lambda s,_:s.append(f(s,_))'
+        # NOTE: The stacks passed into the function are copies.
+        coroutine_decorator_string = 'lambda f:lambda s,t:s.append(f(s[:],t[:]))'
         coroutine_decorator = cast(ast.Expression, ast.parse(
             coroutine_decorator_string, mode='eval')).body
         py_node.decorator_list.append(coroutine_decorator)
@@ -587,9 +587,9 @@ def level_1_extension(
         if_statement = cast(ast.If, old_import_statement.visit(node))
         cast(ast.Import, if_statement.body[0]).names[0].asname = node.asname
         targets = cast(ast.Assign, if_statement.body[1]).targets
-        print(ast.dump(targets[0]))
-        targets[0] = parse_py_qualified_name(astunparse.unparse(targets[0]))
-        cast(ast.Attribute, targets[0]).ctx = ast.Store()
+        qualified_name = astunparse.unparse(targets[0])
+        if_statement.body[1:] = assign_self_pushing_module_type_to_all_components(
+            qualified_name)
         return if_statement
 
     @FunctionalVisitor
