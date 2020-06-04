@@ -138,7 +138,7 @@ class TestSubVisitors(unittest.TestCase):
                 message = message_template.format(node, visitor)
                 self.fail(msg=message)
             self.assertIsInstance(
-                py_node, ast.Call, msg='Python node is not a call')
+                py_node, ast.expr, msg='Python node is not an expression')
 
         test('tuple-word')
         test('literal-word')
@@ -191,7 +191,7 @@ class TestSubVisitors(unittest.TestCase):
                 message = message_template.format(node, visitor)
                 self.fail(msg=message)
             self.assertIsInstance(
-                py_node, ast.Call, msg='Python node is not a call')
+                py_node, ast.expr, msg='Python node is not an expression')
 
         test('set-word')
         test('literal-word')
