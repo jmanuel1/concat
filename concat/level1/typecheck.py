@@ -48,6 +48,8 @@ class Type(abc.ABC):
         pass
 
     def to_for_all(self) -> 'ForAll':
+        # TODO: Create an IndividualType class
+        assert isinstance(self, IndividualTypes)
         return ForAll([], self)
 
     def is_subtype_of(self, supertype: 'Type') -> bool:
