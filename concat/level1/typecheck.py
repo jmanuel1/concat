@@ -47,11 +47,6 @@ class Type(abc.ABC):
     def __init__(self):
         pass
 
-    def to_for_all(self) -> 'ForAll':
-        # TODO: Create an IndividualType class
-        assert isinstance(self, IndividualTypes)
-        return ForAll([], self)
-
     def is_subtype_of(self, supertype: 'Type') -> bool:
         if supertype is self or supertype is PrimitiveTypes.object:
             return True
@@ -65,17 +60,26 @@ class Type(abc.ABC):
             return attr_type.is_subtype_of(supertype.attribute_type)
         return False
 
-    def __and__(self, other: object) -> '_IntersectionType':
-        if not isinstance(other, IndividualTypes) or not isinstance(self, IndividualTypes):
-            return NotImplemented
-        return _IntersectionType(self, other)
-
     def get_type_of_attribute(self, name: str) -> 'IndividualType':
         raise AttributeError(self, name)
 
 
+class IndividualType(Type, abc.ABC):
+    @abc.abstractmethod
+    def __init__(self) -> None:
+        super().__init__()
+
+    def to_for_all(self) -> 'ForAll':
+        return ForAll([], self)
+
+    def __and__(self, other: object) -> '_IntersectionType':
+        if not isinstance(self, IndividualType):
+            return NotImplemented
+        return _IntersectionType(self, other)
+
+
 @dataclasses.dataclass
-class _IntersectionType(Type):
+class _IntersectionType(IndividualType):
     def __init__(self, type_1: 'IndividualType', type_2: 'IndividualType') -> None:
         self.type_1 = type_1
         self.type_2 = type_2
@@ -101,7 +105,7 @@ class _IntersectionType(Type):
         return hash((self.type_1, self.type_2))
 
 
-class PrimitiveInterface(Type):
+class PrimitiveInterface(IndividualType):
     def __init__(self, name: str = '<primitive_interface>', attributes: Optional[Dict[str, 'IndividualType']] = None) -> None:
         self._name = name
         self._attributes = {} if attributes is None else attributes
@@ -119,7 +123,7 @@ class PrimitiveInterface(Type):
         self._attributes[attribute] = type
 
 
-class PrimitiveType(Type):
+class PrimitiveType(IndividualType):
     def __init__(self, name: str = '<primitive_type>', supertypes: Tuple[Type, ...] = (), attributes: Optional[Dict[str, 'IndividualType']] = None) -> None:
         self._name = name
         self._supertypes = supertypes
@@ -179,7 +183,7 @@ class SequenceVariable(_Variable):
         return '*t_{}'.format(id(self))
 
 
-class IndividualVariable(_Variable):
+class IndividualVariable(_Variable, IndividualType):
     def __init__(self, bound: 'IndividualType' = PrimitiveTypes.object) -> None:
         super().__init__()
         self.bound = bound
@@ -217,7 +221,7 @@ class ForAll(Type):
         return string
 
 
-class _Function(Type):
+class _Function(IndividualType):
     def __init__(self, input: Sequence['StackItemType'], output: Sequence['StackItemType']) -> None:
         super().__init__()
         self.input = input
@@ -302,7 +306,7 @@ class _Function(Type):
         raise AttributeError(self, name)
 
 
-class TypeWithAttribute(Type):
+class TypeWithAttribute(IndividualType):
     def __init__(self, attribute: str, attribute_type: 'IndividualType') -> None:
         super().__init__()
         self.attribute = attribute
@@ -315,7 +319,7 @@ class TypeWithAttribute(Type):
             return (self.attribute == supertype.attribute
                     and self.attribute_type.is_subtype_of(
                         supertype.attribute_type))
-        elif isinstance(supertype, IndividualTypes):
+        elif isinstance(supertype, IndividualType):
             try:
                 # REVIEW: I feel like this really tests if we're the supertype.
                 return self.attribute_type.is_subtype_of(supertype.get_type_of_attribute(self.attribute))
@@ -334,12 +338,6 @@ class TypeWithAttribute(Type):
             raise AttributeError(self, name)
         return self.attribute_type
 
-
-IndividualType = Union[PrimitiveType, IndividualVariable,
-                       _Function, _IntersectionType, TypeWithAttribute, PrimitiveInterface]
-# TODO: Make this an abstract class.
-IndividualTypes = (PrimitiveType, IndividualVariable,
-                   _Function, _IntersectionType, TypeWithAttribute, PrimitiveInterface)
 
 StackItemType = Union[SequenceVariable, IndividualType]
 
@@ -728,8 +726,8 @@ def unify(i1: List[StackItemType], i2: List[StackItemType]) -> Substitutions:
             i2[0] not in _ftv(i1):
         return Substitutions({i2[0]: [*i1]})
     if len(i1) > 0 and len(i2) > 0 and \
-            isinstance(i1[-1], IndividualTypes) and \
-            isinstance(i2[-1], IndividualTypes):
+            isinstance(i1[-1], IndividualType) and \
+            isinstance(i2[-1], IndividualType):
         phi1 = unify_ind(i1[-1], i2[-1])
         phi2 = unify(phi1(i1[:-1]), phi1(i2[:-1]))
         return phi2(phi1)
