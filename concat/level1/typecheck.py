@@ -58,6 +58,9 @@ class Type(abc.ABC):
             except AttributeError:
                 return False
             return attr_type.is_subtype_of(supertype.attribute_type)
+        if isinstance(supertype, _IntersectionType):
+            return self.is_subtype_of(supertype.type_1) and self.is_subtype_of(
+                supertype.type_2)
         return False
 
     def get_type_of_attribute(self, name: str) -> 'IndividualType':
