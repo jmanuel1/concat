@@ -66,6 +66,10 @@ class Type(abc.ABC):
     def get_type_of_attribute(self, name: str) -> 'IndividualType':
         raise AttributeError(self, name)
 
+    @abc.abstractmethod
+    def apply_substitution(self, _: 'Substitutions') -> object:
+        pass
+
 
 class IndividualType(Type, abc.ABC):
     @abc.abstractmethod
@@ -107,6 +111,9 @@ class _IntersectionType(IndividualType):
     def __hash__(self) -> int:
         return hash((self.type_1, self.type_2))
 
+    def apply_substitution(self, sub: 'Substitutions') -> '_IntersectionType':
+        return sub(self.type_1) & sub(self.type_2)
+
 
 class PrimitiveInterface(IndividualType):
     def __init__(self, name: str = '<primitive_interface>', attributes: Optional[Dict[str, 'IndividualType']] = None) -> None:
@@ -124,6 +131,10 @@ class PrimitiveInterface(IndividualType):
 
     def add_attribute(self, attribute: str, type: 'IndividualType') -> None:
         self._attributes[attribute] = type
+
+    def apply_substitution(self, _: 'Substitutions') -> 'PrimitiveInterface':
+        # QUESTION: Sub the attributes?
+        return self
 
 
 class PrimitiveType(IndividualType):
@@ -150,6 +161,9 @@ class PrimitiveType(IndividualType):
         except KeyError:
             raise AttributeError(self, attribute)
 
+    def apply_substitution(self, _: 'Substitutions') -> 'PrimitiveType':
+        # QUESTION: Sub the attributes? And even the supertypes?
+        return self
 
 
 class _Variable(Type, abc.ABC):
@@ -161,6 +175,11 @@ class _Variable(Type, abc.ABC):
     @abc.abstractmethod
     def __init__(self) -> None:
         super().__init__()
+
+    def apply_substitution(self, sub: 'Substitutions') -> Union[IndividualType, '_Variable', List[Type]]:
+        if self in sub:
+            return sub[self]
+        return self
 
 
 class SequenceVariable(_Variable):
@@ -192,6 +211,19 @@ class IndividualVariable(_Variable, IndividualType):
     def get_type_of_attribute(self, name: str) -> 'IndividualType':
         return self.bound.get_type_of_attribute(name)
 
+    def apply_substitution(self, sub: 'Substitutions') -> IndividualType:
+        if super().apply_substitution(sub) is not self:
+            return super().apply_substitution(sub)
+        # If our bound won't change, return the same variable. Without
+        # handling this case, parts of unify_ind don't work since it starts
+        # returning substitutions from type variables it wasn't originally
+        # given.
+        bound: IndividualType = sub(self.bound)
+        if bound == self.bound:
+            return self
+        # NOTE: This returns a new, distinct type variable!
+        return IndividualVariable(bound)
+
 
 class ForAll(Type):
     def __init__(self, quantified_variables: List[_Variable], type: 'IndividualType') -> None:
@@ -207,6 +239,16 @@ class ForAll(Type):
         string += ' '.join(map(str, self.quantified_variables))
         string += '. {}'.format(self.type)
         return string
+
+    def apply_substitution(self, sub: 'Substitutions') -> 'ForAll':
+        return ForAll(
+            self.quantified_variables,
+            Substitutions({
+                a: i
+                for a, i in sub.items()
+                if a not in self.quantified_variables
+            })(self.type)
+        )
 
 
 class _Function(IndividualType):
@@ -293,6 +335,8 @@ class _Function(IndividualType):
             return self
         raise AttributeError(self, name)
 
+    def apply_substitution(self, sub: 'Substitutions') -> '_Function':
+        return _Function(sub(self.input), sub(self.output))
 
 
 class PrimitiveTypes:
@@ -352,10 +396,11 @@ class TypeWithAttribute(IndividualType):
             raise AttributeError(self, name)
         return self.attribute_type
 
+    def apply_substitution(self, sub: 'Substitutions') -> 'TypeWithAttribute':
+        return TypeWithAttribute(self.attribute, sub(self.attribute_type))
+
 
 StackItemType = Union[SequenceVariable, IndividualType]
-
-
 
 # expose _Function as StackEffect
 StackEffect = _Function
@@ -364,6 +409,9 @@ StackEffect = _Function
 class Environment(Dict[str, Type]):
     def copy(self) -> 'Environment':
         return Environment(super().copy())
+
+    def apply_substitution(self, sub: 'Substitutions') -> 'Environment':
+        return Environment({name: sub(t) for name, t in self.items()})
 
 
 class Substitutions(Dict[_Variable, Union[Type, List[StackItemType]]]):
@@ -425,38 +473,8 @@ class Substitutions(Dict[_Variable, Union[Type, List[StackItemType]]]):
     def __call__(self, arg: Environment) -> Environment:
         ...
 
-    # REVIEW: I think these branches might be better off as methods (with the
-    # exception of the list case).
     def __call__(self, arg: '_T') -> '_T':
-        if isinstance(arg, Substitutions):
-            return Substitutions({
-                **self,
-                **{a: self(i) for a, i in arg.items() if a not in self._dom()}
-            })
-        elif isinstance(arg, _Function):
-            return _Function(self(arg.input), self(arg.output))
-        elif isinstance(arg, ForAll):
-            return ForAll(
-                arg.quantified_variables,
-                Substitutions({
-                    a: i
-                    for a, i in self.items()
-                    if a not in arg.quantified_variables
-                })(arg.type)
-            )
-        elif isinstance(arg, _Variable) and arg in self:
-            return self[arg]
-        elif isinstance(arg, IndividualVariable):
-            # If our bound won't change, return the same variable. Without
-            # handling this case, parts of unify_ind don't work since it starts
-            # returning substitutions from type variables it wasn't originally
-            # given.
-            bound: IndividualType = self(arg.bound)
-            if bound == arg.bound:
-                return arg
-            # NOTE: This returns a new, distinct type variable!
-            return IndividualVariable(bound)
-        elif isinstance(arg, collections.abc.Sequence):
+        if isinstance(arg, collections.abc.Sequence):
             subbed_types: List[StackItemType] = []
             for type in arg:
                 subbed_type: Union[StackItemType,
@@ -466,22 +484,19 @@ class Substitutions(Dict[_Variable, Union[Type, List[StackItemType]]]):
                 else:
                     subbed_types.append(subbed_type)
             return subbed_types
-        elif isinstance(arg, Environment):
-            return Environment({name: self(t) for name, t in arg.items()})
-        elif isinstance(arg, TypeWithAttribute):
-            return TypeWithAttribute(arg.attribute, self(arg.attribute_type))
-        elif isinstance(arg, _IntersectionType):
-            return self(arg.type_1) & self(arg.type_2)
-        elif isinstance(arg, (PrimitiveType, PrimitiveInterface, SequenceVariable)):
-            return arg
-        else:
-            raise builtins.TypeError(arg)
+        return arg.apply_substitution(self)
 
     def _dom(self) -> Set[_Variable]:
         return {*self}
 
     def __str__(self) -> str:
         return '{' + ',\n'.join(map(lambda i: '{}: {}'.format(i[0], i[1]), self.items())) + '}'
+
+    def apply_substitution(self, sub: 'Substitutions') -> 'Substitutions':
+        return Substitutions({
+            **sub,
+            **{a: sub(i) for a, i in self.items() if a not in sub._dom()}
+        })
 
 
 _InferFunction = Callable[
