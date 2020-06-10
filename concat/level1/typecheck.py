@@ -132,9 +132,12 @@ class PrimitiveInterface(IndividualType):
     def add_attribute(self, attribute: str, type: 'IndividualType') -> None:
         self._attributes[attribute] = type
 
-    def apply_substitution(self, _: 'Substitutions') -> 'PrimitiveInterface':
-        # QUESTION: Sub the attributes?
-        return self
+    def apply_substitution(self, sub: 'Substitutions') -> 'PrimitiveInterface':
+        new_attributes = {name: sub(type) for name, type in self._attributes.items()}
+        if new_attributes == self._attributes:
+            return self
+        new_name = '{}[sub {}]'.format(self._name, id(sub))
+        return PrimitiveInterface(new_name, new_attributes)
 
 
 class PrimitiveType(IndividualType):
@@ -161,9 +164,13 @@ class PrimitiveType(IndividualType):
         except KeyError:
             raise AttributeError(self, attribute)
 
-    def apply_substitution(self, _: 'Substitutions') -> 'PrimitiveType':
-        # QUESTION: Sub the attributes? And even the supertypes?
-        return self
+    def apply_substitution(self, sub: 'Substitutions') -> 'PrimitiveType':
+        new_attributes = {name: sub(type) for name, type in self._attributes.items()}
+        new_supertypes = tuple(sub(type) for type in self._supertypes)
+        if new_attributes == self._attributes and new_supertypes == self._supertypes:
+            return self
+        new_name = '{}[sub {}]'.format(self._name, id(sub))
+        return PrimitiveType(new_name, new_supertypes, new_attributes)
 
 
 class _Variable(Type, abc.ABC):
