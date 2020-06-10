@@ -62,7 +62,7 @@ class PrimitiveInterfaces:
 
 class PrimitiveTypes:
     tuple = concat.level1.typecheck.PrimitiveType(
-        'tuple', (concat.level1.typecheck.PrimitiveTypes.iterable, PrimitiveInterfaces.subscriptable))
+        'tuple', (concat.level1.typecheck.PrimitiveInterfaces.iterable, PrimitiveInterfaces.subscriptable))
 
 
 def infer(env: concat.level1.typecheck.Environment, program: concat.astutils.WordsOrStatements, is_top_level=False) -> Tuple[concat.level1.typecheck.Substitutions, concat.level1.typecheck.StackEffect]:

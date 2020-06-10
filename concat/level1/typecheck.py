@@ -151,21 +151,6 @@ class PrimitiveType(IndividualType):
             raise AttributeError(self, attribute)
 
 
-class PrimitiveTypes:
-    int = PrimitiveType('int')
-    bool = PrimitiveType('bool')
-    object = PrimitiveType('object')
-    context_manager = PrimitiveType('context_manager')
-    # TODO: Make this a primtive interface.
-    iterable = PrimitiveType('iterable')
-    dict = PrimitiveType('dict', (iterable,))
-    str = PrimitiveType('str')
-    module = PrimitiveType('module')
-    list = PrimitiveType('list', (iterable,))
-    py_function = PrimitiveType('py_function')
-    file = PrimitiveType('file', (iterable,), {
-                         'seek': py_function, 'read': py_function})
-
 
 class _Variable(Type, abc.ABC):
     """Objects that represent type variables.
@@ -187,9 +172,9 @@ class SequenceVariable(_Variable):
 
 
 class IndividualVariable(_Variable, IndividualType):
-    def __init__(self, bound: 'IndividualType' = PrimitiveTypes.object) -> None:
+    def __init__(self, bound: Optional[IndividualType] = None) -> None:
         super().__init__()
-        self.bound = bound
+        self.bound = bound or PrimitiveTypes.object
 
     def is_subtype_of(self, supertype: Type):
         return super().is_subtype_of(supertype) or self.bound.is_subtype_of(
@@ -309,6 +294,32 @@ class _Function(IndividualType):
         raise AttributeError(self, name)
 
 
+
+class PrimitiveTypes:
+    int = PrimitiveType('int')
+    bool = PrimitiveType('bool')
+    object = PrimitiveType('object')
+    context_manager = PrimitiveType('context_manager')
+    dict = PrimitiveType('dict')
+    str = PrimitiveType('str')
+    module = PrimitiveType('module')
+    list = PrimitiveType('list')
+    py_function = PrimitiveType('py_function')
+    file = PrimitiveType('file', (), {
+                         'seek': py_function, 'read': py_function})
+
+
+class PrimitiveInterfaces:
+    invertible = PrimitiveInterface('invertible')
+    __rest_var = SequenceVariable()
+    # FIXME: This should be a type scheme. I don't know how that will work.
+    invertible.add_attribute('__invert__', _Function(
+        [__rest_var, invertible], [__rest_var, IndividualVariable()]))
+    iterable = PrimitiveInterface('iterable')
+    for type in {PrimitiveTypes.int, PrimitiveTypes.dict, PrimitiveTypes.list, PrimitiveTypes.file}:
+        type.add_supertype(iterable)
+
+
 class TypeWithAttribute(IndividualType):
     def __init__(self, attribute: str, attribute_type: 'IndividualType') -> None:
         super().__init__()
@@ -344,14 +355,6 @@ class TypeWithAttribute(IndividualType):
 
 StackItemType = Union[SequenceVariable, IndividualType]
 
-
-class PrimitiveInterfaces:
-    invertible = PrimitiveInterface('invertible')
-    __rest_var = SequenceVariable()
-    # FIXME: This should be a type scheme. I don't know how that will work.
-    invertible.add_attribute('__invert__', _Function(
-        [__rest_var, invertible], [__rest_var, IndividualVariable()]))
-    PrimitiveTypes.int.add_supertype(invertible)
 
 
 # expose _Function as StackEffect
@@ -600,7 +603,7 @@ def infer(
     elif isinstance(e[-1], concat.level1.parse.TryWordNode):
         S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
         a_bar, b_bar = SequenceVariable(), SequenceVariable()
-        phi = unify(list(o), [a_bar, PrimitiveTypes.iterable,
+        phi = unify(list(o), [a_bar, PrimitiveInterfaces.iterable,
                               _Function([a_bar], [b_bar])])
         return phi(S), phi(_Function(i, [b_bar]))
     elif isinstance(e[-1], concat.level1.parse.DictWordNode):
