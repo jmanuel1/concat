@@ -323,6 +323,7 @@ class _Function(IndividualType):
             for type_from_self, type_from_supertype in zip(
                     self.input, supertype.input):
                 if not type_from_supertype.is_subtype_of(type_from_self):
+                    print(type_from_supertype, 'not subtype of', type_from_self)
                     return False
             # output types are covariant
             for type_from_self, type_from_supertype in zip(
@@ -377,20 +378,6 @@ class TypeWithAttribute(IndividualType):
         self.attribute = attribute
         self.attribute_type = attribute_type
 
-    def is_subtype_of(self, supertype: Type) -> bool:
-        if super().is_subtype_of(supertype):
-            return True
-        elif isinstance(supertype, TypeWithAttribute):
-            return (self.attribute == supertype.attribute
-                    and self.attribute_type.is_subtype_of(
-                        supertype.attribute_type))
-        elif isinstance(supertype, IndividualType):
-            try:
-                # REVIEW: I feel like this really tests if we're the supertype.
-                return self.attribute_type.is_subtype_of(supertype.get_type_of_attribute(self.attribute))
-            except TypeError:
-                return False
-        raise NotImplementedError(supertype)
 
     def __str__(self) -> str:
         type = ''
