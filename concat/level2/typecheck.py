@@ -52,6 +52,13 @@ class StackEffectTypeNode(IndividualTypeNode):
         self.output = map(extract_value, output)
 
 
+class IntersectionTypeNode(IndividualTypeNode):
+    def __init__(self, location: concat.astutils.Location, type_1: IndividualTypeNode, type_2: IndividualTypeNode):
+        super().__init__(location)
+        self.type_1 = type_1
+        self.type_2 = type_2
+
+
 class PrimitiveInterfaces:
     subscriptable = concat.level1.typecheck.PrimitiveInterface('subscriptable')
     concat.level1.typecheck.PrimitiveTypes.list.add_supertype(subscriptable)
@@ -179,6 +186,10 @@ def ast_to_type(ast: TypeNode, subs: concat.level1.typecheck.Substitutions, env:
         in_types = [_ensure_type(item[1], env, item[0]) for item in ast.input]
         out_types = [_ensure_type(item[1], env, item[0]) for item in ast.output]
         return concat.level1.typecheck.StackEffect([a_bar, *in_types], [b_bar, *out_types]), new_env
+    elif isinstance(ast, IntersectionTypeNode):
+        type_1, new_env = ast_to_type(ast.type_1, subs, env)
+        type_2, newer_env = ast_to_type(ast.type_2, subs, new_env)
+        return type_1 & type_2, newer_env
     else:
         raise NotImplementedError(ast)
 
@@ -253,12 +264,21 @@ def typecheck_extension(parsers: concat.level0.parse.ParserDict) -> None:
 
         # FIXME: Get the location
         return StackEffectTypeNode((0, 0), a_bar_parsed, i, b_bar_parsed, o)
+    @parsy.generate
+    def intersection_type_parser() -> Generator:
+        # print('parsing intersection type')
+        yield parsers.token('AMPER')
+        type_1 = yield parsers['type']
+        type_2 = yield parsers['type']
+        return IntersectionTypeNode(type_1.location, type_1, type_2)
 
     parsers['stack-effect-type'] = concat.parser_combinators.desc_cumulatively(
         stack_effect_type_parser, 'stack effect type'
     )
 
     parsers['type'] = parsy.alt(
+        concat.parser_combinators.desc_cumulatively(
+            intersection_type_parser, 'intersection type'),
         concat.parser_combinators.desc_cumulatively(
             attribute_type_parser, 'attribute type'),
         concat.parser_combinators.desc_cumulatively(
