@@ -499,10 +499,12 @@ _InferFunction = Callable[
 ]
 
 
-def _inst(sigma: ForAll) -> IndividualType:
-    """This is the inst function described by Kleffner."""
-    subs = Substitutions({a: type(a)() for a in sigma.quantified_variables})
-    return subs(sigma.type)
+def inst(sigma: Union[ForAll, PrimitiveInterface, _Function]) -> IndividualType:
+    """This is based on the inst function described by Kleffner."""
+    if isinstance(sigma, ForAll):
+        subs = Substitutions({a: type(a)() for a in sigma.quantified_variables})
+        return subs(sigma.type)
+    raise builtins.TypeError(type(sigma))
 
 
 def infer(
@@ -578,7 +580,7 @@ def infer(
             top = IndividualVariable(TypeWithAttribute(
                 child.value, attr_type_var))
             S2 = unify(list(o1), [rest, top])
-            attr_type = _inst(S2(attr_type_var).to_for_all())
+            attr_type = inst(S2(attr_type_var).to_for_all())
             rest_types = S2(rest)
             if isinstance(rest_types, SequenceVariable):
                 rest_types = [rest_types]
@@ -587,7 +589,7 @@ def infer(
         elif isinstance(child, concat.level0.parse.NameWordNode):
             if child.value not in gamma:
                 raise NameError(child)
-            name_type = _inst(gamma[child.value].to_for_all())
+            name_type = inst(gamma[child.value].to_for_all())
             return S1, _Function(i1, [*o1, S1(name_type)])
         S2, (i2, o2) = infer(S1(gamma), pushed.children, extensions=extensions)
         return S2(S1), _Function(S2(i1), [*S2(o1), _Function(i2, o2)])
