@@ -494,7 +494,7 @@ class Substitutions(Dict[_Variable, Union[Type, List[StackItemType]]]):
 
 
 _InferFunction = Callable[
-    [Environment, 'concat.astutils.WordsOrStatements'],
+    [Environment, 'concat.astutils.WordsOrStatements', bool, Tuple['_InferFunction'], Tuple[Substitutions, _Function]],
     Tuple[Substitutions, _Function]
 ]
 
@@ -513,30 +513,26 @@ def infer(
 ) -> Tuple[Substitutions, _Function]:
     """The infer function described by Kleffner."""
     e = list(e)
-    # HACK: For now this works, but I might want a better way to pass around
-    # the extensions later
-    infer._extensions = (   # type: ignore
-        infer._extensions  # type: ignore
-        if extensions is None else extensions)
+    print(e)
+
     if len(e) == 0:
         a_bar = SequenceVariable()
-        print('is top level?', is_top_level)
         effect = _Function([], []) if is_top_level else _Function(
             [a_bar], [a_bar])
         return Substitutions(), effect
-    elif isinstance(e[-1], concat.level0.parse.NumberWordNode):
-        S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
+
+    S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level, extensions=extensions)
+
+    if isinstance(e[-1], concat.level0.parse.NumberWordNode):
         if isinstance(e[-1].value, int):
             return S, _Function(i, [*o, PrimitiveTypes.int])
         else:
             raise NotImplementedError
     # there's no False word at the moment
     elif isinstance(e[-1], concat.level1.parse.TrueWordNode):
-        S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
         return S, _Function(i, [*o, PrimitiveTypes.bool])
     elif isinstance(e[-1], concat.level1.parse.AddWordNode):
         # for now, only works with ints and strings
-        S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
         a_bar = SequenceVariable()
         try:
             phi = unify(list(o), [
@@ -550,32 +546,30 @@ def infer(
     elif isinstance(e[-1], concat.level0.parse.NameWordNode):
         # the type of if_then is built-in
         if e[-1].value == 'if_then':
-            S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
             a_bar = SequenceVariable()
             b = _Function([a_bar], [a_bar])
             phi = unify(list(o), [a_bar, PrimitiveTypes.bool, b])
             return phi(S), phi(_Function(i, [a_bar]))
         # the type of call is built-in
         elif e[-1].value == 'call':
-            S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
             a_bar, b_bar = SequenceVariable(), SequenceVariable()
             phi = unify(list(o), [a_bar, _Function([a_bar], [b_bar])])
             return phi(S), phi(_Function(i, [b_bar]))
-        S, (i1, o1) = infer(gamma, e[:-1], is_top_level=is_top_level)
+        (i1, o1) = i, o
         if not e[-1].value in S(gamma):
             raise NameError(e[-1])
-        type_of_name = _inst(S(gamma)[e[-1].value].to_for_all())
+        type_of_name = inst(S(gamma)[e[-1].value].to_for_all())
         if not isinstance(type_of_name, _Function):
             raise NotImplementedError(
                 'name {} of type {}'.format(e[-1].value, type_of_name))
         i2, o2 = type_of_name
-        print('trying to unify using name', e[-1].value)
+        print('trying to unify using name', e[-1].value, 'at', e[-1].location)
         print(*o1)
         phi = unify(list(o1), S(i2))
         return phi(S), phi(_Function(i1, S(o2)))
     elif isinstance(e[-1], concat.level0.parse.PushWordNode) and not isinstance(e[-1].children[0], concat.level1.parse.SubscriptionWordNode):
         pushed = cast(concat.level0.parse.PushWordNode, e[-1])
-        S1, (i1, o1) = infer(gamma, e[:-1], is_top_level=is_top_level)
+        S1, (i1, o1) = S, (i, o)
         # special case for push an attribute accessor
         child = pushed.children[0]
         rest = SequenceVariable()
@@ -595,32 +589,29 @@ def infer(
                 raise NameError(child)
             name_type = _inst(gamma[child.value].to_for_all())
             return S1, _Function(i1, [*o1, S1(name_type)])
-        S2, (i2, o2) = infer(S1(gamma), pushed.children)
+        S2, (i2, o2) = infer(S1(gamma), pushed.children, extensions=extensions)
         return S2(S1), _Function(S2(i1), [*S2(o1), _Function(i2, o2)])
     elif isinstance(e[-1], concat.level0.parse.QuoteWordNode):
         quotation = cast(concat.level0.parse.QuoteWordNode, e[-1])
-        return infer(gamma, [*e[:-1], *quotation.children], is_top_level=is_top_level)
+        return infer(gamma, [*e[:-1], *quotation.children], is_top_level=is_top_level, extensions=extensions)
     # there is no fix combinator, lambda abstraction, or a let form like
     # Kleffner's
     # now for our extensions
     elif isinstance(e[-1], concat.level1.parse.WithWordNode):
-        S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
         a_bar, b_bar = SequenceVariable(), SequenceVariable()
         phi = unify(list(o), [a_bar, _Function([a_bar, PrimitiveTypes.object], [
             b_bar]), PrimitiveTypes.context_manager])
         return phi(S), phi(_Function(i, [b_bar]))
     elif isinstance(e[-1], concat.level1.parse.TryWordNode):
-        S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
         a_bar, b_bar = SequenceVariable(), SequenceVariable()
         phi = unify(list(o), [a_bar, PrimitiveInterfaces.iterable,
                               _Function([a_bar], [b_bar])])
         return phi(S), phi(_Function(i, [b_bar]))
     elif isinstance(e[-1], concat.level1.parse.DictWordNode):
-        S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
         phi = S
         collected_type = o
         for key, value in e[-1].dict_children:
-            phi1, (i1, o1) = infer(phi(gamma), key)
+            phi1, (i1, o1) = infer(phi(gamma), key, extensions=extensions)
             R1 = unify(phi1(collected_type), list(i1))
             phi = R1(phi1(phi))
             collected_type = phi(o1)
@@ -628,7 +619,7 @@ def infer(
             collected_type, collected_type_sub = drop_last_from_type_seq(
                 collected_type)
             phi = collected_type_sub(phi)
-            phi2, (i2, o2) = infer(phi(gamma), value)
+            phi2, (i2, o2) = infer(phi(gamma), value, extensions=extensions)
             R2 = unify(phi2(collected_type), list(i2))
             phi = R2(phi2(phi))
             collected_type = phi(o2)
@@ -638,11 +629,10 @@ def infer(
             phi = collected_type_sub(phi)
         return phi, phi(_Function(i, [*collected_type, PrimitiveTypes.dict]))
     elif isinstance(e[-1], concat.level1.parse.ListWordNode):
-        S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
         phi = S
         collected_type = o
         for item in e[-1].list_children:
-            phi1, (i1, o1) = infer(phi(gamma), item)
+            phi1, (i1, o1) = infer(phi(gamma), item, extensions=extensions)
             R1 = unify(phi1(phi(collected_type)), list(i1))
             collected_type = R1(phi1(phi(o1)))
             # drop the top of the stack to use as the key
@@ -651,16 +641,13 @@ def infer(
             phi = collected_type_sub(R1(phi1(phi)))
         return phi, phi(_Function(i, [*collected_type, PrimitiveTypes.list]))
     elif isinstance(e[-1], concat.level1.parse.InvertWordNode):
-        S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
         out_var = SequenceVariable()
         type_var = IndividualVariable(PrimitiveInterfaces.invertible)
         phi = unify(list(o), [out_var, type_var])
         return phi(S), phi(_Function(i, [out_var, type_var]))
     elif isinstance(e[-1], concat.level0.parse.StringWordNode):
-        S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
         return S, _Function(i, [*o, PrimitiveTypes.str])
     elif isinstance(e[-1], concat.level0.parse.AttributeWordNode):
-        S, (i, o) = infer(gamma, e[:-1], is_top_level=is_top_level)
         out_var = SequenceVariable()
         attr_type_var = IndividualVariable()
         type_var = IndividualVariable(
@@ -678,19 +665,13 @@ def infer(
         R = unify(out_types, phi([*attr_type.input]))
         return R(phi(S)), R(phi(_Function(i, attr_type.output)))
     else:
-        for extension in infer._extensions:  # type: ignore
+        for extension in extensions or []:
             try:
-                return extension(gamma, e, is_top_level)
-            except NotImplementedError as exc:
-                print('NotImplementedError', exc)
-                # print(exc.__traceback__)
+                return extension(gamma, e, is_top_level, extensions=extensions, previous=(S, _Function(i, o)))
+            except NotImplementedError:
                 pass
         raise NotImplementedError(
             "don't know how to handle '{}'".format(e[-1]))
-
-
-# Initialize the extensions
-infer._extensions = ()  # type: ignore
 
 
 def _ftv(f: Union[Type, List[StackItemType], Dict[str, Type]]) -> Set[_Variable]:

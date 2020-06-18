@@ -72,10 +72,15 @@ class PrimitiveTypes:
         'tuple', (concat.level1.typecheck.PrimitiveInterfaces.iterable, PrimitiveInterfaces.subscriptable))
 
 
-def infer(env: concat.level1.typecheck.Environment, program: concat.astutils.WordsOrStatements, is_top_level=False) -> Tuple[concat.level1.typecheck.Substitutions, concat.level1.typecheck.StackEffect]:
+def infer(
+    env: concat.level1.typecheck.Environment,
+    program: concat.astutils.WordsOrStatements,
+    is_top_level=False,
+    extensions=(),
+    previous: Tuple[concat.level1.typecheck.Substitutions, concat.level1.typecheck.StackEffect] = (concat.level1.typecheck.Substitutions(), concat.level1.typecheck.StackEffect([], []))
+) -> Tuple[concat.level1.typecheck.Substitutions, concat.level1.typecheck.StackEffect]:
+    subs, (input, output) = previous
     if isinstance(program[-1], concat.level2.parse.CastWordNode):
-        subs, (input, output) = concat.level1.typecheck.infer(
-            env, program[:-1], is_top_level=is_top_level)
         new_type, _ = ast_to_type(program[-1].type, subs, env)
         rest, subs_2 = concat.level1.typecheck.drop_last_from_type_seq(
             list(output))
@@ -84,8 +89,6 @@ def infer(env: concat.level1.typecheck.Environment, program: concat.astutils.Wor
         return subs_2(subs), effect
     elif isinstance(program[-1], concat.level0.parse.ImportStatementNode):
         # TODO: Support all types of import correctly.
-        sub_and_effect = concat.level1.typecheck.infer(
-            env, program[:-1], is_top_level=is_top_level)
         seq_var = concat.level1.typecheck.SequenceVariable()
         # FIXME: We should resolve imports as if we are the source file.
         module = importlib.import_module(program[-1].value)
@@ -98,8 +101,8 @@ def infer(env: concat.level1.typecheck.Environment, program: concat.astutils.Wor
                                                                                                                [seq_var, module_type]))
         return sub_and_effect
     elif isinstance(program[-1], concat.level1.parse.FuncdefStatementNode):
-        S, f = concat.level1.typecheck.infer(
-            env, program[:-1], is_top_level=is_top_level)
+        S = subs
+        f = concat.level1.typecheck.StackEffect(input, output)
         name = program[-1].name
         declared_type: Optional[concat.level1.typecheck.StackEffect]
         if program[-1].stack_effect:
@@ -109,7 +112,7 @@ def infer(env: concat.level1.typecheck.Environment, program: concat.astutils.Wor
             declared_type = None
             env_with_types = env.copy()
         phi1, inferred_type = concat.level1.typecheck.infer(
-            S(env_with_types), program[-1].body, is_top_level=False)
+            S(env_with_types), program[-1].body, is_top_level=False, extensions=extensions)
         if declared_type is not None:
             declared_type = S(declared_type)
             phi2 = concat.level1.typecheck.unify_ind(
@@ -126,7 +129,6 @@ def infer(env: concat.level1.typecheck.Environment, program: concat.astutils.Wor
         env[name] = effect.generalized_wrt(S(env))
         return S, f
     elif isinstance(program[-1], concat.level0.parse.PushWordNode):
-        subs, (input, output) = concat.level1.typecheck.infer(env, program[:-1])
         child = program[-1].children[0]
         rest = concat.level1.typecheck.SequenceVariable()
         # special case for subscription words
