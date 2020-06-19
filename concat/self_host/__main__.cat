@@ -3,7 +3,7 @@
 
 from concat.transpile import transpile
 import concat.astutils
-import concat.level1.execute
+import concat.level1.execute as execute
 import concat.level1.typecheck
 import concat.level1.stdlib.repl as repl
 from concat.level2.stdlib.pyinterop import to_py_function
@@ -19,46 +19,67 @@ from typing import TextIO
 def file_type:
     """Capture the filename and create a list containing the file name and file object.""" drop
 
-    $(dup [(), {'mode': 'r',} swap open]) curry
+    dup [(), {'mode': 'r',} swap open]
 
 
-def seek_file:
+def seek_file(file:file offset:int whence:int --):
     swap [(), (),] [,] swap pick $.seek py_call drop drop
 
 
-def get_line_at:
+def get_line_at(file:file location:tuple -- result:str):
     over 0 io$.SEEK_SET seek_file
     swap to_list
     # FIXME: We cast because we don't have *generic* interfaces for subtraction
     # and subscription.
-    [[0] cast (int) 1 -]
+    $[$[0] cast (int) 1 -]
 
 
 def create_arg_parser:
-    {'description': ()} [,] argparse$.ArgumentParser py_call
+    {'description': ()} [,] argparse$.ArgumentParser py_call cast (& .add_argument:py_function .parse_args:py_function)
 
 
 def add_argument:
     [(),] pick $.add_argument py_call drop drop
 
 
+#def run_repl(args:.debug:bool -- ):
+#    [,] [[,], [,], over $.debug] repl$.repl py_call drop
+
+
 'Run a Concat program.' create_arg_parser
 
-dup {'nargs': '?', 'type': $file_type to_py_function, 'default': sys$.stdin, 'help': 'file to run'} 'file' add_argument
+dup {'nargs': '?', 'type': $file_type to_py_function, 'default': ['<stdin>', sys$.stdin,], 'help': 'file to run'} 'file' add_argument
 dup {'action': 'store_true', 'default': False, 'help': 'turn stack debugging on'} '--debug' add_argument
 
-$.parse_args [,] [,] pick py_call nip
+$.parse_args [,] [,] pick py_call nip cast (& .file:list .debug:bool)
 
 # interactive mode
 dup
-$.file sys$.stdin is
+$.file$[1] sys$.stdin is
+# FIXME: The inside of this quotation seems to run before we reach choose. For
+# example, we see the value of the flag argument to choose here, even if it's
+# False.
 $([,] [[,], [,], over $.debug] repl$.repl py_call drop)
 $(
     [
-      [concat.level1.typecheck$.NameError, $()],
+      [concat.level1.typecheck$.NameError, $(
+        [,] ['Error:\n',] $print py_call drop
+        [,] [over, 'in line:',] $print py_call drop
+        {'end': '\n',} [pick$.file$[1] cast (file) pick$.location get_line_at,] $print py_call drop
+        [,] [' ' pick$.location$[1] cast (int) * '^' +,] $print py_call drop
+        drop None
+      ),],
+      [$Exception, $(
+        [,] ['An internal error has occurred.',] $print py_call drop
+        [,] ['This is a big in Concat.',] $print py_call drop
+        None swap raise
+      ),]
     ]
-    $($.file [,] [,] pick $.read py_call nip [(),] [,] swap $transpile py_call)
+    $(dup $.file$[1] cast (file) [,] [,] pick $.read py_call nip [(),] [,] swap $transpile py_call)
     try
+    # FIXME: An empty dict {,} is parsed as a set.
+    dup None is $([,] [pick$.file$[0], over, {},] execute$.execute py_call drop) if_not
+    drop  # drop the Python AST
 )
 choose  # FIXME: We should test for interactivity instead
 # else:
