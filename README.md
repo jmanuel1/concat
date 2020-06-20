@@ -3,7 +3,8 @@ Concat
 
 An experimental concatenative Python-based programming language.
 
-Examples are in the examples directory. To see the spec, go to
+Examples are in the examples directory. To see the (out of date and incomplete)
+spec, go to
 [http://jmanuel1.github.io/concat-spec/](http://jmanuel1.github.io/concat-spec/).
 
 Python 3.7+ required.
