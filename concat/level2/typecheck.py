@@ -99,7 +99,7 @@ def infer(
         # mutate type environment
         env[program[-1].value] = concat.level1.typecheck.ForAll([seq_var], concat.level1.typecheck.StackEffect([seq_var],
                                                                                                                [seq_var, module_type]))
-        return sub_and_effect
+        return previous
     elif isinstance(program[-1], concat.level1.parse.FuncdefStatementNode):
         S = subs
         f = concat.level1.typecheck.StackEffect(input, output)
