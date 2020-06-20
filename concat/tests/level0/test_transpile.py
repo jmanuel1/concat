@@ -91,5 +91,5 @@ class TestSubVisitors(unittest.TestCase):
                                 'visitor')
             message = message_template.format(node)
             self.fail(msg=message)
-        self.assertIsInstance(py_node, ast.Attribute,
-                              msg='Python node is not a attribute')
+        self.assertIsInstance(py_node, ast.expr,
+                              msg='Python node is not an expression')

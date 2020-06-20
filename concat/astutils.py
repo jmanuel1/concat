@@ -1,4 +1,4 @@
-from typing import Union, List, Tuple, Iterable, Optional, Sequence, cast
+from typing import Union, List, Tuple, Iterable, Optional, Sequence, Iterator, cast
 import ast
 import concat.visitors
 import concat.level0.parse
@@ -8,7 +8,7 @@ import concat.level0.parse
 
 WordsOrStatements = Sequence[
     Union['concat.level0.parse.WordNode', 'concat.level0.parse.StatementNode']]
-Words = List['concat.level0.parse.WordNode']
+Words = List[concat.level0.parse.WordNode]
 Location = Tuple[int, int]
 _TranspilerDict = concat.visitors.VisitorDict[
     'concat.level0.parse.Node', ast.AST]
@@ -271,12 +271,23 @@ def correct_magic_signature(statement: ast.stmt) -> ast.stmt:
 
 def statementfy(node: Union[ast.expr, ast.stmt]) -> ast.stmt:
     if isinstance(node, ast.expr):
-        load = ast.Load()
-        stack = ast.Name(id='stack', ctx=load)
-        stash = ast.Name(id='stash', ctx=load)
-        call_node = ast.Call(func=node, args=[stack, stash], keywords=[])
+        call_node = call_concat_function(node)
         return ast.Expr(value=call_node)
     return node
+
+
+def parse_py_qualified_name(name: str) -> Union[ast.Name, ast.Attribute]:
+    return cast(Union[ast.Name, ast.Attribute], cast(ast.Expression, ast.parse(name, mode='eval')).body)
+
+
+def assert_all_nodes_have_locations(tree: ast.AST) -> None:
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.expr, ast.stmt)):
+            print(node)
+            assert hasattr(node, 'lineno')
+            assert hasattr(node, 'col_offset')
+            print(node.lineno, node.col_offset, type(
+                node.lineno), type(node.col_offset))
 
 
 def flatten(list: List[Union['concat.level0.parse.WordNode', Words]]) -> Words:
@@ -287,3 +298,38 @@ def flatten(list: List[Union['concat.level0.parse.WordNode', Words]]) -> Words:
         else:
             flat_list.extend(el)
     return flat_list
+
+
+def call_concat_function(func: ast.expr) -> ast.Call:
+    load = ast.Load()
+    stack = ast.Name(id='stack', ctx=load)
+    stash = ast.Name(id='stash', ctx=load)
+    call_node = ast.Call(func=func, args=[stack, stash], keywords=[])
+    return call_node
+
+
+def abstract(func: ast.expr) -> ast.Lambda:
+    args = ast.arguments([ast.arg('stack', None), ast.arg(
+        'stash', None)], None, [], [], None, [])
+    py_node = ast.Lambda(args, func)
+    return py_node
+
+
+def assign_self_pushing_module_type_to_all_components(qualified_name: str) -> Iterator[ast.Assign]:
+    qualified_name = qualified_name.strip()
+    components = tuple(qualified_name.split('.'))
+    if qualified_name.endswith('.__class__'):
+        components = components[:-1]
+    assert components
+    for i in range(1, len(components) + 1):
+        target = '.'.join(components[:i])
+        assert target
+        assignment = '{}.__class__ = concat.level0.stdlib.importlib.Module'.format(
+            target)
+        yield ast.parse(assignment, mode='exec').body[0]  # type: ignore
+
+
+def append_to_stack(expr: ast.expr) -> ast.expr:
+    push_func = ast.Attribute(ast.Name(id='stack', ctx=ast.Load()), 'append', ctx=ast.Load())
+    py_node = ast.Call(func=push_func, args=[expr], keywords=[])
+    return py_node

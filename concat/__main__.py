@@ -1,49 +1,15 @@
 """The Concat Implementation."""
 
 
-import concat.level0.lex
-import concat.level0.parse
-import concat.level0.transpile
-import concat.level0.execute
-import concat.level1.lex
-import concat.level1.parse
-import concat.level1.transpile
-import concat.level1.execute
+from concat.transpile import transpile
+import concat.astutils
 import concat.level1.typecheck
-import concat.level1.stdlib.repl
+import concat.level2.stdlib.repl
+import concat.level2.execute
 import argparse
 import sys
-import ast
-from typing import Callable, IO, AnyStr, cast, List
-
-
-def tokenize(code: str) -> List[concat.level0.lex.Token]:
-    lexer = concat.level1.lex.Lexer()
-    lexer.input(code)
-    tokens = []
-    while True:
-        token = lexer.token()
-        if token is None:
-            break
-        tokens.append(token)
-    return tokens
-
-
-def transpile(code: str) -> ast.Module:
-    tokens = tokenize(code)
-    parser = concat.level0.parse.ParserDict()
-    parser.extend_with(concat.level0.parse.level_0_extension)
-    parser.extend_with(concat.level1.parse.level_1_extension)
-    concat_ast = parser.parse(tokens)
-    # TODO: put names from the preamble into the type environment
-    # FIXME: Consider the type of everything entered interactively beforehand.
-    concat.level1.typecheck.infer(
-        concat.level1.typecheck.Environment(), concat_ast.children)
-    transpiler = concat.level0.transpile.VisitorDict[concat.level0.parse.Node,
-                                                     ast.AST]()
-    transpiler.extend_with(concat.level0.transpile.level_0_extension)
-    transpiler.extend_with(concat.level1.transpile.level_1_extension)
-    return cast(ast.Module, transpiler.visit(concat_ast))
+import io
+from typing import Callable, IO, AnyStr, TextIO
 
 
 filename = '<stdin>'
@@ -58,6 +24,12 @@ def file_type(mode: str) -> Callable[[str], IO[AnyStr]]:
     return func
 
 
+def get_line_at(file: TextIO, location: concat.astutils.Location) -> str:
+    file.seek(0, io.SEEK_SET)
+    lines = [*file]
+    return lines[location[0] - 1]
+
+
 arg_parser = argparse.ArgumentParser(description='Run a Concat program.')
 arg_parser.add_argument(
     'file',
@@ -67,13 +39,29 @@ arg_parser.add_argument(
     help='file to run')
 arg_parser.add_argument('--debug', action='store_true',
                         default=False, help='turn stack debugging on')
-args = arg_parser.parse_args()
+
+# We should pass any unknown args onto the program we're about to run. There
+# might be a better way to go about this, but I think this is fine for now.
+args, rest = arg_parser.parse_known_args()
+sys.argv = [sys.argv[0], *rest]
 
 
 # interactive mode
-if args.file is sys.stdin:  # FIXME: We should test for interactivity instead
-    concat.level1.stdlib.repl.repl([], [], args.debug)
+if args.file.isatty():
+    concat.level2.stdlib.repl.repl([], [], args.debug)
 else:
-    python_ast = transpile(args.file.read())
-    args.file.close()
-    concat.level1.execute.execute(filename, python_ast, {})
+    try:
+        python_ast = transpile(args.file.read())
+    except concat.level1.typecheck.NameError as e:
+        print('Error:\n')
+        print(e, 'in line:')
+        print(get_line_at(args.file, e.location), end='')
+        print(' '*e.location[1] + '^')
+    except Exception:
+        print('An internal error has occurred.')
+        print('This is a bug in Concat.')
+        raise
+    else:
+        concat.level2.execute.execute(filename, python_ast, {})
+    finally:
+        args.file.close()

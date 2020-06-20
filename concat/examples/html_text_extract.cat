@@ -1,0 +1,31 @@
+# IGNORE
+import html
+import builtins
+# TODO: add these to requirements.txt or some better of dev dependencies?
+import requests
+from pyquery import PyQuery
+
+
+def get_url:
+    [(),] [,] swap requests$.get py_call cast (.text:str)
+
+
+def print:
+    [(),] [,] swap builtins$.print py_call
+
+
+def parse_html:
+    [(),] [,] swap $PyQuery cast (py_function) py_call cast (py_function)
+
+
+def query_selector(py_query_obj:py_function selector -- py_query_result):
+    [(),] [,] swap pick py_call nip
+
+
+def get_text_content:
+    # FIXME: We shouldn't need the first cast.
+    [,] [,] pick cast (.text:py_function) $.text py_call cast (str) nip
+
+
+'https://pypi.org/project/pyquery/' get_url
+$.text parse_html 'h1' query_selector get_text_content print

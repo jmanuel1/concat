@@ -16,11 +16,11 @@ setup(
         'Intended Audience :: Developers',
         'Topic :: Software Development :: Interpreters',
         'License :: OSI Approved :: MIT License',
-        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.7',
     ],
     keywords='concatenative',
     packages=find_packages(),  # type: ignore
     install_requires=['astunparse>=1.3.0,<2', 'parsy>=1.3.0,<2'],
     test_suite='nose.collector',
-    tests_require=['nose', 'scripttest']
+    tests_require=['nose', 'scripttest', 'hypothesis']
 )

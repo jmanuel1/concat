@@ -5,6 +5,7 @@ It is like Factor's listener vocabulary."""
 
 import concat
 import concat.astutils
+import concat.typecheck
 import concat.level0.stdlib.importlib
 import concat.level0.parse
 import concat.level0.transpile
@@ -13,6 +14,7 @@ import concat.level1.lex
 import concat.level1.parse
 import concat.level1.transpile
 import concat.level1.execute
+import concat.level1.typecheck
 import sys
 import tokenize as tokize
 import ast
@@ -22,10 +24,6 @@ from typing import List, Dict, Set, Callable, NoReturn, cast
 
 
 sys.modules[__name__].__class__ = concat.level0.stdlib.importlib.Module
-
-
-class REPLExitException(Exception):
-    pass
 
 
 def _tokenize(code: str) -> List[concat.level0.lex.Token]:
@@ -45,10 +43,9 @@ def _parse(code: str) -> concat.level0.parse.TopLevelNode:
     parser = concat.level0.parse.ParserDict()
     parser.extend_with(concat.level0.parse.level_0_extension)
     parser.extend_with(concat.level1.parse.level_1_extension)
+    # FIXME: Level 2 parser extension and typechecker extensions should be
+    # here.
     concat_ast = parser.parse(tokens)
-    # TODO: enable type checking from within read_quot.
-    # concat.level1.typecheck.infer(
-    #     concat.level1.typecheck.Environment(), concat_ast.children)
     return concat_ast
 
 
@@ -77,43 +74,41 @@ def _read_until_complete_line() -> str:
 
 
 def read_form(stack: List[object], stash: List[object]) -> None:
-    string = _read_until_complete_line()
-    ast = _parse(string)
-    location = ast.children[0].location if ast.children else (0, 0)
-
     caller_frame = inspect.stack()[1].frame
     caller_globals: Dict[str, object] = {
-        **caller_frame.f_globals, 'stack': stack, 'stash': stash}
+        **caller_frame.f_globals}
     caller_locals = caller_frame.f_locals
+    scope = {**caller_globals, **caller_locals, 'stack': stack, 'stash': stash}
 
-    # FIXME: Use parsers['word'].many instead of the top-level parser, or just
-    # wrap whatever expression we read in '$(' and ')'.
-    if all(map(lambda c: isinstance(
-            c, concat.level0.parse.WordNode), ast.children)):
-        ast.children = [concat.level0.parse.PushWordNode(
-            concat.level0.parse.QuoteWordNode(
-                cast(concat.astutils.Words, ast.children), location))]
+    string = _read_until_complete_line()
+    try:
+        ast = _parse('$(' + string + ')')
+    except concat.level1.parse.ParseError:
+        ast = _parse(string)
+        concat.typecheck.check(
+            caller_globals['@@extra_env'], ast.children)
+        # I don't think it makes sense for us to get multiple children if what
+        # we got was a statement, so we assert.
+        assert len(ast.children) == 1
+        py_ast = _transpile(ast)
+
+        def statement_function(stack: List[object], stash: List[object]):
+            concat.level1.execute.execute(
+                '<stdin>', py_ast, scope, True)
+
+        stack.append(statement_function)
+    else:
+        concat.typecheck.check(
+            caller_globals['@@extra_env'], ast.children)
         py_ast = _transpile(ast)
         concat.level1.execute.execute(
-            '<stdin>', py_ast, caller_globals, True, caller_locals)
-        return
-
-    # I don't think it makes sense for us to get multiple children if what we
-    # got was a statement, so we assert.
-    assert len(ast.children) == 1
-    py_ast = _transpile(ast)
-
-    def statement_function(stack: List[object], stash: List[object]):
-        concat.level1.execute.execute(
-            '<stdin>', py_ast, caller_globals, True, caller_locals)
-
-    stack.append(statement_function)
+            '<stdin>', py_ast, scope, True)
 
 
-def read_quot(stack: List[object], stash: List[object]) -> None:
+def read_quot(stack: List[object], stash: List[object], extra_env: concat.level1.typecheck.Environment = concat.level1.typecheck.Environment()) -> None:
     caller_frame = inspect.stack()[1].frame
     caller_globals: Dict[str, object] = {
-        **caller_frame.f_globals, 'stack': stack, 'stash': stash}
+        **caller_frame.f_globals, 'stack': stack, 'stash': stash, '@@extra_env': extra_env}
     caller_locals = caller_frame.f_locals
     exec('concat.level1.stdlib.repl.read_form(stack, stash)',
          caller_globals, caller_locals)
@@ -122,19 +117,17 @@ def read_quot(stack: List[object], stash: List[object]) -> None:
         raise Exception('did not receive a quotation from standard input')
 
 
-# TODO: This is really meant to call a contuinuation, like in Factor. We don't
-# have continuations yet, so we'll just raise an exception.
-def do_return(stack: List[object], stash: List[object]) -> NoReturn:
-    raise REPLExitException
-
-
 def _exit_repl() -> NoReturn:
-    print('Bye!')
+    print_exit_message()
     # TODO: Don't exit the whole program because we can nest REPLs.
     exit()
 
 
-def repl(stack: List[object], stash: List[object], debug=False) -> None:
+def print_exit_message() -> None:
+    print('Bye!')
+
+
+def repl(stack: List[object], stash: List[object], debug=False, initial_globals={}) -> None:
     def show_var(stack: List[object], stash: List[object]):
         cast(Set[str], globals['visible_vars']).add(cast(str, stack.pop()))
 
@@ -142,7 +135,8 @@ def repl(stack: List[object], stash: List[object], debug=False) -> None:
         'visible_vars': set(),
         'show_var': show_var,
         'concat': concat,
-        'return': concat.level1.stdlib.repl.do_return
+        '@@extra_env': concat.level1.typecheck.Environment(),
+        **initial_globals
     }
     locals: Dict[str, object] = {}
 
@@ -162,45 +156,46 @@ def repl(stack: List[object], stash: List[object], debug=False) -> None:
         concat.level1.execute.execute(
             init_file_name, python_ast, globals, True, locals)
     prompt = '>>> '
-    print(prompt, end='', flush=True)
     try:
         while True:
+            print(prompt, end='', flush=True)
             try:
                 eval('concat.level1.stdlib.repl.read_form(stack, [])',
                      globals, locals)
+            except concat.level1.parse.ParseError as e:
+                print('Syntax error:\n')
+                print(e)
+            except concat.level0.execute.ConcatRuntimeError as e:
+                print('Runtime error:\n')
+                print(e)
             except EOFError:
                 break
-            stack = cast(List[object], globals['stack'])
-            quotation = cast(
-                Callable[[List[object], List[object]], None],
-                stack.pop()
-            )
-            try:
+            else:
+                stack = cast(List[object], globals['stack'])
+                quotation = cast(
+                    Callable[[List[object], List[object]], None],
+                    stack.pop()
+                )
                 try:
                     quotation(stack, cast(List[object], globals['stash']))
-                except concat.level1.stdlib.repl.REPLExitException:
-                    _exit_repl()
-                except Exception as e:
-                    raise concat.level0.execute.ConcatRuntimeError from e
-            except concat.level0.execute.ConcatRuntimeError as e:
-                value = e.__cause__
-                if value is None or value.__traceback__ is None:
-                    tb = None
-                else:
-                    tb = value.__traceback__.tb_next
-                traceback.print_exception(None, value, tb)
-            except KeyboardInterrupt:
-                # a ctrl-c during execution just cancels that execution
-                if globals.get('handle_ctrl_c', False):
-                    print('Concat was interrupted.')
-                else:
-                    raise
-            print('Stack:', globals['stack'])
-            if debug:
-                print('Stash:', globals['stash'])
-            for var in cast(Set[str], globals['visible_vars']):
-                print(var, '=', globals[var])
-            print(prompt, end='', flush=True)
+                except concat.level0.execute.ConcatRuntimeError as e:
+                    value = e.__cause__
+                    if value is None or value.__traceback__ is None:
+                        tb = None
+                    else:
+                        tb = value.__traceback__.tb_next
+                    traceback.print_exception(None, value, tb)
+                except KeyboardInterrupt:
+                    # a ctrl-c during execution just cancels that execution
+                    if globals.get('handle_ctrl_c', False):
+                        print('Concat was interrupted.')
+                    else:
+                        raise
+                print('Stack:', globals['stack'])
+                if debug:
+                    print('Stash:', globals['stash'])
+                for var in cast(Set[str], globals['visible_vars']):
+                    print(var, '=', globals[var])
     except KeyboardInterrupt:
         # catch ctrl-c to cleanly exit
         _exit_repl()

@@ -7,9 +7,13 @@ from concat.level0.stdlib.pyinterop import py_call
 
 
 class ConcatRuntimeError(RuntimeError):
-    def __init__(self):
-        super().__init__()
-        # self.concat_traceback = traceback
+    def __init__(self, stack: List[object], stash: List[object]) -> None:
+        super().__init__(stack, stash)
+        self._stack = stack
+        self._stash = stash
+
+    def __str__(self) -> str:
+        return 'Stack: {!r}, Stash: {!r}'.format(self._stack, self._stash)
 
 
 def _compile(filename: str, ast_: ast.Module) -> types.CodeType:
@@ -27,30 +31,26 @@ def _run(
     except Exception as e:
         # throw away all of the traceback outside the code
         # traceback = e.__traceback__.tb_next
-        raise ConcatRuntimeError from e
+        raise ConcatRuntimeError(globals['stack'], globals['stash']) from e
 
 
-def _do_preamble(globals: Dict[str, object], interactive=False) -> None:
+def _do_preamble(globals: Dict[str, object]) -> None:
     """Add key-value pairs expected by Concat code to the passed-in mapping.
 
-    This mutates the mapping, unless noth interactive and
-    globals['@@level-0-interactive'] are true."""
-    if interactive and globals.get('@@level-0-interactive', False):
-        return
-    if interactive:
-        globals['@@level-0-interactive'] = True
+    This mutates the mapping, but anything already in the mapping is preserved."""
 
-    globals['concat'] = concat
+    globals.setdefault('concat', concat)
 
-    globals['py_call'] = py_call
+    globals.setdefault('py_call', py_call)
 
-    globals['stack'], globals['stash'] = [], []
+    globals.setdefault('stack', [])
+    globals.setdefault('stash', [])
 
     def push(val: object) -> Callable[[List[object], List[object]], None]:
         def push_func(stack: List[object], _: List[object]):
             stack.append(val)
         return push_func
-    globals['push'] = push
+    globals.setdefault('push', push)
 
 
 def execute(
@@ -60,6 +60,6 @@ def execute(
     interactive=False,
     locals: Optional[Dict[str, object]] = None
 ) -> None:
-    _do_preamble(globals, interactive)
+    _do_preamble(globals)
 
     _run(_compile(filename, ast), globals, locals)

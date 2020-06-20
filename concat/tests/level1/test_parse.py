@@ -17,6 +17,10 @@ class TestSmallExamples(unittest.TestCase):
                 parsers.extend_with(concat.level0.parse.level_0_extension)
                 parsers.extend_with(concat.level1.parse.level_1_extension)
 
+                # We place a substitute stack effect parser in the dictionary
+                parsers['stack-effect-type'] = parsers.token('NAME').many() >> parsers.token(
+                    'MINUS').many() >> parsers.token('NAME').many()
+
                 # for example programs, we only test acceptance
 
                 try:

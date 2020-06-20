@@ -37,6 +37,7 @@ import parsy
 
 class Node(abc.ABC):
 
+    @abc.abstractmethod
     def __init__(self):
         self.location = (0, 0)
         self.children: Iterable[Node]
@@ -72,7 +73,7 @@ class ImportStatementNode(StatementNode):
         self.value = module.value
 
 
-class WordNode(Node):
+class WordNode(Node, abc.ABC):
     pass
 
 
@@ -90,7 +91,11 @@ class NumberWordNode(WordNode):
         super().__init__()
         self.location = number.start
         self.children: List[Node] = []
-        self.value = eval(number.value)
+        try:
+            self.value = eval(number.value)
+        except SyntaxError:
+            raise ValueError(
+                '{!r} cannot eval to a number'.format(number.value))
 
 
 class StringWordNode(WordNode):
@@ -99,7 +104,11 @@ class StringWordNode(WordNode):
         super().__init__()
         self.location = string.start
         self.children: List[Node] = []
-        self.value = eval(string.value)
+        try:
+            self.value = eval(string.value)
+        except SyntaxError:
+            raise ValueError(
+                '{!r} cannot eval to a string'.format(string.value))
 
 
 class QuoteWordNode(WordNode):
@@ -226,7 +235,7 @@ def level_0_extension(parsers: ParserDict) -> None:
     @parsy.generate('quote word')
     def quote_word_parser() -> Generator[parsy.Parser, Any, QuoteWordNode]:
         lpar = yield parsers.token('LPAR')
-        children = yield parsers.ref_parser('word').many()
+        children = yield parsers['word'].many()
         yield parsers.token('RPAR')
         return QuoteWordNode(children, lpar.start)
 

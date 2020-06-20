@@ -21,7 +21,8 @@ from concat.visitors import (
     Choice,
     Visitor,
     VisitFailureException,
-    alt
+    alt,
+    assert_type
 )
 import concat.level0.parse
 
@@ -104,15 +105,27 @@ def level_0_extension(
 
     visitors['quote-word'] = quote_word_visitor
 
-    # Converts a PushWordNode to a Python call to stack.append
     @FunctionalVisitor
-    def push_word_visitor(node: concat.level0.parse.Node) -> ast.Call:
+    def pushed_attribute_visitor(node: concat.level0.parse.AttributeWordNode) -> ast.expr:
+        top = cast(ast.Expression, ast.parse('stack.pop()', mode='eval')).body
+        load = ast.Load()
+        attribute = ast.Attribute(value=top, attr=node.value, ctx=load)
+        attribute.lineno, attribute.col_offset = node.location
+        return attribute
+
+    # Converts a PushWordNode to a Python lambda abstraction
+    @FunctionalVisitor
+    def push_word_visitor(node: concat.level0.parse.Node) -> ast.expr:
         if not isinstance(node, concat.level0.parse.PushWordNode):
             raise VisitFailureException
-        child = visitors.ref_visitor('word').visit(list(node.children)[0])
-        load = ast.Load()
-        push_func = ast.Name(id='push', ctx=load)
-        py_node = ast.Call(func=push_func, args=[child], keywords=[])
+        child = Choice(assert_type(concat.level0.parse.AttributeWordNode).then(pushed_attribute_visitor),
+                       visitors['word']).visit(list(node.children)[0])
+        args = ast.arguments(args=[ast.arg('stack', None), ast.arg(
+            'stash', None)], vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[])
+        stack_append = cast(ast.Expression, ast.parse(
+            'stack.append', mode='eval')).body
+        body = ast.Call(stack_append, [child], [])
+        py_node = ast.Lambda(args, body)
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
@@ -152,12 +165,11 @@ def level_0_extension(
     # Converts a AttributeWordNode to be an attribute lookup on the top of the
     # stack
     @FunctionalVisitor
-    def attribute_word_visitor(node: concat.level0.parse.Node):
+    def attribute_word_visitor(node: concat.level0.parse.Node) -> ast.expr:
         if not isinstance(node, concat.level0.parse.AttributeWordNode):
             raise VisitFailureException
-        top = cast(ast.Expression, ast.parse('stack.pop()', mode='eval')).body
-        load = ast.Load()
-        attribute = ast.Attribute(value=top, attr=node.value, ctx=load)
+        attribute = concat.astutils.abstract(concat.astutils.call_concat_function(
+            pushed_attribute_visitor.visit(node)))
         attribute.lineno, attribute.col_offset = node.location
         return attribute
 

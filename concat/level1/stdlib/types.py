@@ -1,91 +1,101 @@
-from typing import List, NoReturn, Generator, Optional
-import concat.level0.stdlib.types
+"""This module includes the Concat generator protocol.
 
+Assume there is a function f that takes an object and pushes an object and another function onto the stack.
+
+    def f(`s -- (... -- ...) `t): ...
+
+Then f may represent an generator. `f` returns the first object yielded by the generator, along with a continuation representing the rest of the iteration. This continuation has the same type as f, or is the value None. If the continuation is None, then the generator is exhausted and the returned object is the return value of the generator.
+
+In other words, if the type of an generator is denoted by GenType[`s, `t, `r], then GenType[`s, `t, `r] = (`s -- GenType[`s, `t, `r] `t) | (`s -- None `r).
+
+Example:
+
+    # A generator that returns the single value 42.
+    def forty_two:
+        drop None 42
+
+Concat generators can be converted to fit Python's iterator protocol using the to_py_iter function defined in this module.
+
+Prior art:
+
+* https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Generator
+* https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Iteration_protocols
+* https://softwareengineering.stackexchange.com/a/332383/153281
+"""
+
+from typing import List, Generator
+import concat.level0.stdlib.types
 
 _ConcatGenerator = Generator[object, object, None]
 
 
-class _YieldException(Exception):
-    pass
-
-
 class Quotation(concat.level0.stdlib.types.Quotation):
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
 
     def __call__(
         self, stack: List[object], stash: List[object]
-    ) -> Optional[_ConcatGenerator]:
-        if Quotation.yield_function in self:
-            # Copy the stack and stash since they could change between each
-            # resumption.
-            generator = self._call_as_generator(stack[:], stash[:])
-            # push generator onto stack as a return value
-            stack.append(generator)
-            return generator
+    ) -> None:
         return super().__call__(stack, stash)
 
-    @staticmethod
-    def yield_function(_: List[object], __: List[object]) -> NoReturn:
-        raise _YieldException
 
-    def _call_as_generator(
-        self, stack: List[object], stash: List[object]
-    ) -> _ConcatGenerator:
-        """Execute the quotation like a Python generator.
-
-        Note that control is returned to the next element of a quotation after
-        a yield. That means that in the code `(42 yield unreachable) reached`,
-        the word `unreachable` is never executed.
-        """
-        for element in self:
-            try:
-                element(stack, stash)
-            except _YieldException:
-                stack.append((yield stack.pop()))
-            # TODO: Implement yield_from
+def to_py_iter(stack: List[object], stash: List[object]) -> None:
+    quot = stack.pop()
+    def generator() -> Generator[object, object, object]:
+        stack_, stash_ = stack[:], stash[:]  # idk if this is necessary
+        q = quot
+        input = yield
+        while True:
+            stack_.append(input)
+            q(stack_, stash_)
+            q, value = stack_.pop(-2), stack_.pop()
+            if not q:
+                return value
+            input = yield value
+    g = generator()
+    # advance g once so we can send in values immediately
+    next(g)
+    stack.append(g)
 
 
 if __name__ == '__main__':
+    from concat.level1.stdlib.shuffle_words import drop
+
     print('42 example')
-    quotation = Quotation([Quotation.yield_function])
-    generator = quotation([42], [])
-    assert generator is not None
-    for item in generator:
+    quotation = Quotation([drop, lambda s, _: s.append(Quotation([drop, lambda s, _: s.append(None), lambda s, _: s.append(None)])), lambda s, _: s.append(42)])
+    stack = [quotation]
+    to_py_iter(stack, [])
+    for item in stack.pop():
         print(item)
-
-    # TODO: Given the way generators currently work, I don't think the
-    # following example can be written without falling back onto some of
-    # Python's control structures.
-
-    # print('hailstone sequence of 42 example')
-    # # Imports for example
-    # from concat.level1.stdlib.shuffle_words import dup, drop
-    # from concat.level1.stdlib.execution import choose, loop
-    #
-    # def quotation_2(s, _):
-    #     return Quotation([
-    #         lambda s, _: s.append(Quotation([
-    #             lambda s, _: print('stack is', s, 'at start of quotation_2'),
-    #             lambda s, _: print(s[-1]),
-    #             dup,
-    #             Quotation.yield_function, drop,
-    #             lambda s, _: s.append(drop),
-    #             lambda s, _: s.append(Quotation([
-    #                 lambda s, _: s.append(s[-1] % 2 == 0),
-    #                 lambda s, _: s.append(Quotation([
-    #                     lambda s, _: s.append(s.pop()//2)
-    #                 ])),
-    #                 lambda s, _: s.append(Quotation([
-    #                     lambda s, _: s.append(3*s.pop() + 1)
-    #                 ])),
-    #                 lambda s, _: print('stack is', s),
-    #                 choose,
-    #             ])),
-    #             lambda s, _: print('stack is', s),
-    #             lambda s, _: s.append(s[-1] != 1),
-    #         ])),
-    #         loop
-    #     ])(s, _)
-    # generator_2 = quotation_2([42], [])
-    # assert generator_2 is not None
-    # for number in generator_2:
-    #     print(number)
+#
+#     # TODO: Given the way generators currently work, I don't think the
+#     # following example can be written without falling back onto some of
+#     # Python's control structures.
+#
+#     print('hailstone sequence of 42 example')
+#     # Imports for example
+#     from concat.level1.stdlib.shuffle_words import dup, drop
+#     from concat.level1.stdlib.execution import choose, loop
+#
+#     quotation_2 = Quotation([
+#         lambda s, t: s.append(Quotation([
+#             lambda s, t: s.append(s[-1] == 1),
+#             lambda s, t: s.append(Quotation([Quotation.yield_function, drop,
+#                                              lambda s, t: s.append(False)])),
+#             lambda s, t: s.append(Quotation([
+#                 dup, Quotation.yield_function, drop,
+#                 lambda s, t: s.append(s.pop() % 2 == 0),
+#                 lambda s, t: s.append(lambda s, t: s.append(s.pop()//2)),
+#                 lambda s, t: s.append(lambda s, t: s.append(3*s.pop() + 1)),
+#                 choose,
+#                 lambda s, t: s.append(True)
+#             ])),
+#             choose
+#         ])),
+#         loop
+#     ]).make_generator_function([], [])
+#     generator_2 = quotation_2([42], [])
+#     assert generator_2 is not None
+#     for number in generator_2:
+#         print(number)

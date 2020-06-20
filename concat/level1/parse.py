@@ -5,7 +5,9 @@ This parser is designed to extend the level zero parser.
 from concat.level0.lex import Token
 import concat.level0.parse
 import concat.level1.typecheck
+import concat.level2.typecheck  # NOTE: Used only for type annotations
 from concat.astutils import Words, Location, WordsOrStatements, flatten
+import concat.parser_combinators
 import abc
 import operator
 from typing import Iterable, List, Tuple, Sequence, Optional, Generator
@@ -16,7 +18,8 @@ import parsy
 
 class ParseError(parsy.ParseError):
     def line_info(self):
-        return '{}:{}'.format(*self.stream[self.index].start)
+        return '{}:{} ({!r} here)'.format(
+            *self.stream[self.index].start, self.stream[self.index])
 
 
 # let's lie
@@ -24,6 +27,7 @@ parsy.ParseError = ParseError  # type: ignore
 
 
 class SimpleValueWordNode(concat.level0.parse.WordNode, abc.ABC):
+    @abc.abstractmethod
     def __init__(self, token: Token):
         super().__init__()
         self.location = token.start
@@ -31,19 +35,23 @@ class SimpleValueWordNode(concat.level0.parse.WordNode, abc.ABC):
 
 
 class NoneWordNode(SimpleValueWordNode):
-    pass
+    def __init__(self, token: Token):
+        super().__init__(token)
 
 
 class NotImplWordNode(SimpleValueWordNode):
-    pass
+    def __init__(self, token: Token):
+        super().__init__(token)
 
 
 class EllipsisWordNode(SimpleValueWordNode):
-    pass
+    def __init__(self, token: Token):
+        super().__init__(token)
 
 
 class TrueWordNode(SimpleValueWordNode):
-    pass
+    def __init__(self, token: Token):
+        super().__init__(token)
 
 
 class SubscriptionWordNode(concat.level0.parse.WordNode):
@@ -183,12 +191,14 @@ class BytesWordNode(concat.level0.parse.WordNode):
 
 
 class IterableWordNode(concat.level0.parse.WordNode, abc.ABC):
+    @abc.abstractmethod
     def __init__(self, element_words: Iterable[Words], location: Location):
         super().__init__()
         self.children = []
         self.location = location
         for children in element_words:
             self.children += list(children)
+        self.element_words = element_words
 
 
 class TupleWordNode(IterableWordNode):
@@ -213,7 +223,10 @@ class DelStatementNode(concat.level0.parse.StatementNode):
     def __init__(self, targets: Sequence[concat.level0.parse.WordNode]):
         super().__init__()
         self.children = targets
-        self.location = targets[0].location
+        try:
+            self.location = targets[0].location
+        except IndexError:
+            raise ValueError('there must be at least one target')
 
 
 class DictWordNode(IterableWordNode):
@@ -271,8 +284,9 @@ class FuncdefStatementNode(concat.level0.parse.StatementNode):
         annotation: Optional[Iterable[concat.level0.parse.WordNode]],
         body: WordsOrStatements,
         location: Location,
-        stack_effect: Optional[concat.level1.typecheck.StackEffect] = None
+        stack_effect: Optional['concat.level2.typecheck.StackEffectTypeNode'] = None
     ):
+        super().__init__()
         self.location = location
         self.name = name.value
         self.decorators = decorators
@@ -298,6 +312,12 @@ class ImportStatementNode(concat.level0.parse.ImportStatementNode):
         token.value = module
         super().__init__(token, location)
         self.asname = asname
+
+    def __str__(self) -> str:
+        string = 'import {}'.format(self.value)
+        if self.asname is not None:
+            string += ' as {}'.format(self.asname)
+        return string
 
 
 class FromImportStatementNode(ImportStatementNode):
@@ -605,50 +625,50 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     #   [ annotation ], COLON, suite ;
     # decorator = AT, word ;
     # annotation = RARROW, word* ;
-    # suite = word* | statement
-    #   | NEWLINE, INDENT, (word | statement, NEWLINE)+, DEDENT ;
-    # The stack effect syntax is defined within the .typecheck module.
-    @parsy.generate('funcdef statement')
+    # suite = NEWLINE, INDENT, (word | statement, NEWLINE)+, DEDENT | statement
+    #    | word+ ;
+    # The stack effect syntax is defined within the ..level2.typecheck module.
+    @parsy.generate
     def funcdef_statement_parser() -> Generator:
         location = (yield parsers.token('DEF')).start
         name = yield parsers.token('NAME')
-        effect_tokens = None
         if (yield parsers.token('LPAR').optional()):
-            effect_tokens = []
-            while not (yield parsers.token('RPAR').optional()):
-                effect_tokens.append((yield parsy.any_char))
-        if effect_tokens is None:
-            effect = None
+            effect_ast = yield parsers['stack-effect-type']
+            yield parsers.token('RPAR')
         else:
-            effect = concat.level1.typecheck.parse_stack_effect(effect_tokens)
+            effect_ast = None
         decorators = yield decorator.many()
         annotation = yield annotation_parser.optional()
         yield parsers.token('COLON')
         body = yield suite
         return FuncdefStatementNode(
-            name, decorators, annotation, body, location, effect)
+            name, decorators, annotation, body, location, effect_ast)
 
-    parsers['funcdef-statement'] = funcdef_statement_parser
+    parsers['funcdef-statement'] = concat.parser_combinators.desc_cumulatively(
+        funcdef_statement_parser, 'funcdef statement')
 
     decorator = parsers.token('AT') >> parsers.ref_parser('word')
 
     annotation_parser = parsers.token(
         'RARROW') >> parsers.ref_parser('word').many()
 
-    @parsy.generate('suite')
+    @parsy.generate
     def suite():
-        words = parsers['word'].many()
+        words = parsers['word'].at_least(1)
         statement = parsy.seq(parsers['statement'])
-        block_content = (parsers['word'] | parsers['statement']
-                         << parsers.token('NEWLINE')).at_least(1)
-        indented_block = parsers.token('NEWLINE') >> parsers.token(
+        block_content = (parsers['word'] << parsers.token('NEWLINE').optional()
+                         | parsers['statement'] << parsers.token('NEWLINE')
+                         ).at_least(1)
+        indented_block = parsers.token('NEWLINE').optional() >> parsers.token(
             'INDENT') >> block_content << parsers.token('DEDENT')
-        return (yield words | statement | indented_block)
+        return (yield indented_block | statement | words)
+
+    suite = concat.parser_combinators.desc_cumulatively(suite, 'suite')
 
     @parsy.generate('module')
     def module():
         name = parsers.token('NAME').map(operator.attrgetter('value'))
-        return (yield name.sep_by(parsers.token('DOT'), min=1).concat())
+        return '.'.join((yield name.sep_by(parsers.token('DOT'), min=1)))
 
     # These following parsers parse import statements.
     # import statement = IMPORT, module, [ AS, NAME ]
