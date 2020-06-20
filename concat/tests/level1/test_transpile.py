@@ -18,52 +18,44 @@ class TestSubVisitors(unittest.TestCase):
         self.__visitors.extend_with(concat.level0.transpile.level_0_extension)
         self.__visitors.extend_with(concat.level1.transpile.level_1_extension)
 
-    def test_none_word_visitor(self) -> None:
-        none = Token()
-        none.start = (0, 0)
-        node = concat.level1.parse.NoneWordNode(none)
+    def _test_visitor_basic(
+            self, node: concat.level0.parse.Node, visitor: str) -> ast.AST:
         try:
-            py_node = self.__visitors['none-word'].visit(node)
+            py_node = self.__visitors[visitor].visit(node)
         except concat.visitors.VisitFailureException:
-            message = '{} was not accepted by the none-word visitor'.format(
-                node)
+            message = '{} was not accepted by the {} visitor'.format(
+                node, visitor)
             self.fail(msg=message)
         self.assertIsInstance(
             py_node, ast.Call, msg='Python node is not a call')
+        return py_node
+
+    def test_none_word_visitor(self) -> None:
+        """Tests that none words are transpiled to calls which contain None."""
+        none = Token()
+        none.start = (0, 0)
+        node = concat.level1.parse.NoneWordNode(none)
+        py_node = self._test_visitor_basic(node, 'none-word')
         value = cast(ast.NameConstant, cast(ast.Call, py_node).args[0]).value
         self.assertIs(value, None,
                       msg='Python None node does not contain `None`')
 
     def test_not_impl_word_visitor(self) -> None:
+        """Not-impl words are transpiled to calls containing NotImplemented."""
         not_impl = Token()
         not_impl.start = (0, 0)
         node = concat.level1.parse.NotImplWordNode(not_impl)
-        try:
-            py_node = self.__visitors['not-impl-word'].visit(node)
-        except concat.visitors.VisitFailureException:
-            message_template = '{} was not accepted by the not-impl-word '
-            'visitor'
-            message = message_template.format(node)
-            self.fail(msg=message)
-        self.assertIsInstance(
-            py_node, ast.Call, msg='Python node is not a call')
+        py_node = self._test_visitor_basic(node, 'not-impl-word')
         identifier = cast(ast.Name, cast(ast.Call, py_node).args[0]).id
         message = 'Python Name node does not contain "NotImplemented"'
         self.assertEqual(identifier, 'NotImplemented', msg=message)
 
     def test_ellipsis_word_visitor(self) -> None:
+        """Ellipsis words are transpiled to calls which contain '...'."""
         ellipsis = Token()
         ellipsis.start = (0, 0)
         node = concat.level1.parse.EllipsisWordNode(ellipsis)
-        try:
-            py_node = self.__visitors['ellipsis-word'].visit(node)
-        except concat.visitors.VisitFailureException:
-            message_template = '{} was not accepted by the ellipsis-word '
-            'visitor'
-            message = message_template.format(node)
-            self.fail(msg=message)
-        self.assertIsInstance(
-            py_node, ast.Call, msg='Python node is not a call')
+        py_node = self._test_visitor_basic(node, 'ellipsis-word')
         message = 'The Python node within the call is not an Ellipsis'
         self.assertIsInstance(
             cast(ast.Call, py_node).args[0], ast.Ellipsis, msg=message)
