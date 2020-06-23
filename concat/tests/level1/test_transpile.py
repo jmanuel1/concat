@@ -75,6 +75,7 @@ class TestSubVisitors(unittest.TestCase):
                       msg='Python node does not contain 2')
 
     def test_del_statement_visitor(self) -> None:
+        """Concat del statements are transpiled to Python del statements."""
         name_token = concat.level0.lex.Token()
         name_token.value, name_token.start = 'a', (0, 0)
         name = concat.level0.parse.NameWordNode(name_token)
@@ -95,6 +96,7 @@ class TestSubVisitors(unittest.TestCase):
         test('statement')
 
     def test_async_funcdef_statement_visitor(self) -> None:
+        """Async function definitions are transpiled to the same kind of Python statement."""
         name_token = concat.level0.lex.Token()
         name_token.value, name_token.start = 'a', (0, 0)
         node = concat.level1.parse.AsyncFuncdefStatementNode(
@@ -115,6 +117,7 @@ class TestSubVisitors(unittest.TestCase):
         test('statement')
 
     def test_funcdef_statement_visitor(self) -> None:
+        """Function definitions are transpiled to the same kind of Python statement."""
         name_token = concat.level0.lex.Token()
         name_token.value, name_token.start = 'a', (0, 0)
         node = concat.level1.parse.FuncdefStatementNode(
@@ -134,9 +137,11 @@ class TestSubVisitors(unittest.TestCase):
         test('funcdef-statement')
         test('statement')
 
-
-
     def test_import_statement_visitor_with_as(self) -> None:
+        """import ... as ... statements are transpiled to the same kind of Python statement.
+
+        The as-clause will be present in the resulting Python AST."""
+
         node = concat.level1.parse.ImportStatementNode('a.submodule', 'b')
 
         def test(visitor: str) -> None:
