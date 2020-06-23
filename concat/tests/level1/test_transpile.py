@@ -68,8 +68,7 @@ class TestSubVisitors(unittest.TestCase):
         try:
             py_node = self.__visitors['slice-word'].visit(node)
         except concat.visitors.VisitFailureException:
-            message_template = '{} was not accepted by the slice-word '
-            'visitor'
+            message_template = '{} was not accepted by the slice-word visitor'
             message = message_template.format(node)
             self.fail(msg=message)
         self.assertIn('2', astunparse.unparse(py_node),
