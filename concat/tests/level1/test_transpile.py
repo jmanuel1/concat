@@ -18,18 +18,6 @@ class TestSubVisitors(unittest.TestCase):
         self.__visitors.extend_with(concat.level0.transpile.level_0_extension)
         self.__visitors.extend_with(concat.level1.transpile.level_1_extension)
 
-    def _test_visitor_basic(
-            self, node: concat.level0.parse.Node, visitor: str) -> ast.AST:
-        try:
-            py_node = self.__visitors[visitor].visit(node)
-        except concat.visitors.VisitFailureException:
-            message = '{} was not accepted by the {} visitor'.format(
-                node, visitor)
-            self.fail(msg=message)
-        self.assertIsInstance(
-            py_node, ast.Call, msg='Python node is not a call')
-        return py_node
-
     def _test_visitor(
         self,
         node: concat.level0.parse.Node,
@@ -46,6 +34,10 @@ class TestSubVisitors(unittest.TestCase):
         self.assertIsInstance(
             py_node, py_node_type, msg=message)
         return py_node
+
+    def _test_visitor_basic(
+            self, node: concat.level0.parse.Node, visitor: str) -> ast.AST:
+        return self._test_visitor(node, visitor, ast.Call)
 
     def test_none_word_visitor(self) -> None:
         """Tests that none words are transpiled to calls which contain None."""
