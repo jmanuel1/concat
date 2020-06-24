@@ -333,3 +333,8 @@ def append_to_stack(expr: ast.expr) -> ast.expr:
     push_func = ast.Attribute(ast.Name(id='stack', ctx=ast.Load()), 'append', ctx=ast.Load())
     py_node = ast.Call(func=push_func, args=[expr], keywords=[])
     return py_node
+
+
+def get_explicit_positional_function_parameters(
+        fun: ast.FunctionDef) -> List[str]:
+    return [arg.arg for arg in fun.args.args]
