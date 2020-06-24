@@ -236,19 +236,23 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         self.__visitors.extend_with(concat.level0.transpile.level_0_extension)
         self.__visitors.extend_with(concat.level1.transpile.level_1_extension)
 
+    def _make_magic_py_method_from_name(
+            self, method_name: str) -> ast.FunctionDef:
+        name = Token()
+        name.start, name.value = (0, 0), '__{}__'.format(method_name)
+        definition = concat.level1.parse.FuncdefStatementNode(
+            name, [], None, [], (0, 0))
+        node = concat.level1.parse.ClassdefStatementNode(
+            'A', [definition], (0, 0), [], [])
+        py_node = cast(
+            ast.ClassDef, self.__visitors['classdef-statement'].visit(node))
+        return cast(ast.FunctionDef, py_node.body[0])
+
     def test__new__(self) -> None:
         """Test that transpiled __new__ methods take the class, stack, and stash.
 
         def __new__ should become def __new__(cls, stack, stash) and it should push cls onto the stack before executing the rest of the function."""
-        name = Token()
-        name.start, name.value = (0, 0), '__new__'
-        new_def = concat.level1.parse.FuncdefStatementNode(
-            name, [], None, [], (0, 0))
-        node = concat.level1.parse.ClassdefStatementNode(
-            'A', [new_def], (0, 0), [], [])
-        py_node = cast(
-            ast.ClassDef, self.__visitors['classdef-statement'].visit(node))
-        py_new_def = cast(ast.FunctionDef, py_node.body[0])
+        py_new_def = self._make_magic_py_method_from_name('new')
         py_args = [arg.arg for arg in py_new_def.args.args]
         self.assertEqual(
             py_args, ['cls', 'stack', 'stash'], msg='wrong arguments')
@@ -262,15 +266,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         For example, def __init__ should become def __init__(self, stack, stash) and it should push self onto the stack before executing the rest of the function. The function need not return a value other than None."""
         for method in {'init', 'call'}:
             with self.subTest(msg='testing __{}__'.format(method), method=method):
-                name = Token()
-                name.start, name.value = (0, 0), '__{}__'.format(method)
-                method_def = concat.level1.parse.FuncdefStatementNode(
-                    name, [], None, [], (0, 0))
-                node = concat.level1.parse.ClassdefStatementNode(
-                    'A', [method_def], (0, 0), [], [])
-                visitor = self.__visitors['classdef-statement']
-                py_node = cast(ast.ClassDef, visitor.visit(node))
-                py_method_def = cast(ast.FunctionDef, py_node.body[0])
+                py_method_def = self._make_magic_py_method_from_name(method)
                 py_args = [arg.arg for arg in py_method_def.args.args]
                 self.assertEqual(
                     py_args, ['self', 'stack', 'stash'], msg='wrong arguments')
@@ -292,15 +288,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
             method_name = '__{}__'.format(method)
             with self.subTest(msg='testing {}'.format(method_name),
                               method=method_name):
-                name = Token()
-                name.start, name.value = (0, 0), method_name
-                defun = concat.level1.parse.FuncdefStatementNode(
-                    name, [], None, [], (0, 0))
-                node = concat.level1.parse.ClassdefStatementNode(
-                    'A', [defun], (0, 0), [], [])
-                visitor = self.__visitors['classdef-statement']
-                py_node = cast(ast.ClassDef, visitor.visit(node))
-                py_def = cast(ast.FunctionDef, py_node.body[0])
+                py_def = self._make_magic_py_method_from_name(method)
                 py_args = [arg.arg for arg in py_def.args.args]
                 self.assertEqual(py_args, ['self'], msg='wrong arguments')
                 py_first_statement = py_def.body[0]
@@ -315,15 +303,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         """Test that transpiled __format__ methods take only self and format_spec.
 
         def __format__ should become def __format__(self, format_spec) and it should push format_spec and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
-        name = Token()
-        name.start, name.value = (0, 0), '__format__'
-        format_def = concat.level1.parse.FuncdefStatementNode(
-            name, [], None, [], (0, 0))
-        node = concat.level1.parse.ClassdefStatementNode(
-            'A', [format_def], (0, 0), [], [])
-        py_node = cast(
-            ast.ClassDef, self.__visitors['classdef-statement'].visit(node))
-        py_format_def = cast(ast.FunctionDef, py_node.body[0])
+        py_format_def = self._make_magic_py_method_from_name('format')
         py_args = [arg.arg for arg in py_format_def.args.args]
         self.assertEqual(
             py_args, ['self', 'format_spec'], msg='wrong arguments')
@@ -351,15 +331,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
                        'and', 'rshift', 'lshift', 'mod', 'floordiv',
                        'truediv', 'matmul', 'mul', 'sub', 'add'}:
             with self.subTest(msg='testing __{}__'.format(method), method=method):
-                name = Token()
-                name.start, name.value = (0, 0), '__{}__'.format(method)
-                defun = concat.level1.parse.FuncdefStatementNode(
-                    name, [], None, [], (0, 0))
-                node = concat.level1.parse.ClassdefStatementNode(
-                    'A', [defun], (0, 0), [], [])
-                py_node = cast(
-                    ast.ClassDef, self.__visitors['classdef-statement'].visit(node))
-                py_def = cast(ast.FunctionDef, py_node.body[0])
+                py_def = self._make_magic_py_method_from_name(method)
                 py_args = [arg.arg for arg in py_def.args.args]
                 self.assertEqual(
                     py_args, ['self', 'other'], msg='wrong arguments')
@@ -378,15 +350,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         For example, def __getattr__ should become def __getattr__(self, name) and it should push name and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         for method in {'getattr', 'getattribute', 'delattr'}:
             with self.subTest(msg='testing __{}__'.format(method), method=method):
-                name = Token()
-                name.start, name.value = (0, 0), '__{}__'.format(method)
-                getattr_def = concat.level1.parse.FuncdefStatementNode(
-                    name, [], None, [], (0, 0))
-                node = concat.level1.parse.ClassdefStatementNode(
-                    'A', [getattr_def], (0, 0), [], [])
-                py_node = cast(
-                    ast.ClassDef, self.__visitors['classdef-statement'].visit(node))
-                py_getattr_def = cast(ast.FunctionDef, py_node.body[0])
+                py_getattr_def = self._make_magic_py_method_from_name(method)
                 py_args = [arg.arg for arg in py_getattr_def.args.args]
                 self.assertEqual(
                     py_args, ['self', 'name'], msg='wrong arguments')
@@ -403,15 +367,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         """Test that transpiled __setattr__ methods take only self, name, and value.
 
         def __setattr__ should become def __setattr__(self, name, value) and it should push value, name, and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
-        name = Token()
-        name.start, name.value = (0, 0), '__setattr__'
-        setattr_def = concat.level1.parse.FuncdefStatementNode(
-            name, [], None, [], (0, 0))
-        node = concat.level1.parse.ClassdefStatementNode(
-            'A', [setattr_def], (0, 0), [], [])
-        py_node = cast(
-            ast.ClassDef, self.__visitors['classdef-statement'].visit(node))
-        py_setattr_def = cast(ast.FunctionDef, py_node.body[0])
+        py_setattr_def = self._make_magic_py_method_from_name('setattr')
         py_args = [arg.arg for arg in py_setattr_def.args.args]
         self.assertEqual(
             py_args, ['self', 'name', 'value'], msg='wrong arguments')
@@ -426,15 +382,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         """Test that transpiled __get__ methods take only self, instance, and owner.
 
         def __get__ should become def __get__(self, instance, owner) and it should push owner, instance, and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
-        name = Token()
-        name.start, name.value = (0, 0), '__get__'
-        get_def = concat.level1.parse.FuncdefStatementNode(
-            name, [], None, [], (0, 0))
-        node = concat.level1.parse.ClassdefStatementNode(
-            'A', [get_def], (0, 0), [], [])
-        py_node = cast(
-            ast.ClassDef, self.__visitors['classdef-statement'].visit(node))
-        py_get_def = cast(ast.FunctionDef, py_node.body[0])
+        py_get_def = self._make_magic_py_method_from_name('get')
         py_args = [arg.arg for arg in py_get_def.args.args]
         self.assertEqual(
             py_args, ['self', 'instance', 'owner'], msg='wrong arguments')
@@ -449,15 +397,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         """Test that transpiled __set__ methods take only self, instance, and value.
 
         def __set__ should become def __set__(self, instance, value) and it should push value, instance, and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
-        name = Token()
-        name.start, name.value = (0, 0), '__set__'
-        set_def = concat.level1.parse.FuncdefStatementNode(
-            name, [], None, [], (0, 0))
-        node = concat.level1.parse.ClassdefStatementNode(
-            'A', [set_def], (0, 0), [], [])
-        py_node = cast(
-            ast.ClassDef, self.__visitors['classdef-statement'].visit(node))
-        py_set_def = cast(ast.FunctionDef, py_node.body[0])
+        py_set_def = self._make_magic_py_method_from_name('set')
         py_args = [arg.arg for arg in py_set_def.args.args]
         self.assertEqual(
             py_args, ['self', 'instance', 'value'], msg='wrong arguments')
@@ -474,15 +414,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         For example, def __delete__ should become def __delete__(self, instance) and it should push instance and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         for method in {'delete', 'instancecheck'}:
             with self.subTest(msg='testing __{}__'.format(method), method=method):
-                name = Token()
-                name.start, name.value = (0, 0), '__{}__'.format(method)
-                defun = concat.level1.parse.FuncdefStatementNode(
-                    name, [], None, [], (0, 0))
-                node = concat.level1.parse.ClassdefStatementNode(
-                    'A', [defun], (0, 0), [], [])
-                py_node = cast(
-                    ast.ClassDef, self.__visitors['classdef-statement'].visit(node))
-                py_defun = cast(ast.FunctionDef, py_node.body[0])
+                py_defun = self._make_magic_py_method_from_name(method)
                 py_args = [arg.arg for arg in py_defun.args.args]
                 self.assertEqual(
                     py_args, ['self', 'instance'], msg='wrong arguments')
@@ -497,15 +429,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         """Test that transpiled __init_subclass__ methods take only cls and arbitrary keyword arguments.
 
         def __init_subclass__ should become def __init_subclass__(cls, **kwargs) and it should push kwargs and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
-        name = Token()
-        name.start, name.value = (0, 0), '__init_subclass__'
-        init_subclass_def = concat.level1.parse.FuncdefStatementNode(
-            name, [], None, [], (0, 0))
-        node = concat.level1.parse.ClassdefStatementNode(
-            'A', [init_subclass_def], (0, 0), [], [])
-        py_node = cast(
-            ast.ClassDef, self.__visitors['classdef-statement'].visit(node))
-        py_init_subclass_def = cast(ast.FunctionDef, py_node.body[0])
+        py_init_subclass_def = self._make_magic_py_method_from_name('init_subclass')
         py_args = [arg.arg for arg in py_init_subclass_def.args.args]
         self.assertEqual(py_args, ['cls'], msg='wrong positonal arguments')
         py_kwarg_object = py_init_subclass_def.args.kwarg
@@ -523,15 +447,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         """Test that transpiled __prepare__ methods take only cls, bases, and arbitrary keyword arguments.
 
         def __prepare__ should become def __prepare__(cls, name, bases, **kwds) and it should push kwds, bases, name, and self onto the stack before executing the rest of the function. The function should return stack.pop(). It is up to the programmer to decorate the function with @classmethod."""
-        name = Token()
-        name.start, name.value = (0, 0), '__prepare__'
-        prepare_def = concat.level1.parse.FuncdefStatementNode(
-            name, [], None, [], (0, 0))
-        node = concat.level1.parse.ClassdefStatementNode(
-            'A', [prepare_def], (0, 0), [], [])
-        py_node = cast(
-            ast.ClassDef, self.__visitors['classdef-statement'].visit(node))
-        py_prepare_def = cast(ast.FunctionDef, py_node.body[0])
+        py_prepare_def = self._make_magic_py_method_from_name('prepare')
         py_args = [arg.arg for arg in py_prepare_def.args.args]
         self.assertEqual(py_args, ['cls', 'name', 'bases'],
                          msg='wrong positonal arguments')
@@ -550,15 +466,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         """Test that transpiled __subclasscheck__ methods take only self and subclass.
 
         def __subclasscheck__ should become def __subclasscheck__(self, subclass) and it should push subclass and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
-        name = Token()
-        name.start, name.value = (0, 0), '__subclasscheck__'
-        subclasscheck_def = concat.level1.parse.FuncdefStatementNode(
-            name, [], None, [], (0, 0))
-        node = concat.level1.parse.ClassdefStatementNode(
-            'A', [subclasscheck_def], (0, 0), [], [])
-        py_node = cast(
-            ast.ClassDef, self.__visitors['classdef-statement'].visit(node))
-        py_subclasscheck_def = cast(ast.FunctionDef, py_node.body[0])
+        py_subclasscheck_def = self._make_magic_py_method_from_name('subclasscheck')
         py_args = [arg.arg for arg in py_subclasscheck_def.args.args]
         self.assertEqual(py_args, ['self', 'subclass'],
                          msg='wrong positonal arguments')
@@ -578,15 +486,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         for method in {'getitem', 'missing', 'delitem'}:
             method_name = '__{}__'.format(method)
             with self.subTest(msg='testing {}'.format(method_name), method_name=method_name):
-                name = Token()
-                name.start, name.value = (0, 0), method_name
-                method_def = concat.level1.parse.FuncdefStatementNode(
-                    name, [], None, [], (0, 0))
-                node = concat.level1.parse.ClassdefStatementNode(
-                    'A', [method_def], (0, 0), [], [])
-                py_node = cast(
-                    ast.ClassDef, self.__visitors['classdef-statement'].visit(node))
-                py_method_def = cast(ast.FunctionDef, py_node.body[0])
+                py_method_def = self._make_magic_py_method_from_name(method)
                 py_args = [arg.arg for arg in py_method_def.args.args]
                 self.assertEqual(py_args, ['self', 'key'],
                                  msg='wrong positonal arguments')
@@ -604,15 +504,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         for method in {'exit', 'aexit'}:
             method_name = '__{}__'.format(method)
             with self.subTest(msg='testing {}'.format(method_name), method_name=method_name):
-                name = Token()
-                name.start, name.value = (0, 0), method_name
-                method_def = concat.level1.parse.FuncdefStatementNode(
-                    name, [], None, [], (0, 0))
-                node = concat.level1.parse.ClassdefStatementNode(
-                    'A', [method_def], (0, 0), [], [])
-                py_node = cast(
-                    ast.ClassDef, self.__visitors['classdef-statement'].visit(node))
-                py_method_def = cast(ast.FunctionDef, py_node.body[0])
+                py_method_def = self._make_magic_py_method_from_name(method)
                 py_args = [arg.arg for arg in py_method_def.args.args]
                 self.assertEqual(py_args, [
                                  'self', 'exc_type', 'exc_value', 'traceback'], msg='wrong positonal arguments')
@@ -627,15 +519,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         """Test that transpiled __round__ methods take only self and ndigits.
 
         def __round__ should become def __round__(self, ndigits) and it should push ndigits and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
-        name = Token()
-        name.start, name.value = (0, 0), '__round__'
-        method_def = concat.level1.parse.FuncdefStatementNode(
-            name, [], None, [], (0, 0))
-        node = concat.level1.parse.ClassdefStatementNode(
-            'A', [method_def], (0, 0), [], [])
-        py_node = cast(
-            ast.ClassDef, self.__visitors['classdef-statement'].visit(node))
-        py_method_def = cast(ast.FunctionDef, py_node.body[0])
+        py_method_def = self._make_magic_py_method_from_name('round')
         py_args = [arg.arg for arg in py_method_def.args.args]
         self.assertEqual(py_args, ['self', 'ndigits'],
                          msg='wrong positonal arguments')
@@ -653,15 +537,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         for method in {'pow', 'ipow'}:
             method_name = '__{}__'.format(method)
             with self.subTest(msg='testing {}'.format(method_name), method_name=method_name):
-                name = Token()
-                name.start, name.value = (0, 0), method_name
-                method_def = concat.level1.parse.FuncdefStatementNode(
-                    name, [], None, [], (0, 0))
-                node = concat.level1.parse.ClassdefStatementNode(
-                    'A', [method_def], (0, 0), [], [])
-                py_node = cast(
-                    ast.ClassDef, self.__visitors['classdef-statement'].visit(node))
-                py_method_def = cast(ast.FunctionDef, py_node.body[0])
+                py_method_def = self._make_magic_py_method_from_name(method)
                 py_args = [arg.arg for arg in py_method_def.args.args]
                 self.assertEqual(py_args, ['self', 'other', 'modulo'],
                                  msg='wrong positonal arguments')
@@ -680,15 +556,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         """Test that transpiled __contains__ methods take only self and item.
 
         def __contains__ should become def __contains__(self, item) and it should push item and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
-        name = Token()
-        name.start, name.value = (0, 0), '__contains__'
-        method_def = concat.level1.parse.FuncdefStatementNode(
-            name, [], None, [], (0, 0))
-        node = concat.level1.parse.ClassdefStatementNode(
-            'A', [method_def], (0, 0), [], [])
-        py_node = cast(
-            ast.ClassDef, self.__visitors['classdef-statement'].visit(node))
-        py_method_def = cast(ast.FunctionDef, py_node.body[0])
+        py_method_def = self._make_magic_py_method_from_name('contains')
         py_args = [arg.arg for arg in py_method_def.args.args]
         self.assertEqual(py_args, ['self', 'item'],
                          msg='wrong positonal arguments')
@@ -703,15 +571,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         """Test that transpiled __setitem__ methods take only self, key, and value.
 
         def __setitem__ should become def __setitem__(self, key, value) and it should push value, key, and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
-        name = Token()
-        name.start, name.value = (0, 0), '__setitem__'
-        method_def = concat.level1.parse.FuncdefStatementNode(
-            name, [], None, [], (0, 0))
-        node = concat.level1.parse.ClassdefStatementNode(
-            'A', [method_def], (0, 0), [], [])
-        py_node = cast(
-            ast.ClassDef, self.__visitors['classdef-statement'].visit(node))
-        py_method_def = cast(ast.FunctionDef, py_node.body[0])
+        py_method_def = self._make_magic_py_method_from_name('setitem')
         py_args = [arg.arg for arg in py_method_def.args.args]
         self.assertEqual(py_args, ['self', 'key', 'value'],
                          msg='wrong positonal arguments')
