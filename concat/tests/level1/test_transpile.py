@@ -1,4 +1,5 @@
 import concat.visitors
+from concat.astutils import get_explicit_positional_function_parameters
 from concat.level0.lex import Token
 import concat.level0.parse
 import concat.level0.transpile
@@ -253,7 +254,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         def __new__ should become def __new__(cls, stack, stash) and it should push cls onto the stack before executing the rest of the function."""
         py_new_def = self._make_magic_py_method_from_name('new')
-        py_args = [arg.arg for arg in py_new_def.args.args]
+        py_args = get_explicit_positional_function_parameters(py_new_def)
         self.assertEqual(
             py_args, ['cls', 'stack', 'stash'], msg='wrong arguments')
         py_first_statement = py_new_def.body[0]
@@ -267,7 +268,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         for method in {'init', 'call'}:
             with self.subTest(msg='testing __{}__'.format(method), method=method):
                 py_method_def = self._make_magic_py_method_from_name(method)
-                py_args = [arg.arg for arg in py_method_def.args.args]
+                py_args = get_explicit_positional_function_parameters(
+                    py_method_def)
                 self.assertEqual(
                     py_args, ['self', 'stack', 'stash'], msg='wrong arguments')
                 py_first_statement = py_method_def.body[0]
@@ -289,7 +291,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
             with self.subTest(msg='testing {}'.format(method_name),
                               method=method_name):
                 py_def = self._make_magic_py_method_from_name(method)
-                py_args = [arg.arg for arg in py_def.args.args]
+                py_args = get_explicit_positional_function_parameters(py_def)
                 self.assertEqual(py_args, ['self'], msg='wrong arguments')
                 py_first_statement = py_def.body[0]
                 self.assertIn('stack.append(self)', astunparse.unparse(
@@ -304,7 +306,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         def __format__ should become def __format__(self, format_spec) and it should push format_spec and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         py_format_def = self._make_magic_py_method_from_name('format')
-        py_args = [arg.arg for arg in py_format_def.args.args]
+        py_args = get_explicit_positional_function_parameters(py_format_def)
         self.assertEqual(
             py_args, ['self', 'format_spec'], msg='wrong arguments')
         py_first_statement, py_second_statement = py_format_def.body[0:2]
@@ -332,7 +334,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
                        'truediv', 'matmul', 'mul', 'sub', 'add'}:
             with self.subTest(msg='testing __{}__'.format(method), method=method):
                 py_def = self._make_magic_py_method_from_name(method)
-                py_args = [arg.arg for arg in py_def.args.args]
+                py_args = get_explicit_positional_function_parameters(py_def)
                 self.assertEqual(
                     py_args, ['self', 'other'], msg='wrong arguments')
                 py_first_statement, py_second_statement = py_def.body[0:2]
@@ -351,7 +353,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         for method in {'getattr', 'getattribute', 'delattr'}:
             with self.subTest(msg='testing __{}__'.format(method), method=method):
                 py_getattr_def = self._make_magic_py_method_from_name(method)
-                py_args = [arg.arg for arg in py_getattr_def.args.args]
+                py_args = get_explicit_positional_function_parameters(
+                    py_getattr_def)
                 self.assertEqual(
                     py_args, ['self', 'name'], msg='wrong arguments')
                 py_first_statement, py_second_statement = py_getattr_def.body[0:2]
@@ -368,7 +371,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         def __setattr__ should become def __setattr__(self, name, value) and it should push value, name, and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         py_setattr_def = self._make_magic_py_method_from_name('setattr')
-        py_args = [arg.arg for arg in py_setattr_def.args.args]
+        py_args = get_explicit_positional_function_parameters(py_setattr_def)
         self.assertEqual(
             py_args, ['self', 'name', 'value'], msg='wrong arguments')
         py_first_statement = py_setattr_def.body[0:2]
@@ -383,7 +386,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         def __get__ should become def __get__(self, instance, owner) and it should push owner, instance, and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         py_get_def = self._make_magic_py_method_from_name('get')
-        py_args = [arg.arg for arg in py_get_def.args.args]
+        py_args = get_explicit_positional_function_parameters(py_get_def)
         self.assertEqual(
             py_args, ['self', 'instance', 'owner'], msg='wrong arguments')
         py_first_statement = py_get_def.body[0:2]
@@ -398,7 +401,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         def __set__ should become def __set__(self, instance, value) and it should push value, instance, and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         py_set_def = self._make_magic_py_method_from_name('set')
-        py_args = [arg.arg for arg in py_set_def.args.args]
+        py_args = get_explicit_positional_function_parameters(py_set_def)
         self.assertEqual(
             py_args, ['self', 'instance', 'value'], msg='wrong arguments')
         py_first_statement = py_set_def.body[0:2]
@@ -415,7 +418,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         for method in {'delete', 'instancecheck'}:
             with self.subTest(msg='testing __{}__'.format(method), method=method):
                 py_defun = self._make_magic_py_method_from_name(method)
-                py_args = [arg.arg for arg in py_defun.args.args]
+                py_args = get_explicit_positional_function_parameters(py_defun)
                 self.assertEqual(
                     py_args, ['self', 'instance'], msg='wrong arguments')
                 py_first_statement = py_defun.body[0:2]
@@ -430,7 +433,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         def __init_subclass__ should become def __init_subclass__(cls, **kwargs) and it should push kwargs and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         py_init_subclass_def = self._make_magic_py_method_from_name('init_subclass')
-        py_args = [arg.arg for arg in py_init_subclass_def.args.args]
+        py_args = get_explicit_positional_function_parameters(
+            py_init_subclass_def)
         self.assertEqual(py_args, ['cls'], msg='wrong positonal arguments')
         py_kwarg_object = py_init_subclass_def.args.kwarg
         self.assertIsNotNone(py_kwarg_object, msg='no ** argument')
@@ -448,7 +452,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         def __prepare__ should become def __prepare__(cls, name, bases, **kwds) and it should push kwds, bases, name, and self onto the stack before executing the rest of the function. The function should return stack.pop(). It is up to the programmer to decorate the function with @classmethod."""
         py_prepare_def = self._make_magic_py_method_from_name('prepare')
-        py_args = [arg.arg for arg in py_prepare_def.args.args]
+        py_args = get_explicit_positional_function_parameters(
+            py_prepare_def)
         self.assertEqual(py_args, ['cls', 'name', 'bases'],
                          msg='wrong positonal arguments')
         py_kwarg_object = py_prepare_def.args.kwarg
@@ -467,7 +472,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         def __subclasscheck__ should become def __subclasscheck__(self, subclass) and it should push subclass and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         py_subclasscheck_def = self._make_magic_py_method_from_name('subclasscheck')
-        py_args = [arg.arg for arg in py_subclasscheck_def.args.args]
+        py_args = get_explicit_positional_function_parameters(
+            py_subclasscheck_def)
         self.assertEqual(py_args, ['self', 'subclass'],
                          msg='wrong positonal arguments')
         py_first_statement = py_subclasscheck_def.body[0:2]
@@ -487,7 +493,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
             method_name = '__{}__'.format(method)
             with self.subTest(msg='testing {}'.format(method_name), method_name=method_name):
                 py_method_def = self._make_magic_py_method_from_name(method)
-                py_args = [arg.arg for arg in py_method_def.args.args]
+                py_args = get_explicit_positional_function_parameters(
+                    py_method_def)
                 self.assertEqual(py_args, ['self', 'key'],
                                  msg='wrong positonal arguments')
                 py_first_statement = py_method_def.body[0:2]
@@ -505,7 +512,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
             method_name = '__{}__'.format(method)
             with self.subTest(msg='testing {}'.format(method_name), method_name=method_name):
                 py_method_def = self._make_magic_py_method_from_name(method)
-                py_args = [arg.arg for arg in py_method_def.args.args]
+                py_args = get_explicit_positional_function_parameters(
+                    py_method_def)
                 self.assertEqual(py_args, [
                                  'self', 'exc_type', 'exc_value', 'traceback'], msg='wrong positonal arguments')
                 py_first_statement = py_method_def.body[0:2]
@@ -520,7 +528,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         def __round__ should become def __round__(self, ndigits) and it should push ndigits and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         py_method_def = self._make_magic_py_method_from_name('round')
-        py_args = [arg.arg for arg in py_method_def.args.args]
+        py_args = get_explicit_positional_function_parameters(py_method_def)
         self.assertEqual(py_args, ['self', 'ndigits'],
                          msg='wrong positonal arguments')
         py_first_statement = py_method_def.body[0:2]
@@ -538,7 +546,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
             method_name = '__{}__'.format(method)
             with self.subTest(msg='testing {}'.format(method_name), method_name=method_name):
                 py_method_def = self._make_magic_py_method_from_name(method)
-                py_args = [arg.arg for arg in py_method_def.args.args]
+                py_args = get_explicit_positional_function_parameters(
+                    py_method_def)
                 self.assertEqual(py_args, ['self', 'other', 'modulo'],
                                  msg='wrong positonal arguments')
                 self.assertIsInstance(
@@ -557,7 +566,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         def __contains__ should become def __contains__(self, item) and it should push item and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         py_method_def = self._make_magic_py_method_from_name('contains')
-        py_args = [arg.arg for arg in py_method_def.args.args]
+        py_args = get_explicit_positional_function_parameters(py_method_def)
         self.assertEqual(py_args, ['self', 'item'],
                          msg='wrong positonal arguments')
         py_first_statement = py_method_def.body[0:2]
@@ -572,7 +581,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         def __setitem__ should become def __setitem__(self, key, value) and it should push value, key, and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         py_method_def = self._make_magic_py_method_from_name('setitem')
-        py_args = [arg.arg for arg in py_method_def.args.args]
+        py_args = get_explicit_positional_function_parameters(py_method_def)
         self.assertEqual(py_args, ['self', 'key', 'value'],
                          msg='wrong positonal arguments')
         py_first_statement = py_method_def.body[0:2]
