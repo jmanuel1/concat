@@ -220,10 +220,12 @@ class TestSubVisitors(unittest.TestCase):
 class TestMagicMethodTranspilaton(unittest.TestCase):
     """Test that magic methods are transformed into what Python expects.
 
-    Note that we don't transform module-level __getattr__ and __dict__, or
-    handle __(mro_entries, class_getitem)__ since those are Python 3.7
-    features. We don't handle __set_name__ either, since that was addded in
-    3.6.
+    Note that we don't transform module-level __getattr__ and __dict__.
+
+    TODO: handle __(mro_entries, class_getitem)__ since those are Python 3.7
+    features.
+
+    TODO: handle __set_name__ since that was addded in 3.6.
 
     Special names that aren't methods, like __slots__ aren't accounted for. We
     don't even have assignment!"""
