@@ -67,7 +67,7 @@ class Type(abc.ABC):
         raise AttributeError(self, name)
 
     @abc.abstractmethod
-    def apply_substitution(self, _: 'Substitutions') -> object:
+    def apply_substitution(self, _: 'Substitutions') -> 'Type':
         pass
 
 
@@ -80,7 +80,7 @@ class IndividualType(Type, abc.ABC):
         return ForAll([], self)
 
     def __and__(self, other: object) -> '_IntersectionType':
-        if not isinstance(self, IndividualType):
+        if not isinstance(self, IndividualType) or not isinstance(other, IndividualType):
             return NotImplemented
         return _IntersectionType(self, other)
 
@@ -185,7 +185,7 @@ class _Variable(Type, abc.ABC):
 
     def apply_substitution(self, sub: 'Substitutions') -> Union[IndividualType, '_Variable', List[Type]]:
         if self in sub:
-            return sub[self]
+            return sub[self]  # type: ignore
         return self
 
 
@@ -220,7 +220,7 @@ class IndividualVariable(_Variable, IndividualType):
 
     def apply_substitution(self, sub: 'Substitutions') -> IndividualType:
         if super().apply_substitution(sub) is not self:
-            return super().apply_substitution(sub)
+            return cast(IndividualType, super().apply_substitution(sub))
         # If our bound won't change, return the same variable. Without
         # handling this case, parts of unify_ind don't work since it starts
         # returning substitutions from type variables it wasn't originally
