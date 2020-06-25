@@ -9,12 +9,12 @@ import dataclasses
 import builtins
 import collections.abc
 from typing import (List, Set, Tuple, Dict, Iterator, Union,
-                    Optional, Generator, Callable, Sequence, NoReturn, overload, cast)
-import concat.astutils
-import concat.parser_combinators
+                    Optional, Callable, Sequence, NoReturn, TYPE_CHECKING,
+                    overload, cast)
 import concat.level0.parse
 import concat.level1.parse
-import parsy
+if TYPE_CHECKING:
+    import concat.astutils
 
 
 class TypeError(builtins.TypeError):
