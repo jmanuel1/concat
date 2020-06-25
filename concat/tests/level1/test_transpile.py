@@ -255,6 +255,16 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         self.assertEqual(
             fun_params, params, msg='wrong explicit positional parameters')
 
+    def _assert_pushes(
+        self,
+        fun: ast.FunctionDef,
+        name: str,
+        statement_number: int = 0
+    ) -> None:
+        py_statement = fun.body[statement_number]
+        self.assertIn('stack.append({})'.format(name), astunparse.unparse(
+            py_statement), msg="doesn't push {}".format(name))
+
     def test__new__(self) -> None:
         """Test that transpiled __new__ methods take the class, stack, and stash.
 
@@ -262,9 +272,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         py_new_def = self._make_magic_py_method_from_name('new')
         self._assert_explicit_positional_parameters_equal(
             py_new_def, ['cls', 'stack', 'stash'])
-        py_first_statement = py_new_def.body[0]
-        self.assertIn('stack.append(cls)', astunparse.unparse(
-            py_first_statement), msg="doesn't push cls")
+        self._assert_pushes(py_new_def, 'cls')
 
     def test_instance_functions_with_concat_signatures(self) -> None:
         """Test that transpiled __(init, call)__ methods take self, the stack, and the stash.
@@ -275,9 +283,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
                 py_method_def = self._make_magic_py_method_from_name(method)
                 self._assert_explicit_positional_parameters_equal(
                     py_method_def, ['self', 'stack', 'stash'])
-                py_first_statement = py_method_def.body[0]
-                self.assertIn('stack.append(self)', astunparse.unparse(
-                    py_first_statement), msg="doesn't push self")
+                self._assert_pushes(py_method_def, 'self')
 
     def test_self_only_methods(self) -> None:
         """Test that transpiled __(del, repr, etc.)__ methods take only self.
@@ -296,9 +302,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
                 py_def = self._make_magic_py_method_from_name(method)
                 self._assert_explicit_positional_parameters_equal(
                     py_def, ['self'])
-                py_first_statement = py_def.body[0]
-                self.assertIn('stack.append(self)', astunparse.unparse(
-                    py_first_statement), msg="doesn't push self")
+                self._assert_pushes(py_def, 'self')
                 py_last_statement = py_def.body[-1]
                 message = "doesn't pop return value off stack"
                 self.assertIn('return stack.pop()', astunparse.unparse(
@@ -311,11 +315,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         py_format_def = self._make_magic_py_method_from_name('format')
         self._assert_explicit_positional_parameters_equal(
             py_format_def, ['self', 'format_spec'])
-        py_first_statement, py_second_statement = py_format_def.body[0:2]
-        self.assertIn('stack.append(format_spec)', astunparse.unparse(
-            py_first_statement), msg="doesn't push format_spec")
-        self.assertIn('stack.append(self)', astunparse.unparse(
-            py_second_statement), msg="doesn't push self")
+        self._assert_pushes(py_format_def, 'format_spec')
+        self._assert_pushes(py_format_def, 'self', 1)
         py_last_statement = py_format_def.body[-1]
         self.assertIn('return stack.pop()', astunparse.unparse(
             py_last_statement), msg="doesn't pop return value off stack")
@@ -338,11 +339,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
                 py_def = self._make_magic_py_method_from_name(method)
                 self._assert_explicit_positional_parameters_equal(
                     py_def, ['self', 'other'])
-                py_first_statement, py_second_statement = py_def.body[0:2]
-                self.assertIn('stack.append(self)', astunparse.unparse(
-                    py_first_statement), msg="doesn't push self")
-                self.assertIn('stack.append(other)', astunparse.unparse(
-                    py_second_statement), msg="doesn't push other")
+                self._assert_pushes(py_def, 'self')
+                self._assert_pushes(py_def, 'other', 1)
                 py_last_statement = py_def.body[-1]
                 self.assertIn('return stack.pop()', astunparse.unparse(
                     py_last_statement), msg="doesn't pop return value off stack")
@@ -356,11 +354,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
                 py_getattr_def = self._make_magic_py_method_from_name(method)
                 self._assert_explicit_positional_parameters_equal(
                     py_getattr_def, ['self', 'name'])
-                py_first_statement, py_second_statement = py_getattr_def.body[0:2]
-                self.assertIn('stack.append(name)', astunparse.unparse(
-                    py_first_statement), msg="doesn't push name")
-                self.assertIn('stack.append(self)', astunparse.unparse(
-                    py_second_statement), msg="doesn't push self")
+                self._assert_pushes(py_getattr_def, 'name')
+                self._assert_pushes(py_getattr_def, 'self', 1)
                 py_last_statement = py_getattr_def.body[-1]
                 self.assertIn('return stack.pop()', astunparse.unparse(
                     py_last_statement), msg="doesn't pop return value off stack")
