@@ -363,10 +363,7 @@ class PrimitiveTypes:
 
 class PrimitiveInterfaces:
     invertible = PrimitiveInterface('invertible')
-    __rest_var = SequenceVariable()
-    # FIXME: This should be a type scheme. I don't know how that will work.
-    invertible.add_attribute('__invert__', _Function(
-        [__rest_var, invertible], [__rest_var, IndividualVariable()]))
+    invertible.add_attribute('__invert__', PrimitiveTypes.py_function)
     iterable = PrimitiveInterface('iterable')
     for type in {PrimitiveTypes.int, PrimitiveTypes.dict, PrimitiveTypes.list, PrimitiveTypes.file}:
         type.add_supertype(iterable)
