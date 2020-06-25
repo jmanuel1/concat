@@ -48,9 +48,6 @@ Summer of Shipping *aspirational* project goals
 -------------
 
 1. Clean up some uglier and overly repetitive parts of the code.
-   - In particular, the transpiler tests should be rewritten or gotten rid of.
-     They don't test what was meant to be tested (that correct Python ASTs are
-     produced) anyway.
 2. Make the project more amenable to collaboration.
    - Automated testing
    - Testing coverage
