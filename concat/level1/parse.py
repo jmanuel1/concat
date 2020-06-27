@@ -3,7 +3,7 @@
 This parser is designed to extend the level zero parser.
 """
 from typing import (
-    Iterable, List, Tuple, Sequence, Optional, Generator, TYPE_CHECKING)
+    Iterable, List, Tuple, Sequence, Optional, Generator, Type, TYPE_CHECKING)
 from concat.level0.lex import Token
 import concat.level0.parse
 import concat.level1.typecheck
@@ -463,28 +463,28 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     # bytes word = BYTES ;
     parsers['bytes-word'] = parsers.token('BYTES').map(BytesWordNode)
 
+    def iterable_word_parser(
+        delimiter: str,
+        cls: Type[IterableWordNode],
+        desc: str
+    ) -> 'parsy.Parser[Token, IterableWordNode]':
+        @parsy.generate
+        def parser() -> Generator:
+            location = (yield parsers.token('L' + delimiter)).start
+            element_words = yield word_list_parser
+            yield parsers.token('R' + delimiter)
+            return cls(element_words, location)
+        return concat.parser_combinators.desc_cumulatively(parser, desc)
+
     # This parses a tuple word.
     # tuple word = LPAR, word list, RPAR ;
-    @parsy.generate('tuple word')
-    def tuple_word_parser() -> Generator:
-        location = (yield parsers.token('LPAR')).start
-        element_words = yield word_list_parser
-        yield parsers.token('RPAR')
-        return TupleWordNode(element_words, location)
-
-    parsers['tuple-word'] = tuple_word_parser
+    parsers['tuple-word'] = iterable_word_parser(
+        'PAR', TupleWordNode, 'tuple word')
 
     # This parses a list word.
     # list word = LSQB, word list, RSQB ;
-    @parsy.generate('list word')
-    def list_word_parser() -> Generator:
-        location = (yield parsers.token('LSQB')).start
-        element_words = yield word_list_parser
-        end = parsers.token('RSQB')
-        yield end
-        return ListWordNode(element_words, location)
-
-    parsers['list-word'] = list_word_parser
+    parsers['list-word'] = iterable_word_parser(
+        'SQB', ListWordNode, 'list word')
 
     # word list = (COMMA | word+, COMMA | word+, (COMMA, word+)+, [ COMMA ]) ;
     @parsy.generate('word list')
@@ -500,14 +500,8 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
 
     # This parses a set word.
     # list word = LBRACE, word list, RBRACE ;
-    @parsy.generate('set word')
-    def set_word_parser():
-        location = (yield parsers.token('LBRACE')).start
-        element_words = yield word_list_parser
-        yield parsers.token('RBRACE')
-        return SetWordNode(element_words, location)
-
-    parsers['set-word'] = set_word_parser
+    parsers['set-word'] = iterable_word_parser(
+        'BRACE', SetWordNode, 'set word')
 
     # This parses a dict word.
     # dict word =
