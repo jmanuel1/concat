@@ -418,33 +418,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
 
     parsers['slice-word'] = slice_word_parser
 
-    parsers['operator-word'] = parsy.alt(
-        parsers.ref_parser('subtract-word'),
-        parsers.ref_parser('power-word'),
-        parsers.ref_parser('invert-word'),
-        parsers.ref_parser('mul-word'),
-        parsers.ref_parser('mat-mul-word'),
-        parsers.ref_parser('floor-div-word'),
-        parsers.ref_parser('div-word'),
-        parsers.ref_parser('mod-word'),
-        parsers.ref_parser('add-word'),
-        parsers.ref_parser('left-shift-word'),
-        parsers.ref_parser('right-shift-word'),
-        parsers.ref_parser('bitwise-and-word'),
-        parsers.ref_parser('bitwise-xor-word'),
-        parsers.ref_parser('bitwise-or-word'),
-        parsers.ref_parser('less-than-word'),
-        parsers.ref_parser('greater-than-word'),
-        parsers.ref_parser('equal-to-word'),
-        parsers.ref_parser('greater-than-or-equal-to-word'),
-        parsers.ref_parser('less-than-or-equal-to-word'),
-        parsers.ref_parser('not-equal-to-word'),
-        parsers.ref_parser('is-word'),
-        parsers.ref_parser('in-word'),
-        parsers.ref_parser('or-word'),
-        parsers.ref_parser('and-word'),
-        parsers.ref_parser('not-word')
-    )
+    parsers['operator-word'] = parsy.fail('operator')
 
     operators = (
         ('power', 'DOUBLESTAR', PowerWordNode),
@@ -483,6 +457,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     for operator_name, token_type, node_type in operators:
         parser_name = operator_name + '-word'
         parsers[parser_name] = parsers.token(token_type).map(node_type)
+        parsers['operator-word'] |= parsers.ref_parser(parser_name)
 
     # This parses a bytes word.
     # bytes word = BYTES ;
