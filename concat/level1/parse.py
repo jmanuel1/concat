@@ -2,16 +2,18 @@
 
 This parser is designed to extend the level zero parser.
 """
+from typing import (
+    Iterable, List, Tuple, Sequence, Optional, Generator, TYPE_CHECKING)
 from concat.level0.lex import Token
 import concat.level0.parse
 import concat.level1.typecheck
-import concat.level2.typecheck  # NOTE: Used only for type annotations
 from concat.astutils import Words, Location, WordsOrStatements, flatten
 import concat.parser_combinators
 import abc
 import operator
-from typing import Iterable, List, Tuple, Sequence, Optional, Generator
 import parsy
+if TYPE_CHECKING:
+    from concat.level2.typecheck import StackEffectTypeNode
 
 
 # Patches to parsy for better errors--useful for debugging
@@ -284,7 +286,7 @@ class FuncdefStatementNode(concat.level0.parse.StatementNode):
         annotation: Optional[Iterable[concat.level0.parse.WordNode]],
         body: WordsOrStatements,
         location: Location,
-        stack_effect: Optional['concat.level2.typecheck.StackEffectTypeNode'] = None
+        stack_effect: Optional['StackEffectTypeNode'] = None
     ):
         super().__init__()
         self.location = location
