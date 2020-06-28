@@ -114,10 +114,6 @@ def _literal_word_extension(
     visitors['bytes-word'] = assert_type(
         concat.level1.parse.BytesWordNode).then(bytes_word_visitor)
 
-
-
-    # TODO: Make these comments doc-strings.
-
     def iterable_word_visitor(node: concat.level1.parse.IterableWordNode, kind: Type[ast.expr], **kwargs: ast.AST) -> ast.expr:
         """Converts a IterableWordNode to a Python expression.
 
@@ -166,10 +162,12 @@ def _literal_word_extension(
     visitors['set-word'] = assert_type(
         concat.level1.parse.SetWordNode).then(set_word_visitor)
 
-    # Converts a DictWordNode to the Python expression
-    # `push({(Quotation([...1])(stack,stash),stack.pop())[-1]:(Quotation([...2])(stack,stash),stack.pop())[-1],......})`.
     @FunctionalVisitor
     def dict_word_visitor(node: concat.level1.parse.DictWordNode):
+        """Converts a DictWordNode to a Python expression.
+
+        The expression looks like
+        `push({(Quotation([...1])(stack,stash),stack.pop())[-1]:(Quotation([...2])(stack,stash),stack.pop())[-1],......})`."""
         load = ast.Load()
         pairs = []
         for key, value in node.dict_children:
@@ -214,14 +212,15 @@ def _word_extension(
 
     visitors.extend_with(_literal_word_extension)
 
-    # Converts a SubscriptionWordNode to the Python expression `lambda
-    # stack,stash:(...(stack,stash),
-    # stack.pop(-2)[stack.pop()])[-1](stack,stash)`.
-    # NOTE: The result of the subscript is called by default.
     @FunctionalVisitor
     def subscription_word_visitor(
         node: concat.level1.parse.SubscriptionWordNode
     ) -> ast.expr:
+        """Converts a SubscriptionWordNode to a Python expression.
+
+        The Python expression looks like `lambda stack,stash:(...(stack,stash),
+        stack.pop(-2)[stack.pop()])[-1](stack,stash)`.
+        NOTE: The result of the subscript is called by default."""
         quotation = concat.level0.parse.QuoteWordNode(
             node.children, node.location)
         py_index = ast.Index(pop_stack())
@@ -236,11 +235,13 @@ def _word_extension(
         concat.level1.parse.SubscriptionWordNode).then(
         subscription_word_visitor)
 
-    # Converts a SliceWordNode to the Python equivalent of `[...3 ...2 ...1 #
-    # to_slice]`. This perhaps makes the evaluation order in a slice a bit
-    # weird.
     @FunctionalVisitor
     def slice_word_visitor(node: concat.level1.parse.SliceWordNode):
+        """Converts a SliceWordNode to a Python expression.
+
+        The expression will be the Python equivalent of `[...3 ...2 ...1
+        to_slice]`. This perhaps makes the evaluation order in a slice a bit
+        weird."""
         to_slice_token = concat.level0.lex.Token()
         to_slice_token.type, to_slice_token.value = 'NAME', 'to_slice'
         to_slice = concat.level0.parse.NameWordNode(to_slice_token)
@@ -468,12 +469,13 @@ def level_1_extension(
         visitors.ref_visitor('funcdef-statement')
     )
 
-    # This converts a DelStatementNode to the Python statement `del
-    # ...1,......,...n`.
     @FunctionalVisitor
     def del_statement_visitor(
         node: concat.level1.parse.DelStatementNode
     ) -> ast.Delete:
+        """This converts a DelStatementNode to a Python statement.
+
+        The Python statement has the form of `del ...1,......,...n`."""
         @FunctionalVisitor
         def subscription_subvisitor(
             node: concat.level1.parse.SubscriptionWordNode
@@ -524,13 +526,14 @@ def level_1_extension(
     visitors['del-statement'] = assert_type(
         concat.level1.parse.DelStatementNode).then(del_statement_visitor)
 
-    # This converts an AsyncFuncdefStatementNode to the Python '@... @(lambda
-    # f: lambda s,t: s.append(f(s[:],t[:]))) async def name(stack, stash) -> ...:
-    # ...'.
     @FunctionalVisitor
     def async_funcdef_statement_visitor(
         node: concat.level1.parse.AsyncFuncdefStatementNode
     ) -> ast.AsyncFunctionDef:
+        """This converts an AsyncFuncdefStatementNode to a Python statement.
+
+        The statement takes the form of  '@... @(lambda f: lambda s,t:
+        s.append(f(s[:],t[:]))) async def name(stack, stash) -> ...: ...'."""
         py_func_def = cast(
             ast.FunctionDef, visitors['funcdef-statement'].visit(node))
         py_node = ast.AsyncFunctionDef(
@@ -550,12 +553,13 @@ def level_1_extension(
         concat.level1.parse.AsyncFuncdefStatementNode
     ).then(async_funcdef_statement_visitor)
 
-    # This transpiles a FuncdefStatementNode to the Python statement '@... def
-    # name: ...'.
     @FunctionalVisitor
     def funcdef_statement_visitor(
         node: concat.level1.parse.FuncdefStatementNode
     ) -> ast.FunctionDef:
+        """This transpiles a FuncdefStatementNode to a Python statement.
+
+        The statement takes the form of '@... def # name: ...'."""
         word_or_statement = alt(visitors['word'], visitors['statement'])
         py_body = [statementfy(word_or_statement.visit(node))
                    for node in node.body]
