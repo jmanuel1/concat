@@ -7,7 +7,7 @@ import concat.level1.parse
 import concat.level1.transpile
 import unittest
 import ast
-from typing import List, Type, cast
+from typing import Iterable, Iterator, List, Type, cast
 import astunparse  # type: ignore
 
 
@@ -35,6 +35,15 @@ class TestSubVisitors(unittest.TestCase):
         self.assertIsInstance(
             py_node, py_node_type, msg=message)
         return py_node
+
+    def _test_visitors(
+        self,
+        node: concat.level0.parse.Node,
+        visitors: Iterable[str],
+        py_node_type: Type[ast.AST]
+    ) -> Iterator[ast.AST]:
+        for visitor in visitors:
+            yield self._test_visitor(node, visitor, py_node_type)
 
     def _test_visitor_basic(
             self, node: concat.level0.parse.Node, visitor: str) -> ast.AST:
@@ -85,8 +94,7 @@ class TestSubVisitors(unittest.TestCase):
         name_token.value, name_token.start = 'a', (0, 0)
         name = concat.level0.parse.NameWordNode(name_token)
         node = concat.level1.parse.DelStatementNode([name])
-        self._test_visitor(node, 'del-statement', ast.Delete)
-        self._test_visitor(node, 'statement', ast.Delete)
+        self._test_visitors(node, {'del-statement', 'statement'}, ast.Delete)
 
     def test_async_funcdef_statement_visitor(self) -> None:
         """Async function definitions are transpiled to the same kind of Python statement."""
@@ -95,8 +103,9 @@ class TestSubVisitors(unittest.TestCase):
         node = concat.level1.parse.AsyncFuncdefStatementNode(
             name_token, [], [], [], (0, 0))
 
-        self._test_visitor(node, 'async-funcdef-statement', ast.AsyncFunctionDef)
-        self._test_visitor(node, 'statement', ast.AsyncFunctionDef)
+        visitors = {'async-funcdef-statement', 'statement'}
+        self._test_visitors(
+            node, visitors, ast.AsyncFunctionDef)
 
     def test_funcdef_statement_visitor(self) -> None:
         """Function definitions are transpiled to the same kind of Python statement."""
@@ -105,8 +114,8 @@ class TestSubVisitors(unittest.TestCase):
         node = concat.level1.parse.FuncdefStatementNode(
             name_token, [], [], [], (0, 0))
 
-        self._test_visitor(node, 'funcdef-statement', ast.FunctionDef)
-        self._test_visitor(node, 'statement', ast.FunctionDef)
+        self._test_visitors(
+            node, {'funcdef-statement', 'statement'}, ast.FunctionDef)
 
     def test_import_statement_visitor_with_as(self) -> None:
         """import ... as ... statements are transpiled to the same kind of Python statement.
@@ -115,57 +124,45 @@ class TestSubVisitors(unittest.TestCase):
 
         node = concat.level1.parse.ImportStatementNode('a.submodule', 'b')
 
-        py_node = self._test_visitor(node, 'import-statement', ast.stmt)
-        self.assertIn('as b', astunparse.unparse(py_node),
-                      msg='as-part was not transpiled')
-        py_node = self._test_visitor(node, 'statement', ast.stmt)
-        self.assertIn('as b', astunparse.unparse(py_node),
-                      msg='as-part was not transpiled')
+        for py_node in self._test_visitors(
+                node, {'import-statement', 'statement'}, ast.stmt):
+            self.assertIn('as b', astunparse.unparse(py_node),
+                          msg='as-part was not transpiled')
 
     def test_import_statement_visitor_with_from(self) -> None:
         node = concat.level1.parse.FromImportStatementNode('a.submodule', 'b')
 
-        py_node = self._test_visitor(node, 'import-statement', ast.stmt)
-        self.assertIn('from', astunparse.unparse(py_node),
-                      msg='was not transpiled as from-import')
-        py_node = self._test_visitor(node, 'statement', ast.stmt)
-        self.assertIn('from', astunparse.unparse(py_node),
-                      msg='was not transpiled as from-import')
+        for py_node in self._test_visitors(
+                node, {'import-statement', 'statement'}, ast.stmt):
+            self.assertIn('from', astunparse.unparse(py_node),
+                          msg='was not transpiled as from-import')
 
     def test_import_statement_visitor_with_from_and_as(self) -> None:
         node = concat.level1.parse.FromImportStatementNode(
             'a.submodule', 'b', 'c')
 
-        py_node = self._test_visitor(node, 'import-statement', ast.stmt)
-        self.assertIn('from', astunparse.unparse(py_node),
-                      msg='was not transpiled as from-import')
-        self.assertIn('as c', astunparse.unparse(py_node),
-                      msg='as-part was not transpiled')
-        py_node = self._test_visitor(node, 'statement', ast.stmt)
-        self.assertIn('from', astunparse.unparse(py_node),
-                      msg='was not transpiled as from-import')
-        self.assertIn('as c', astunparse.unparse(py_node),
-                      msg='as-part was not transpiled')
+        for py_node in self._test_visitors(
+                node, {'import-statement', 'statement'}, ast.stmt):
+            self.assertIn('from', astunparse.unparse(py_node),
+                          msg='was not transpiled as from-import')
+            self.assertIn('as c', astunparse.unparse(py_node),
+                          msg='as-part was not transpiled')
 
     def test_import_statement_visitor_with_from_and_star(self) -> None:
         node = concat.level1.parse.FromImportStarStatementNode('a')
 
-        py_node = self._test_visitor(node, 'import-statement', ast.stmt)
-        self.assertIn('from', astunparse.unparse(py_node),
-                      msg='was not transpiled as from-import')
-        self.assertIn('*', astunparse.unparse(py_node),
-                      msg='star-part was not transpiled')
-        py_node = self._test_visitor(node, 'statement', ast.stmt)
-        self.assertIn('from', astunparse.unparse(py_node),
-                      msg='was not transpiled as from-import')
-        self.assertIn('*', astunparse.unparse(py_node),
-                      msg='star-part was not transpiled')
+        for py_node in self._test_visitors(
+                node, {'import-statement', 'statement'}, ast.stmt):
+            self.assertIn('from', astunparse.unparse(py_node),
+                          msg='was not transpiled as from-import')
+            self.assertIn('*', astunparse.unparse(py_node),
+                          msg='star-part was not transpiled')
 
     def test_classdef_statement_visitor(self) -> None:
         node = concat.level1.parse.ClassdefStatementNode('A', [], (0, 0))
 
-        self._test_visitor(node, 'classdef-statement', ast.ClassDef)
-        self._test_visitor(node, 'statement', ast.ClassDef)
+        self._test_visitors(
+            node, {'classdef-statement', 'statement'}, ast.ClassDef)
 
     def test_classdef_statement_visitor_with_decorators(self) -> None:
         name = Token()
@@ -174,12 +171,10 @@ class TestSubVisitors(unittest.TestCase):
         node = concat.level1.parse.ClassdefStatementNode(
             'A', [], (0, 0), [decorator])
 
-        py_node = self._test_visitor(node, 'classdef-statement', ast.ClassDef)
-        self.assertIn('@', astunparse.unparse(py_node),
-                      msg='decorator was not transpiled')
-        py_node = self._test_visitor(node, 'statement', ast.ClassDef)
-        self.assertIn('@', astunparse.unparse(py_node),
-                      msg='decorator was not transpiled')
+        for py_node in self._test_visitors(
+                node, {'classdef-statement', 'statement'}, ast.ClassDef):
+            self.assertIn('@', astunparse.unparse(py_node),
+                          msg='decorator was not transpiled')
 
     def test_classdef_statement_visitor_with_bases(self) -> None:
         name = Token()
@@ -188,16 +183,12 @@ class TestSubVisitors(unittest.TestCase):
         node = concat.level1.parse.ClassdefStatementNode(
             'A', [], (0, 0), [], [[base]])
 
-        py_node = self._test_visitor(node, 'classdef-statement', ast.ClassDef)
-        self.assertIn('(', astunparse.unparse(py_node),
-                      msg='bases were not transpiled')
-        self.assertIn('base', astunparse.unparse(py_node),
-                      msg='bases were not transpiled')
-        py_node = self._test_visitor(node, 'statement', ast.ClassDef)
-        self.assertIn('(', astunparse.unparse(py_node),
-                      msg='bases were not transpiled')
-        self.assertIn('base', astunparse.unparse(py_node),
-                      msg='bases were not transpiled')
+        for py_node in self._test_visitors(
+                node, {'classdef-statement', 'statement'}, ast.ClassDef):
+            self.assertIn('(', astunparse.unparse(py_node),
+                          msg='bases were not transpiled')
+            self.assertIn('base', astunparse.unparse(py_node),
+                          msg='bases were not transpiled')
 
     def test_classdef_statement_visitor_with_keyword_args(self) -> None:
         name = Token()
@@ -206,16 +197,12 @@ class TestSubVisitors(unittest.TestCase):
         node = concat.level1.parse.ClassdefStatementNode(
             'A', [], (0, 0), [], [], [('metaclass', word)])
 
-        py_node = self._test_visitor(node, 'classdef-statement', ast.ClassDef)
-        self.assertIn('(', astunparse.unparse(py_node),
-                      msg='keyword arguments were not transpiled')
-        self.assertIn('metaclass=', astunparse.unparse(
-            py_node), msg='keyword arguments were not transpiled')
-        py_node = self._test_visitor(node, 'statement', ast.ClassDef)
-        self.assertIn('(', astunparse.unparse(py_node),
-                      msg='keyword arguments were not transpiled')
-        self.assertIn('metaclass=', astunparse.unparse(
-            py_node), msg='keyword arguments were not transpiled')
+        for py_node in self._test_visitors(
+                node, {'classdef-statement', 'statement'}, ast.ClassDef):
+            self.assertIn('(', astunparse.unparse(py_node),
+                          msg='keyword arguments were not transpiled')
+            self.assertIn('metaclass=', astunparse.unparse(
+                py_node), msg='keyword arguments were not transpiled')
 
 
 class TestMagicMethodTranspilaton(unittest.TestCase):
