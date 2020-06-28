@@ -115,7 +115,7 @@ def alt(*parsers: Parser[T, U]) -> Parser[T, U]:
 def seq(*parsers: Parser[T, U]) -> _ParserOutputtingList[T, U]:
     ...
 
-# there is another seq overload for Python 3.6+, but we support 3.5+
+# there is another seq overload for Python 3.6+, but we don't use it
 
 
 def success(val: T) -> Parser[U, T]:
@@ -123,6 +123,10 @@ def success(val: T) -> Parser[U, T]:
 
 
 def peek(parser: Parser[T, U]) -> Parser[T, U]:
+    ...
+
+
+def fail(expected: str) -> Parser[T, U]:
     ...
 
 
