@@ -265,6 +265,12 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         self.assertIn('stack.append({})'.format(name), astunparse.unparse(
             py_statement), msg="doesn't push {}".format(name))
 
+    def _assert_returns_top_of_stack(self, fun: ast.FunctionDef) -> None:
+        py_last_statement = fun.body[-1]
+        message = "doesn't pop return value off stack"
+        self.assertIn('return stack.pop()', astunparse.unparse(
+            py_last_statement), msg=message)
+
     def test__new__(self) -> None:
         """Test that transpiled __new__ methods take the class, stack, and stash.
 
@@ -303,10 +309,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
                 self._assert_explicit_positional_parameters_equal(
                     py_def, ['self'])
                 self._assert_pushes(py_def, 'self')
-                py_last_statement = py_def.body[-1]
-                message = "doesn't pop return value off stack"
-                self.assertIn('return stack.pop()', astunparse.unparse(
-                    py_last_statement), msg=message)
+                self._assert_returns_top_of_stack(py_def)
 
     def test__format__(self) -> None:
         """Test that transpiled __format__ methods take only self and format_spec.
@@ -317,9 +320,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
             py_format_def, ['self', 'format_spec'])
         self._assert_pushes(py_format_def, 'format_spec')
         self._assert_pushes(py_format_def, 'self', 1)
-        py_last_statement = py_format_def.body[-1]
-        self.assertIn('return stack.pop()', astunparse.unparse(
-            py_last_statement), msg="doesn't pop return value off stack")
+        self._assert_returns_top_of_stack(py_format_def)
 
     def test_comparisons_and_augmented_assignments(self) -> None:
         """Test that transpiled comparison/augmented assignment methods take only self and other.
@@ -341,9 +342,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
                     py_def, ['self', 'other'])
                 self._assert_pushes(py_def, 'self')
                 self._assert_pushes(py_def, 'other', 1)
-                py_last_statement = py_def.body[-1]
-                self.assertIn('return stack.pop()', astunparse.unparse(
-                    py_last_statement), msg="doesn't pop return value off stack")
+                self._assert_returns_top_of_stack(py_def)
 
     def test_attribute_methods_except_setattr_and_dir(self) -> None:
         """Test that transpiled __(getattr, getattribute, etc.)__ methods take only self and name.
@@ -356,9 +355,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
                     py_getattr_def, ['self', 'name'])
                 self._assert_pushes(py_getattr_def, 'name')
                 self._assert_pushes(py_getattr_def, 'self', 1)
-                py_last_statement = py_getattr_def.body[-1]
-                self.assertIn('return stack.pop()', astunparse.unparse(
-                    py_last_statement), msg="doesn't pop return value off stack")
+                self._assert_returns_top_of_stack(py_getattr_def)
 
     def test__setattr__(self) -> None:
         """Test that transpiled __setattr__ methods take only self, name, and value.
@@ -370,9 +367,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         py_first_statement = py_setattr_def.body[0:2]
         self.assertIn('stack += [value, name, self]', astunparse.unparse(
             py_first_statement), msg="doesn't push value, name, and self")
-        py_last_statement = py_setattr_def.body[-1]
-        self.assertIn('return stack.pop()', astunparse.unparse(
-            py_last_statement), msg="doesn't pop return value off stack")
+        self._assert_returns_top_of_stack(py_setattr_def)
 
     def test__get__(self) -> None:
         """Test that transpiled __get__ methods take only self, instance, and owner.
@@ -384,9 +379,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         py_first_statement = py_get_def.body[0:2]
         self.assertIn('stack += [owner, instance, self]', astunparse.unparse(
             py_first_statement), msg="doesn't push owner, instance, and self")
-        py_last_statement = py_get_def.body[-1]
-        self.assertIn('return stack.pop()', astunparse.unparse(
-            py_last_statement), msg="doesn't pop return value off stack")
+        self._assert_returns_top_of_stack(py_get_def)
 
     def test__set__(self) -> None:
         """Test that transpiled __set__ methods take only self, instance, and value.
@@ -398,9 +391,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         py_first_statement = py_set_def.body[0:2]
         self.assertIn('stack += [value, instance, self]', astunparse.unparse(
             py_first_statement), msg="doesn't push value, instance, and self")
-        py_last_statement = py_set_def.body[-1]
-        self.assertIn('return stack.pop()', astunparse.unparse(
-            py_last_statement), msg="doesn't pop return value off stack")
+        self._assert_returns_top_of_stack(py_set_def)
 
     def test_methods_taking_self_and_instance(self) -> None:
         """Test that transpiled __(delete, instancecheck)__ methods take only self and instance.
@@ -414,9 +405,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
                 py_first_statement = py_defun.body[0:2]
                 self.assertIn('stack += [instance, self]', astunparse.unparse(
                     py_first_statement), msg="doesn't push instance and self")
-                py_last_statement = py_defun.body[-1]
-                self.assertIn('return stack.pop()', astunparse.unparse(
-                    py_last_statement), msg="doesn't pop return value off stack")
+                self._assert_returns_top_of_stack(py_defun)
 
     def test__init_subclass__(self) -> None:
         """Test that transpiled __init_subclass__ methods take only cls and arbitrary keyword arguments.
@@ -432,9 +421,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         py_first_statement = py_init_subclass_def.body[0:2]
         self.assertIn('stack += [kwargs, self]', astunparse.unparse(
             py_first_statement), msg="doesn't push kwargs and self")
-        py_last_statement = py_init_subclass_def.body[-1]
-        self.assertIn('return stack.pop()', astunparse.unparse(
-            py_last_statement), msg="doesn't pop return value off stack")
+        self._assert_returns_top_of_stack(py_init_subclass_def)
 
     def test__prepare__(self) -> None:
         """Test that transpiled __prepare__ methods take only cls, bases, and arbitrary keyword arguments.
@@ -450,9 +437,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         py_first_statement = py_prepare_def.body[0:2]
         self.assertIn('stack += [kwds, bases, name, cls]', astunparse.unparse(
             py_first_statement), msg="doesn't push kwds, bases, name, and cls")
-        py_last_statement = py_prepare_def.body[-1]
-        self.assertIn('return stack.pop()', astunparse.unparse(
-            py_last_statement), msg="doesn't pop return value off stack")
+        self._assert_returns_top_of_stack(py_prepare_def)
 
     def test__subclasscheck__(self) -> None:
         """Test that transpiled __subclasscheck__ methods take only self and subclass.
@@ -464,9 +449,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         py_first_statement = py_subclasscheck_def.body[0:2]
         self.assertIn('stack += [subclass, self]', astunparse.unparse(
             py_first_statement), msg="doesn't push subclass and self")
-        py_last_statement = py_subclasscheck_def.body[-1]
-        self.assertIn('return stack.pop()', astunparse.unparse(
-            py_last_statement), msg="doesn't pop return value off stack")
+        self._assert_returns_top_of_stack(py_subclasscheck_def)
 
     def test_key_related_methods(self) -> None:
         """Test that transpiled __(getitem, missing, etc.)__ methods take only self and key.
@@ -483,9 +466,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
                 py_first_statement = py_method_def.body[0:2]
                 self.assertIn('stack += [key, self]', astunparse.unparse(
                     py_first_statement), msg="doesn't push subclass and self")
-                py_last_statement = py_method_def.body[-1]
-                self.assertIn('return stack.pop()', astunparse.unparse(
-                    py_last_statement), msg="doesn't pop return value off stack")
+                self._assert_returns_top_of_stack(py_method_def)
 
     def test_context_manager_exit_methods(self) -> None:
         """Test that transpiled __(aexit, exit)__ methods take only self, exc_type, exc_value, and traceback.
@@ -502,9 +483,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
                 py_first_statement = py_method_def.body[0:2]
                 self.assertIn('stack += [traceback, exc_value, exc_type, self]', astunparse.unparse(
                     py_first_statement), msg="doesn't push traceback, exc_value, exc_type, and self")
-                py_last_statement = py_method_def.body[-1]
-                self.assertIn('return stack.pop()', astunparse.unparse(
-                    py_last_statement), msg="doesn't pop return value off stack")
+                self._assert_returns_top_of_stack(py_method_def)
 
     def test__round__(self) -> None:
         """Test that transpiled __round__ methods take only self and ndigits.
@@ -516,9 +495,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         py_first_statement = py_method_def.body[0:2]
         self.assertIn('stack += [ndigits, self]', astunparse.unparse(
             py_first_statement), msg="doesn't push subclass and self")
-        py_last_statement = py_method_def.body[-1]
-        self.assertIn('return stack.pop()', astunparse.unparse(
-            py_last_statement), msg="doesn't pop return value off stack")
+        self._assert_returns_top_of_stack(py_method_def)
 
     def test_pow(self) -> None:
         """Test that transpiled __[i]pow__ methods take only self, other, and modulo.
@@ -537,9 +514,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
                 py_first_statement = py_method_def.body[0:2]
                 self.assertIn('stack += [self, other, modulo]', astunparse.unparse(
                     py_first_statement), msg="doesn't push self, other, modulo")
-                py_last_statement = py_method_def.body[-1]
-                self.assertIn('return stack.pop()', astunparse.unparse(
-                    py_last_statement), msg="doesn't pop return value off stack")
+                self._assert_returns_top_of_stack(py_method_def)
 
     def test__contains__(self) -> None:
         """Test that transpiled __contains__ methods take only self and item.
@@ -551,9 +526,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         py_first_statement = py_method_def.body[0:2]
         self.assertIn('stack += [item, self]', astunparse.unparse(
             py_first_statement), msg="doesn't push item and self")
-        py_last_statement = py_method_def.body[-1]
-        self.assertIn('return stack.pop()', astunparse.unparse(
-            py_last_statement), msg="doesn't pop return value off stack")
+        self._assert_returns_top_of_stack(py_method_def)
 
     def test__setitem__(self) -> None:
         """Test that transpiled __setitem__ methods take only self, key, and value.
@@ -565,6 +538,4 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         py_first_statement = py_method_def.body[0:2]
         self.assertIn('stack += [value, key, self]', astunparse.unparse(
             py_first_statement), msg="doesn't push value, key, and self")
-        py_last_statement = py_method_def.body[-1]
-        self.assertIn('return stack.pop()', astunparse.unparse(
-            py_last_statement), msg="doesn't pop return value off stack")
+        self._assert_returns_top_of_stack(py_method_def)
