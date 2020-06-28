@@ -7,7 +7,7 @@ import concat.level1.parse
 import concat.level1.transpile
 import unittest
 import ast
-from typing import Iterable, Iterator, List, Type, cast
+from typing import Iterable, Iterator, List, Sequence, Type, cast
 import astunparse  # type: ignore
 
 
@@ -264,14 +264,24 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         self.assertIn('return stack.pop()', astunparse.unparse(
             py_last_statement), msg=message)
 
+    def _test_magic_method_basic(
+        self,
+        name: str,
+        params: Sequence[str],
+        *pushed: str
+    ) -> ast.FunctionDef:
+        fun = self._make_magic_py_method_from_name(name)
+        self._assert_explicit_positional_parameters_equal(
+            fun, list(params))
+        for index, item in enumerate(pushed):
+            self._assert_pushes(fun, item, index)
+        return fun
+
     def test__new__(self) -> None:
         """Test that transpiled __new__ methods take the class, stack, and stash.
 
         def __new__ should become def __new__(cls, stack, stash) and it should push cls onto the stack before executing the rest of the function."""
-        py_new_def = self._make_magic_py_method_from_name('new')
-        self._assert_explicit_positional_parameters_equal(
-            py_new_def, ['cls', 'stack', 'stash'])
-        self._assert_pushes(py_new_def, 'cls')
+        self._test_magic_method_basic('new', ['cls', 'stack', 'stash'], 'cls')
 
     def test_instance_functions_with_concat_signatures(self) -> None:
         """Test that transpiled __(init, call)__ methods take self, the stack, and the stash.
@@ -279,10 +289,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         For example, def __init__ should become def __init__(self, stack, stash) and it should push self onto the stack before executing the rest of the function. The function need not return a value other than None."""
         for method in {'init', 'call'}:
             with self.subTest(msg='testing __{}__'.format(method), method=method):
-                py_method_def = self._make_magic_py_method_from_name(method)
-                self._assert_explicit_positional_parameters_equal(
-                    py_method_def, ['self', 'stack', 'stash'])
-                self._assert_pushes(py_method_def, 'self')
+                self._test_magic_method_basic(
+                    method, ['self', 'stack', 'stash'], 'self')
 
     def test_self_only_methods(self) -> None:
         """Test that transpiled __(del, repr, etc.)__ methods take only self.
@@ -298,21 +306,16 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
             method_name = '__{}__'.format(method)
             with self.subTest(msg='testing {}'.format(method_name),
                               method=method_name):
-                py_def = self._make_magic_py_method_from_name(method)
-                self._assert_explicit_positional_parameters_equal(
-                    py_def, ['self'])
-                self._assert_pushes(py_def, 'self')
+                py_def = self._test_magic_method_basic(
+                    method, ['self'], 'self')
                 self._assert_returns_top_of_stack(py_def)
 
     def test__format__(self) -> None:
         """Test that transpiled __format__ methods take only self and format_spec.
 
         def __format__ should become def __format__(self, format_spec) and it should push format_spec and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
-        py_format_def = self._make_magic_py_method_from_name('format')
-        self._assert_explicit_positional_parameters_equal(
-            py_format_def, ['self', 'format_spec'])
-        self._assert_pushes(py_format_def, 'format_spec')
-        self._assert_pushes(py_format_def, 'self', 1)
+        py_format_def = self._test_magic_method_basic(
+            'format', ['self', 'format_spec'], 'format_spec', 'self')
         self._assert_returns_top_of_stack(py_format_def)
 
     def test_comparisons_and_augmented_assignments(self) -> None:
@@ -330,11 +333,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
                        'and', 'rshift', 'lshift', 'mod', 'floordiv',
                        'truediv', 'matmul', 'mul', 'sub', 'add'}:
             with self.subTest(msg='testing __{}__'.format(method), method=method):
-                py_def = self._make_magic_py_method_from_name(method)
-                self._assert_explicit_positional_parameters_equal(
-                    py_def, ['self', 'other'])
-                self._assert_pushes(py_def, 'self')
-                self._assert_pushes(py_def, 'other', 1)
+                py_def = self._test_magic_method_basic(
+                    method, ['self', 'other'], 'self', 'other')
                 self._assert_returns_top_of_stack(py_def)
 
     def test_attribute_methods_except_setattr_and_dir(self) -> None:
@@ -343,20 +343,16 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         For example, def __getattr__ should become def __getattr__(self, name) and it should push name and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         for method in {'getattr', 'getattribute', 'delattr'}:
             with self.subTest(msg='testing __{}__'.format(method), method=method):
-                py_getattr_def = self._make_magic_py_method_from_name(method)
-                self._assert_explicit_positional_parameters_equal(
-                    py_getattr_def, ['self', 'name'])
-                self._assert_pushes(py_getattr_def, 'name')
-                self._assert_pushes(py_getattr_def, 'self', 1)
+                py_getattr_def = self._test_magic_method_basic(
+                    method, ['self', 'name'], 'name', 'self')
                 self._assert_returns_top_of_stack(py_getattr_def)
 
     def test__setattr__(self) -> None:
         """Test that transpiled __setattr__ methods take only self, name, and value.
 
         def __setattr__ should become def __setattr__(self, name, value) and it should push value, name, and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
-        py_setattr_def = self._make_magic_py_method_from_name('setattr')
-        self._assert_explicit_positional_parameters_equal(
-            py_setattr_def, ['self', 'name', 'value'])
+        py_setattr_def = self._test_magic_method_basic(
+            'setattr', ['self', 'name', 'value'])
         self._assert_pushes_all_at_once(
             py_setattr_def, 'value', 'name', 'self')
         self._assert_returns_top_of_stack(py_setattr_def)
@@ -365,9 +361,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         """Test that transpiled __get__ methods take only self, instance, and owner.
 
         def __get__ should become def __get__(self, instance, owner) and it should push owner, instance, and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
-        py_get_def = self._make_magic_py_method_from_name('get')
-        self._assert_explicit_positional_parameters_equal(
-            py_get_def, ['self', 'instance', 'owner'])
+        py_get_def = self._test_magic_method_basic(
+            'get', ['self', 'instance', 'owner'])
         self._assert_pushes_all_at_once(
             py_get_def, 'owner', 'instance', 'self')
         self._assert_returns_top_of_stack(py_get_def)
@@ -376,9 +371,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         """Test that transpiled __set__ methods take only self, instance, and value.
 
         def __set__ should become def __set__(self, instance, value) and it should push value, instance, and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
-        py_set_def = self._make_magic_py_method_from_name('set')
-        self._assert_explicit_positional_parameters_equal(
-            py_set_def, ['self', 'instance', 'value'])
+        py_set_def = self._test_magic_method_basic(
+            'set', ['self', 'instance', 'value'])
         self._assert_pushes_all_at_once(
             py_set_def, 'value', 'instance', 'self')
         self._assert_returns_top_of_stack(py_set_def)
@@ -389,9 +383,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         For example, def __delete__ should become def __delete__(self, instance) and it should push instance and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         for method in {'delete', 'instancecheck'}:
             with self.subTest(msg='testing __{}__'.format(method), method=method):
-                py_defun = self._make_magic_py_method_from_name(method)
-                self._assert_explicit_positional_parameters_equal(
-                    py_defun, ['self', 'instance'])
+                py_defun = self._test_magic_method_basic(
+                    method, ['self', 'instance'])
                 self._assert_pushes_all_at_once(py_defun, 'instance', 'self')
                 self._assert_returns_top_of_stack(py_defun)
 
@@ -399,9 +392,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         """Test that transpiled __init_subclass__ methods take only cls and arbitrary keyword arguments.
 
         def __init_subclass__ should become def __init_subclass__(cls, **kwargs) and it should push kwargs and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
-        py_init_subclass_def = self._make_magic_py_method_from_name('init_subclass')
-        self._assert_explicit_positional_parameters_equal(
-            py_init_subclass_def, ['cls'])
+        py_init_subclass_def = self._test_magic_method_basic(
+            'init_subclass', ['cls'])
         py_kwarg_object = py_init_subclass_def.args.kwarg
         self.assertIsNotNone(py_kwarg_object, msg='no ** argument')
         py_kwarg = cast(ast.arg, py_kwarg_object).arg
@@ -414,9 +406,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         """Test that transpiled __prepare__ methods take only cls, bases, and arbitrary keyword arguments.
 
         def __prepare__ should become def __prepare__(cls, name, bases, **kwds) and it should push kwds, bases, name, and self onto the stack before executing the rest of the function. The function should return stack.pop(). It is up to the programmer to decorate the function with @classmethod."""
-        py_prepare_def = self._make_magic_py_method_from_name('prepare')
-        self._assert_explicit_positional_parameters_equal(
-            py_prepare_def, ['cls', 'name', 'bases'])
+        py_prepare_def = self._test_magic_method_basic(
+            'prepare', ['cls', 'name', 'bases'])
         py_kwarg_object = py_prepare_def.args.kwarg
         self.assertIsNotNone(py_kwarg_object, msg='no ** argument')
         py_kwarg = cast(ast.arg, py_kwarg_object).arg
@@ -429,9 +420,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         """Test that transpiled __subclasscheck__ methods take only self and subclass.
 
         def __subclasscheck__ should become def __subclasscheck__(self, subclass) and it should push subclass and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
-        py_subclasscheck_def = self._make_magic_py_method_from_name('subclasscheck')
-        self._assert_explicit_positional_parameters_equal(
-            py_subclasscheck_def, ['self', 'subclass'])
+        py_subclasscheck_def = self._test_magic_method_basic(
+            'subclasscheck', ['self', 'subclass'])
         self._assert_pushes_all_at_once(
             py_subclasscheck_def, 'subclass', 'self')
         self._assert_returns_top_of_stack(py_subclasscheck_def)
@@ -445,9 +435,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         for method in {'getitem', 'missing', 'delitem'}:
             method_name = '__{}__'.format(method)
             with self.subTest(msg='testing {}'.format(method_name), method_name=method_name):
-                py_method_def = self._make_magic_py_method_from_name(method)
-                self._assert_explicit_positional_parameters_equal(
-                    py_method_def, ['self', 'key'])
+                py_method_def = self._test_magic_method_basic(
+                    method, ['self', 'key'])
                 self._assert_pushes_all_at_once(py_method_def, 'key', 'self')
                 self._assert_returns_top_of_stack(py_method_def)
 
@@ -458,11 +447,10 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         for method in {'exit', 'aexit'}:
             method_name = '__{}__'.format(method)
             with self.subTest(msg='testing {}'.format(method_name), method_name=method_name):
-                py_method_def = self._make_magic_py_method_from_name(method)
                 expected_params = [
                     'self', 'exc_type', 'exc_value', 'traceback']
-                self._assert_explicit_positional_parameters_equal(
-                    py_method_def, expected_params)
+                py_method_def = self._test_magic_method_basic(
+                    method, expected_params)
                 self._assert_pushes_all_at_once(
                     py_method_def, 'traceback', 'exc_value', 'exc_type', 'self'
                 )
@@ -472,9 +460,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         """Test that transpiled __round__ methods take only self and ndigits.
 
         def __round__ should become def __round__(self, ndigits) and it should push ndigits and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
-        py_method_def = self._make_magic_py_method_from_name('round')
-        self._assert_explicit_positional_parameters_equal(
-            py_method_def, ['self', 'ndigits'])
+        py_method_def = self._test_magic_method_basic(
+            'round', ['self', 'ndigits'])
         self._assert_pushes_all_at_once(py_method_def, 'ndigits', 'self')
         self._assert_returns_top_of_stack(py_method_def)
 
@@ -485,9 +472,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         for method in {'pow', 'ipow'}:
             method_name = '__{}__'.format(method)
             with self.subTest(msg='testing {}'.format(method_name), method_name=method_name):
-                py_method_def = self._make_magic_py_method_from_name(method)
-                self._assert_explicit_positional_parameters_equal(
-                    py_method_def, ['self', 'other', 'modulo'])
+                py_method_def = self._test_magic_method_basic(
+                    method, ['self', 'other', 'modulo'])
                 self.assertIsInstance(
                     py_method_def.args.defaults[-1], ast.Num, msg='modulo default is not a number')
                 self.assertEqual(
@@ -500,9 +486,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         """Test that transpiled __contains__ methods take only self and item.
 
         def __contains__ should become def __contains__(self, item) and it should push item and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
-        py_method_def = self._make_magic_py_method_from_name('contains')
-        self._assert_explicit_positional_parameters_equal(
-            py_method_def, ['self', 'item'])
+        py_method_def = self._test_magic_method_basic(
+            'contains', ['self', 'item'])
         self._assert_pushes_all_at_once(py_method_def, 'item', 'self')
         self._assert_returns_top_of_stack(py_method_def)
 
@@ -510,8 +495,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         """Test that transpiled __setitem__ methods take only self, key, and value.
 
         def __setitem__ should become def __setitem__(self, key, value) and it should push value, key, and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
-        py_method_def = self._make_magic_py_method_from_name('setitem')
-        self._assert_explicit_positional_parameters_equal(
-            py_method_def, ['self', 'key', 'value'])
+        py_method_def = self._test_magic_method_basic(
+            'setitem', ['self', 'key', 'value'])
         self._assert_pushes_all_at_once(py_method_def, 'value', 'key', 'self')
         self._assert_returns_top_of_stack(py_method_def)
