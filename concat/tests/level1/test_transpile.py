@@ -265,6 +265,12 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         self.assertIn('stack.append({})'.format(name), astunparse.unparse(
             py_statement), msg="doesn't push {}".format(name))
 
+    def _assert_pushes_all_at_once(self, fun: ast.FunctionDef, *items: str) -> None:
+        py_first_statement = fun.body[0:2]
+        items_str = ', '.join(items)
+        self.assertIn('stack += [{}]'.format(items_str), astunparse.unparse(
+            py_first_statement), msg="doesn't push {}".format(items_str))
+
     def _assert_returns_top_of_stack(self, fun: ast.FunctionDef) -> None:
         py_last_statement = fun.body[-1]
         message = "doesn't pop return value off stack"
@@ -364,9 +370,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         py_setattr_def = self._make_magic_py_method_from_name('setattr')
         self._assert_explicit_positional_parameters_equal(
             py_setattr_def, ['self', 'name', 'value'])
-        py_first_statement = py_setattr_def.body[0:2]
-        self.assertIn('stack += [value, name, self]', astunparse.unparse(
-            py_first_statement), msg="doesn't push value, name, and self")
+        self._assert_pushes_all_at_once(
+            py_setattr_def, 'value', 'name', 'self')
         self._assert_returns_top_of_stack(py_setattr_def)
 
     def test__get__(self) -> None:
@@ -376,9 +381,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         py_get_def = self._make_magic_py_method_from_name('get')
         self._assert_explicit_positional_parameters_equal(
             py_get_def, ['self', 'instance', 'owner'])
-        py_first_statement = py_get_def.body[0:2]
-        self.assertIn('stack += [owner, instance, self]', astunparse.unparse(
-            py_first_statement), msg="doesn't push owner, instance, and self")
+        self._assert_pushes_all_at_once(
+            py_get_def, 'owner', 'instance', 'self')
         self._assert_returns_top_of_stack(py_get_def)
 
     def test__set__(self) -> None:
@@ -388,9 +392,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         py_set_def = self._make_magic_py_method_from_name('set')
         self._assert_explicit_positional_parameters_equal(
             py_set_def, ['self', 'instance', 'value'])
-        py_first_statement = py_set_def.body[0:2]
-        self.assertIn('stack += [value, instance, self]', astunparse.unparse(
-            py_first_statement), msg="doesn't push value, instance, and self")
+        self._assert_pushes_all_at_once(
+            py_set_def, 'value', 'instance', 'self')
         self._assert_returns_top_of_stack(py_set_def)
 
     def test_methods_taking_self_and_instance(self) -> None:
@@ -402,9 +405,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
                 py_defun = self._make_magic_py_method_from_name(method)
                 self._assert_explicit_positional_parameters_equal(
                     py_defun, ['self', 'instance'])
-                py_first_statement = py_defun.body[0:2]
-                self.assertIn('stack += [instance, self]', astunparse.unparse(
-                    py_first_statement), msg="doesn't push instance and self")
+                self._assert_pushes_all_at_once(py_defun, 'instance', 'self')
                 self._assert_returns_top_of_stack(py_defun)
 
     def test__init_subclass__(self) -> None:
@@ -418,9 +419,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         self.assertIsNotNone(py_kwarg_object, msg='no ** argument')
         py_kwarg = cast(ast.arg, py_kwarg_object).arg
         self.assertEqual(py_kwarg, 'kwargs', msg='wrong ** argument')
-        py_first_statement = py_init_subclass_def.body[0:2]
-        self.assertIn('stack += [kwargs, self]', astunparse.unparse(
-            py_first_statement), msg="doesn't push kwargs and self")
+        self._assert_pushes_all_at_once(
+            py_init_subclass_def, 'kwargs', 'self')
         self._assert_returns_top_of_stack(py_init_subclass_def)
 
     def test__prepare__(self) -> None:
@@ -434,9 +434,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         self.assertIsNotNone(py_kwarg_object, msg='no ** argument')
         py_kwarg = cast(ast.arg, py_kwarg_object).arg
         self.assertEqual(py_kwarg, 'kwds', msg='wrong ** argument')
-        py_first_statement = py_prepare_def.body[0:2]
-        self.assertIn('stack += [kwds, bases, name, cls]', astunparse.unparse(
-            py_first_statement), msg="doesn't push kwds, bases, name, and cls")
+        self._assert_pushes_all_at_once(
+            py_prepare_def, 'kwds', 'bases', 'name', 'cls')
         self._assert_returns_top_of_stack(py_prepare_def)
 
     def test__subclasscheck__(self) -> None:
@@ -446,9 +445,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         py_subclasscheck_def = self._make_magic_py_method_from_name('subclasscheck')
         self._assert_explicit_positional_parameters_equal(
             py_subclasscheck_def, ['self', 'subclass'])
-        py_first_statement = py_subclasscheck_def.body[0:2]
-        self.assertIn('stack += [subclass, self]', astunparse.unparse(
-            py_first_statement), msg="doesn't push subclass and self")
+        self._assert_pushes_all_at_once(
+            py_subclasscheck_def, 'subclass', 'self')
         self._assert_returns_top_of_stack(py_subclasscheck_def)
 
     def test_key_related_methods(self) -> None:
@@ -463,9 +461,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
                 py_method_def = self._make_magic_py_method_from_name(method)
                 self._assert_explicit_positional_parameters_equal(
                     py_method_def, ['self', 'key'])
-                py_first_statement = py_method_def.body[0:2]
-                self.assertIn('stack += [key, self]', astunparse.unparse(
-                    py_first_statement), msg="doesn't push subclass and self")
+                self._assert_pushes_all_at_once(py_method_def, 'key', 'self')
                 self._assert_returns_top_of_stack(py_method_def)
 
     def test_context_manager_exit_methods(self) -> None:
@@ -480,9 +476,9 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
                     'self', 'exc_type', 'exc_value', 'traceback']
                 self._assert_explicit_positional_parameters_equal(
                     py_method_def, expected_params)
-                py_first_statement = py_method_def.body[0:2]
-                self.assertIn('stack += [traceback, exc_value, exc_type, self]', astunparse.unparse(
-                    py_first_statement), msg="doesn't push traceback, exc_value, exc_type, and self")
+                self._assert_pushes_all_at_once(
+                    py_method_def, 'traceback', 'exc_value', 'exc_type', 'self'
+                )
                 self._assert_returns_top_of_stack(py_method_def)
 
     def test__round__(self) -> None:
@@ -492,9 +488,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         py_method_def = self._make_magic_py_method_from_name('round')
         self._assert_explicit_positional_parameters_equal(
             py_method_def, ['self', 'ndigits'])
-        py_first_statement = py_method_def.body[0:2]
-        self.assertIn('stack += [ndigits, self]', astunparse.unparse(
-            py_first_statement), msg="doesn't push subclass and self")
+        self._assert_pushes_all_at_once(py_method_def, 'ndigits', 'self')
         self._assert_returns_top_of_stack(py_method_def)
 
     def test_pow(self) -> None:
@@ -511,9 +505,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
                     py_method_def.args.defaults[-1], ast.Num, msg='modulo default is not a number')
                 self.assertEqual(
                     cast(ast.Num, py_method_def.args.defaults[-1]).n, 1, msg='wrong modulo default')
-                py_first_statement = py_method_def.body[0:2]
-                self.assertIn('stack += [self, other, modulo]', astunparse.unparse(
-                    py_first_statement), msg="doesn't push self, other, modulo")
+                self._assert_pushes_all_at_once(
+                    py_method_def, 'self', 'other', 'modulo')
                 self._assert_returns_top_of_stack(py_method_def)
 
     def test__contains__(self) -> None:
@@ -523,9 +516,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         py_method_def = self._make_magic_py_method_from_name('contains')
         self._assert_explicit_positional_parameters_equal(
             py_method_def, ['self', 'item'])
-        py_first_statement = py_method_def.body[0:2]
-        self.assertIn('stack += [item, self]', astunparse.unparse(
-            py_first_statement), msg="doesn't push item and self")
+        self._assert_pushes_all_at_once(py_method_def, 'item', 'self')
         self._assert_returns_top_of_stack(py_method_def)
 
     def test__setitem__(self) -> None:
@@ -535,7 +526,5 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         py_method_def = self._make_magic_py_method_from_name('setitem')
         self._assert_explicit_positional_parameters_equal(
             py_method_def, ['self', 'key', 'value'])
-        py_first_statement = py_method_def.body[0:2]
-        self.assertIn('stack += [value, key, self]', astunparse.unparse(
-            py_first_statement), msg="doesn't push value, key, and self")
+        self._assert_pushes_all_at_once(py_method_def, 'value', 'key', 'self')
         self._assert_returns_top_of_stack(py_method_def)
