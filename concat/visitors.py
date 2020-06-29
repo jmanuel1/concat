@@ -1,5 +1,17 @@
 from typing import (
-    Any, TypeVar, Iterable, Generic, Callable, Tuple, Union, Dict, Type)
+    Any,
+    NoReturn,
+    Optional,
+    TypeVar,
+    Iterable,
+    Generic,
+    Callable,
+    Tuple,
+    Union,
+    Dict,
+    Type,
+    overload
+)
 from typing_extensions import Protocol
 import abc
 import functools
@@ -160,7 +172,7 @@ class One(Visitor[_InternalNode[_NodeType1], _ReturnType1]):
 # Beyond Visser's combinators
 
 def alt(*visitors):
-    return functools.reduce(Choice, visitors)
+    return functools.reduce(Choice, visitors, fail)
 
 
 # Useful visitors
@@ -178,6 +190,11 @@ def assert_annotated_type(
     arg_name = [name for name in fun.__annotations__ if name != 'return'][0]
     type = fun.__annotations__[arg_name]
     return assert_type(type).then(FunctionalVisitor(fun))
+
+
+@FunctionalVisitor
+def fail(_: object) -> NoReturn:
+    raise VisitFailureException
 
 
 _T = TypeVar('_T')
@@ -201,3 +218,35 @@ class VisitorDict(Dict[str, Visitor[_NodeType1, _ReturnType1]]):
             return self[name].visit(node)
 
         return visit
+
+    @overload
+    def add_alternative_to(
+        self,
+        choice_name: str,
+        alternative_name: str
+    ) -> Callable[[Visitor[_NodeType1, _ReturnType1]], None]:
+        ...
+
+    @overload
+    def add_alternative_to(
+        self,
+        choice_name: str,
+        alternative_name: str,
+        visitor: Visitor[_NodeType1, _ReturnType1]
+    ) -> None:
+        ...
+
+    def add_alternative_to(
+        self,
+        choice_name: str,
+        alternative_name: str,
+        visitor: Optional[Visitor[_NodeType1, _ReturnType1]] = None
+    ) -> Optional[Callable[[Visitor[_NodeType1, _ReturnType1]], None]]:
+        self[choice_name] = Choice(
+            self[choice_name], self.ref_visitor(alternative_name))
+
+        def partial(visitor): self.update({alternative_name: visitor})
+
+        if visitor:
+            return partial(visitor)
+        return partial

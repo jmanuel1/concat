@@ -19,7 +19,8 @@ from concat.visitors import (
     All,
     Visitor,
     assert_type,
-    assert_annotated_type
+    assert_annotated_type,
+    fail
 )
 from concat.transpile_visitors import node_to_py_string
 from concat.astutils import (
@@ -41,27 +42,16 @@ import astunparse  # type: ignore
 
 
 # This should stay in this module since it operates on level 1 types.
-def binary_operator_visitor(operator: str) -> Visitor[
-    'concat.level1.parse.OperatorWordNode', ast.expr
-]:
+def binary_operator_visitor(operator: str) -> Visitor[object, ast.expr]:
     expression = 'lambda s,_:s.append(s.pop(-2) {} s.pop())'.format(operator)
-    return node_to_py_string(expression)
+    return assert_type(concat.level1.parse.OperatorWordNode).then(
+        node_to_py_string(expression))
 
 
 def _literal_word_extension(
     visitors: VisitorDict[concat.level0.parse.Node, ast.AST]
 ) -> None:
-    visitors['literal-word'] = alt(visitors['literal-word'],
-                                   visitors.ref_visitor('none-word'),
-                                   visitors.ref_visitor('not-impl-word'),
-                                   visitors.ref_visitor('ellipsis-word'),
-                                   visitors.ref_visitor('bytes-word'),
-                                   visitors.ref_visitor('tuple-word'),
-                                   visitors.ref_visitor('list-word'),
-                                   visitors.ref_visitor('set-word'),
-                                   visitors.ref_visitor('dict-word')
-                                   )
-
+    @visitors.add_alternative_to('literal-word', 'none-word')
     @assert_annotated_type
     def none_word_visitor(node: concat.level1.parse.NoneWordNode) -> ast.expr:
         """Converts a NoneWordNode to the Python expression `push(None)`."""
@@ -72,8 +62,7 @@ def _literal_word_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
-    visitors['none-word'] = none_word_visitor
-
+    @visitors.add_alternative_to('literal-word', 'not-impl-word')
     @assert_annotated_type
     def not_impl_word_visitor(node: concat.level1.parse.NotImplWordNode):
         """Converts a NotImplWordNode to the Python expression `push(NotImplemented)`."""
@@ -84,8 +73,7 @@ def _literal_word_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
-    visitors['not-impl-word'] = not_impl_word_visitor
-
+    @visitors.add_alternative_to('literal-word', 'ellipsis-word')
     @assert_annotated_type
     def ellipsis_word_visitor(node: concat.level1.parse.EllipsisWordNode):
         """Converts a EllipsisWordNode to the Python expression `push(...)`."""
@@ -96,8 +84,7 @@ def _literal_word_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
-    visitors['ellipsis-word'] = ellipsis_word_visitor
-
+    @visitors.add_alternative_to('literal-word', 'bytes-word')
     @assert_annotated_type
     def bytes_word_visitor(node: concat.level1.parse.BytesWordNode):
         """Converts a BytesWordNode to the Python expression `push(b'...')`."""
@@ -107,8 +94,6 @@ def _literal_word_extension(
         py_node = ast.Call(func=push_func, args=[bytes], keywords=[])
         py_node.lineno, py_node.col_offset = node.location
         return py_node
-
-    visitors['bytes-word'] = bytes_word_visitor
 
     def iterable_word_visitor(node: concat.level1.parse.IterableWordNode, kind: Type[ast.expr], **kwargs: ast.AST) -> ast.expr:
         """Converts a IterableWordNode to a Python expression.
@@ -134,28 +119,26 @@ def _literal_word_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
+    @visitors.add_alternative_to('literal-word', 'tuple-word')
     @assert_annotated_type
     def tuple_word_visitor(
             node: concat.level1.parse.TupleWordNode) -> ast.expr:
         """Converts a TupleWordNode to a Python expression."""
         return iterable_word_visitor(node, ast.Tuple, ctx=ast.Load())
 
-    visitors['tuple-word'] = tuple_word_visitor
-
+    @visitors.add_alternative_to('literal-word', 'list-word')
     @assert_annotated_type
     def list_word_visitor(node: concat.level1.parse.ListWordNode) -> ast.expr:
         """Converts a ListWordNode to a Python expression."""
         return iterable_word_visitor(node, ast.List, ctx=ast.Load())
 
-    visitors['list-word'] = list_word_visitor
-
+    @visitors.add_alternative_to('literal-word', 'set-word')
     @assert_annotated_type
     def set_word_visitor(node: concat.level1.parse.SetWordNode) -> ast.expr:
         """Converts a SetWordNode to the Python expression."""
         return iterable_word_visitor(node, ast.Set)
 
-    visitors['set-word'] = set_word_visitor
-
+    @visitors.add_alternative_to('literal-word', 'dict-word')
     @assert_annotated_type
     def dict_word_visitor(node: concat.level1.parse.DictWordNode):
         """Converts a DictWordNode to a Python expression.
@@ -184,27 +167,13 @@ def _literal_word_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
-    visitors['dict-word'] = dict_word_visitor
-
 
 def _word_extension(
     visitors: VisitorDict[concat.level0.parse.Node, ast.AST]
 ) -> None:
-    visitors['word'] = alt(
-        visitors['word'],
-        visitors.ref_visitor('yield-word'),
-        visitors.ref_visitor('await-word'),
-        visitors.ref_visitor('subscription-word'),
-        visitors.ref_visitor('slice-word'),
-        visitors.ref_visitor('operator-word'),
-        visitors.ref_visitor('assert-word'),
-        visitors.ref_visitor('raise-word'),
-        visitors.ref_visitor('try-word'),
-        visitors.ref_visitor('with-word')
-    )
-
     visitors.extend_with(_literal_word_extension)
 
+    @visitors.add_alternative_to('word', 'subscription-word')
     @assert_annotated_type
     def subscription_word_visitor(
         node: concat.level1.parse.SubscriptionWordNode
@@ -224,8 +193,7 @@ def _word_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
-    visitors['subscription-word'] = subscription_word_visitor
-
+    @visitors.add_alternative_to('word', 'slice-word')
     @assert_annotated_type
     def slice_word_visitor(node: concat.level1.parse.SliceWordNode):
         """Converts a SliceWordNode to a Python expression.
@@ -241,35 +209,9 @@ def _word_extension(
              to_slice])
         return visitors['subscription-word'].visit(subscription)
 
-    visitors['slice-word'] = slice_word_visitor
+    visitors['operator-word'] = fail
 
-    visitors['operator-word'] = alt(
-        visitors.ref_visitor('invert-word'),
-        visitors.ref_visitor('power-word'),
-        visitors.ref_visitor('mul-word'),
-        visitors.ref_visitor('floor-div-word'),
-        visitors.ref_visitor('div-word'),
-        visitors.ref_visitor('mod-word'),
-        visitors.ref_visitor('add-word'),
-        visitors.ref_visitor('subtract-word'),
-        visitors.ref_visitor('left-shift-word'),
-        visitors.ref_visitor('right-shift-word'),
-        visitors.ref_visitor('bitwise-and-word'),
-        visitors.ref_visitor('bitwise-xor-word'),
-        visitors.ref_visitor('bitwise-or-word'),
-        visitors.ref_visitor('less-than-word'),
-        visitors.ref_visitor('greater-than-word'),
-        visitors.ref_visitor('equal-to-word'),
-        visitors.ref_visitor('greater-than-or-equal-to-word'),
-        visitors.ref_visitor('less-than-or-equal-to-word'),
-        visitors.ref_visitor('not-equal-to-word'),
-        visitors.ref_visitor('is-word'),
-        visitors.ref_visitor('in-word'),
-        visitors.ref_visitor('or-word'),
-        visitors.ref_visitor('and-word'),
-        visitors.ref_visitor('not-word')
-    )
-
+    @visitors.add_alternative_to('operator-word', 'invert-word')
     @assert_annotated_type
     def invert_word_visitor(
         node: concat.level1.parse.InvertWordNode
@@ -279,98 +221,107 @@ def _word_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
-    visitors['invert-word'] = invert_word_visitor
+    visitors.add_alternative_to('operator-word', 'power-word', assert_type(
+        concat.level1.parse.PowerWordNode).then(binary_operator_visitor('**')))
 
-    visitors['power-word'] = assert_type(
-        concat.level1.parse.PowerWordNode).then(binary_operator_visitor('**'))
+    visitors.add_alternative_to('operator-word', 'mul-word', assert_type(
+        concat.level1.parse.MulWordNode).then(binary_operator_visitor('*')))
 
-    visitors['mul-word'] = assert_type(
-        concat.level1.parse.MulWordNode).then(binary_operator_visitor('*'))
-
-    visitors['floor-div-word'] = assert_type(
+    visitors.add_alternative_to('operator-word', 'floor-div-word', assert_type(
         concat.level1.parse.FloorDivWordNode).then(
-            binary_operator_visitor('//'))
+            binary_operator_visitor('//')))
 
-    visitors['div-word'] = assert_type(
-        concat.level1.parse.DivWordNode).then(binary_operator_visitor('/'))
+    visitors.add_alternative_to('operator-word', 'div-word', assert_type(
+        concat.level1.parse.DivWordNode).then(binary_operator_visitor('/')))
 
-    visitors['mod-word'] = assert_type(
-        concat.level1.parse.ModWordNode).then(binary_operator_visitor('%'))
+    visitors.add_alternative_to('operator-word', 'mod-word', assert_type(
+        concat.level1.parse.ModWordNode).then(binary_operator_visitor('%')))
 
-    visitors['add-word'] = assert_type(
-        concat.level1.parse.AddWordNode).then(binary_operator_visitor('+'))
+    visitors.add_alternative_to('operator-word', 'add-word', assert_type(
+        concat.level1.parse.AddWordNode).then(binary_operator_visitor('+')))
 
-    visitors['subtract-word'] = assert_type(
+    visitors.add_alternative_to('operator-word', 'subtract-word', assert_type(
         concat.level1.parse.SubtractWordNode).then(
-            binary_operator_visitor('-'))
+            binary_operator_visitor('-')))
 
-    visitors['left-shift-word'] = assert_type(
-        concat.level1.parse.LeftShiftWordNode).then(
-            binary_operator_visitor('<<'))
+    visitors.add_alternative_to(
+        'operator-word', 'left-shift-word', assert_type(
+            concat.level1.parse.LeftShiftWordNode).then(
+                binary_operator_visitor('<<')))
 
-    visitors['right-shift-word'] = assert_type(
-        concat.level1.parse.RightShiftWordNode).then(
-            binary_operator_visitor('>>'))
+    visitors.add_alternative_to(
+        'operator-word', 'right-shift-word', assert_type(
+            concat.level1.parse.RightShiftWordNode).then(
+                binary_operator_visitor('>>')))
 
-    visitors['bitwise-and-word'] = assert_type(
-        concat.level1.parse.BitwiseAndWordNode).then(
-            binary_operator_visitor('&'))
+    visitors.add_alternative_to(
+        'operator-word', 'bitwise-and-word', assert_type(
+            concat.level1.parse.BitwiseAndWordNode).then(
+                binary_operator_visitor('&')))
 
-    visitors['bitwise-xor-word'] = assert_type(
-        concat.level1.parse.BitwiseXorWordNode).then(
-            binary_operator_visitor('^'))
+    visitors.add_alternative_to(
+        'operator-word', 'bitwise-xor-word', assert_type(
+            concat.level1.parse.BitwiseXorWordNode).then(
+                binary_operator_visitor('^')))
 
-    visitors['bitwise-or-word'] = assert_type(
-        concat.level1.parse.BitwiseOrWordNode).then(
-            binary_operator_visitor('|'))
+    visitors.add_alternative_to(
+        'operator-word', 'bitwise-or-word', assert_type(
+            concat.level1.parse.BitwiseOrWordNode).then(
+                binary_operator_visitor('|')))
 
-    visitors['less-than-word'] = assert_type(
-        concat.level1.parse.LessThanWordNode).then(
-            binary_operator_visitor('<'))
+    visitors.add_alternative_to(
+        'operator-word', 'less-than-word', assert_type(
+            concat.level1.parse.LessThanWordNode).then(
+                binary_operator_visitor('<')))
 
-    visitors['greater-than-word'] = assert_type(
-        concat.level1.parse.GreaterThanWordNode).then(
-            binary_operator_visitor('>'))
+    visitors.add_alternative_to(
+        'operator-word', 'greater-than-word', assert_type(
+            concat.level1.parse.GreaterThanWordNode).then(
+                binary_operator_visitor('>')))
 
-    visitors['equal-to-word'] = assert_type(
+    visitors.add_alternative_to('operator-word', 'equal-to-word', assert_type(
         concat.level1.parse.EqualToWordNode).then(
-            binary_operator_visitor('=='))
+            binary_operator_visitor('==')))
 
-    visitors['greater-than-or-equal-to-word'] = assert_type(
-        concat.level1.parse.GreaterThanOrEqualToWordNode).then(
-            binary_operator_visitor('>='))
+    visitors.add_alternative_to(
+        'operator-word', 'greater-than-or-equal-to-word', assert_type(
+            concat.level1.parse.GreaterThanOrEqualToWordNode).then(
+                binary_operator_visitor('>=')))
 
-    visitors['less-than-or-equal-to-word'] = assert_type(
-        concat.level1.parse.LessThanOrEqualToWordNode).then(
-            binary_operator_visitor('<='))
+    visitors.add_alternative_to(
+        'operator-word', 'less-than-or-equal-to-word', assert_type(
+            concat.level1.parse.LessThanOrEqualToWordNode).then(
+                binary_operator_visitor('<=')))
 
-    visitors['not-equal-to-word'] = assert_type(
-        concat.level1.parse.NotEqualToWordNode).then(
-            binary_operator_visitor('!='))
+    visitors.add_alternative_to(
+        'operator-word', 'not-equal-to-word', assert_type(
+            concat.level1.parse.NotEqualToWordNode).then(
+                binary_operator_visitor('!=')))
 
-    visitors['is-word'] = assert_type(
-        concat.level1.parse.IsWordNode).then(binary_operator_visitor('is'))
+    visitors.add_alternative_to('operator-word', 'is-word', assert_type(
+        concat.level1.parse.IsWordNode).then(binary_operator_visitor('is')))
 
-    visitors['in-word'] = assert_type(
-        concat.level1.parse.InWordNode).then(binary_operator_visitor('in'))
+    visitors.add_alternative_to('operator-word', 'in-word', assert_type(
+        concat.level1.parse.InWordNode).then(binary_operator_visitor('in')))
 
     # NOTE: 'or' and 'and' are not short-circuited!
 
-    visitors['or-word'] = assert_type(
-        concat.level1.parse.OrWordNode).then(binary_operator_visitor('or'))
+    visitors.add_alternative_to('operator-word', 'or-word', assert_type(
+        concat.level1.parse.OrWordNode).then(binary_operator_visitor('or')))
 
-    visitors['and-word'] = assert_type(
-        concat.level1.parse.AndWordNode).then(binary_operator_visitor('and'))
+    visitors.add_alternative_to('operator-word', 'and-word', assert_type(
+        concat.level1.parse.AndWordNode).then(binary_operator_visitor('and')))
 
-    visitors['not-word'] = assert_type(
+    visitors.add_alternative_to('operator-word', 'not-word', assert_type(
         concat.level1.parse.NotWordNode).then(
-        node_to_py_string('lambda s,_:s.append(not s.pop())'))
+        node_to_py_string('lambda s,_:s.append(not s.pop())')))
 
     # NOTE on semantics: `yield` pushes the value it returns onto the stack.
     # `yield call` calls the value that is returned. `$yield` is a function
     # that does what `yield` does when called.
     # `yield` causes the nearest enclosing generator quotation on the stack to
     # yield.
+    # TODO: Remove yield from language or make it a statement
     @assert_annotated_type
     def yield_word_visitor(
         node: concat.level1.parse.YieldWordNode
@@ -386,23 +337,23 @@ def _word_extension(
 
     # Converts an AwaitWordNode to a Python expression that awaits the object
     # at the top of the stack.
-    visitors['await-word'] = assert_type(
+    visitors.add_alternative_to('word', 'await-word', assert_type(
         concat.level1.parse.AwaitWordNode).then(
         node_to_py_string('''lambda s,_:exec("""
             import asyncio
-            asyncio.get_running_loop().run_until_complete(s.pop())""")'''))
+            asyncio.get_running_loop().run_until_complete(s.pop())""")''')))
 
     # Converts an AssertWordNode to the Python 'lambda s,_: exec("assert
     # s.pop()")'.
-    visitors['assert-word'] = assert_type(
+    visitors.add_alternative_to('word', 'assert-word', assert_type(
         concat.level1.parse.AssertWordNode).then(
-        node_to_py_string('lambda s,_:exec("assert s.pop()")'))
+        node_to_py_string('lambda s,_:exec("assert s.pop()")')))
 
     # Converts an RaiseWordNode to the Python 'lambda s,_: exec("raise s.pop()
     # from s.pop()")'.
-    visitors['raise-word'] = assert_type(
+    visitors.add_alternative_to('word', 'raise-word', assert_type(
         concat.level1.parse.RaiseWordNode).then(
-        node_to_py_string('lambda s,_:exec("raise s.pop() from s.pop()")'))
+        node_to_py_string('lambda s,_:exec("raise s.pop() from s.pop()")')))
 
     # Converts a TryWordNode to the Python 'lambda s,t: exec("""
     #   import sys
@@ -417,7 +368,7 @@ def _word_extension(
     #       if not h: raise
     #       s.append(sys.exc_info[1])
     #       h[0][1](s,t)"""'
-    visitors['try-word'] = assert_type(
+    visitors.add_alternative_to('word', 'try-word', assert_type(
         concat.level1.parse.TryWordNode
     ).then(
         node_to_py_string('''lambda s,t: exec("""
@@ -432,16 +383,16 @@ except:
     if not h: raise
     s.append(sys.exc_info()[1])
     h[0][1](s,t)""")''')
-    )
+    ))
 
     # Converts a WithWordNode to the Python 'lambda s,_: exec("with s[-1] as
     # c:s.pop(-2)(s,_)")'.
-    visitors['with-word'] = assert_type(
+    visitors.add_alternative_to('word', 'with-word', assert_type(
         concat.level1.parse.WithWordNode
     ).then(
         node_to_py_string(
             'lambda s,_: exec("with s[-1] as c:s.pop(-2)(s,_)")')
-    )
+    ))
 
 
 def level_1_extension(
@@ -449,14 +400,7 @@ def level_1_extension(
 ) -> None:
     visitors.extend_with(_word_extension)
 
-    visitors['statement'] = alt(
-        visitors['statement'],
-        visitors.ref_visitor('del-statement'),
-        visitors.ref_visitor('async-funcdef-statement'),
-        visitors.ref_visitor('classdef-statement'),
-        visitors.ref_visitor('funcdef-statement')
-    )
-
+    @visitors.add_alternative_to('statement', 'del-statement')
     @assert_annotated_type
     def del_statement_visitor(
         node: concat.level1.parse.DelStatementNode
@@ -511,8 +455,7 @@ def level_1_extension(
         targets = All(subvisitor).visit(node)
         return ast.Delete(targets=targets)
 
-    visitors['del-statement'] = del_statement_visitor
-
+    @visitors.add_alternative_to('statement', 'async-funcdef-statement')
     @assert_annotated_type
     def async_funcdef_statement_visitor(
         node: concat.level1.parse.AsyncFuncdefStatementNode
@@ -536,8 +479,7 @@ def level_1_extension(
         py_node.decorator_list.append(coroutine_decorator)
         return py_node
 
-    visitors['async-funcdef-statement'] = async_funcdef_statement_visitor
-
+    @visitors.add_alternative_to('statement', 'funcdef-statement')
     @assert_annotated_type
     def funcdef_statement_visitor(
         node: concat.level1.parse.FuncdefStatementNode
@@ -570,8 +512,6 @@ def level_1_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
-    visitors['funcdef-statement'] = funcdef_statement_visitor
-
     old_import_statement = visitors['import-statement']
 
     @assert_annotated_type
@@ -601,6 +541,7 @@ def level_1_extension(
     visitors['import-statement'] = alt(
         from_import_statement_visitor, import_statement_visitor)
 
+    @visitors.add_alternative_to('statement', 'classdef-statement')
     @assert_annotated_type
     def classdef_statement_visitor(
         node: concat.level1.parse.ClassdefStatementNode
@@ -630,5 +571,3 @@ def level_1_extension(
             keywords=py_keywords,
             body=py_body,
             decorator_list=py_decorators)
-
-    visitors['classdef-statement'] = classdef_statement_visitor
