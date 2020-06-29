@@ -15,11 +15,11 @@ import concat.level0.parse
 import concat.level1.parse
 from concat.visitors import (
     VisitorDict,
-    FunctionalVisitor,
     alt,
     All,
     Visitor,
-    assert_type
+    assert_type,
+    assert_annotated_type
 )
 from concat.transpile_visitors import node_to_py_string
 from concat.astutils import (
@@ -62,8 +62,8 @@ def _literal_word_extension(
                                    visitors.ref_visitor('dict-word')
                                    )
 
-    @FunctionalVisitor
-    def none_word_visitor(node: concat.level1.parse.NoneWordNode):
+    @assert_annotated_type
+    def none_word_visitor(node: concat.level1.parse.NoneWordNode) -> ast.expr:
         """Converts a NoneWordNode to the Python expression `push(None)`."""
         none = ast.NameConstant(value=None)
         load = ast.Load()
@@ -72,10 +72,9 @@ def _literal_word_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
-    visitors['none-word'] = assert_type(
-        concat.level1.parse.NoneWordNode).then(none_word_visitor)
+    visitors['none-word'] = none_word_visitor
 
-    @FunctionalVisitor
+    @assert_annotated_type
     def not_impl_word_visitor(node: concat.level1.parse.NotImplWordNode):
         """Converts a NotImplWordNode to the Python expression `push(NotImplemented)`."""
         load = ast.Load()
@@ -85,10 +84,9 @@ def _literal_word_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
-    visitors['not-impl-word'] = assert_type(
-        concat.level1.parse.NotImplWordNode).then(not_impl_word_visitor)
+    visitors['not-impl-word'] = not_impl_word_visitor
 
-    @FunctionalVisitor
+    @assert_annotated_type
     def ellipsis_word_visitor(node: concat.level1.parse.EllipsisWordNode):
         """Converts a EllipsisWordNode to the Python expression `push(...)`."""
         load = ast.Load()
@@ -98,10 +96,9 @@ def _literal_word_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
-    visitors['ellipsis-word'] = assert_type(
-        concat.level1.parse.EllipsisWordNode).then(ellipsis_word_visitor)
+    visitors['ellipsis-word'] = ellipsis_word_visitor
 
-    @FunctionalVisitor
+    @assert_annotated_type
     def bytes_word_visitor(node: concat.level1.parse.BytesWordNode):
         """Converts a BytesWordNode to the Python expression `push(b'...')`."""
         load = ast.Load()
@@ -111,8 +108,7 @@ def _literal_word_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
-    visitors['bytes-word'] = assert_type(
-        concat.level1.parse.BytesWordNode).then(bytes_word_visitor)
+    visitors['bytes-word'] = bytes_word_visitor
 
     def iterable_word_visitor(node: concat.level1.parse.IterableWordNode, kind: Type[ast.expr], **kwargs: ast.AST) -> ast.expr:
         """Converts a IterableWordNode to a Python expression.
@@ -138,31 +134,29 @@ def _literal_word_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
-    @FunctionalVisitor
-    def tuple_word_visitor(node: concat.level1.parse.TupleWordNode) -> ast.expr:
+    @assert_annotated_type
+    def tuple_word_visitor(
+            node: concat.level1.parse.TupleWordNode) -> ast.expr:
         """Converts a TupleWordNode to a Python expression."""
         return iterable_word_visitor(node, ast.Tuple, ctx=ast.Load())
 
-    visitors['tuple-word'] = assert_type(
-        concat.level1.parse.TupleWordNode).then(tuple_word_visitor)
+    visitors['tuple-word'] = tuple_word_visitor
 
-    @FunctionalVisitor
+    @assert_annotated_type
     def list_word_visitor(node: concat.level1.parse.ListWordNode) -> ast.expr:
         """Converts a ListWordNode to a Python expression."""
         return iterable_word_visitor(node, ast.List, ctx=ast.Load())
 
-    visitors['list-word'] = assert_type(
-        concat.level1.parse.ListWordNode).then(list_word_visitor)
+    visitors['list-word'] = list_word_visitor
 
-    @FunctionalVisitor
+    @assert_annotated_type
     def set_word_visitor(node: concat.level1.parse.SetWordNode) -> ast.expr:
         """Converts a SetWordNode to the Python expression."""
         return iterable_word_visitor(node, ast.Set)
 
-    visitors['set-word'] = assert_type(
-        concat.level1.parse.SetWordNode).then(set_word_visitor)
+    visitors['set-word'] = set_word_visitor
 
-    @FunctionalVisitor
+    @assert_annotated_type
     def dict_word_visitor(node: concat.level1.parse.DictWordNode):
         """Converts a DictWordNode to a Python expression.
 
@@ -190,8 +184,7 @@ def _literal_word_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
-    visitors['dict-word'] = assert_type(
-        concat.level1.parse.DictWordNode).then(dict_word_visitor)
+    visitors['dict-word'] = dict_word_visitor
 
 
 def _word_extension(
@@ -212,7 +205,7 @@ def _word_extension(
 
     visitors.extend_with(_literal_word_extension)
 
-    @FunctionalVisitor
+    @assert_annotated_type
     def subscription_word_visitor(
         node: concat.level1.parse.SubscriptionWordNode
     ) -> ast.expr:
@@ -231,11 +224,9 @@ def _word_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
-    visitors['subscription-word'] = assert_type(
-        concat.level1.parse.SubscriptionWordNode).then(
-        subscription_word_visitor)
+    visitors['subscription-word'] = subscription_word_visitor
 
-    @FunctionalVisitor
+    @assert_annotated_type
     def slice_word_visitor(node: concat.level1.parse.SliceWordNode):
         """Converts a SliceWordNode to a Python expression.
 
@@ -250,8 +241,7 @@ def _word_extension(
              to_slice])
         return visitors['subscription-word'].visit(subscription)
 
-    visitors['slice-word'] = assert_type(
-        concat.level1.parse.SliceWordNode).then(slice_word_visitor)
+    visitors['slice-word'] = slice_word_visitor
 
     visitors['operator-word'] = alt(
         visitors.ref_visitor('invert-word'),
@@ -280,7 +270,7 @@ def _word_extension(
         visitors.ref_visitor('not-word')
     )
 
-    @FunctionalVisitor
+    @assert_annotated_type
     def invert_word_visitor(
         node: concat.level1.parse.InvertWordNode
     ) -> ast.expr:
@@ -289,8 +279,7 @@ def _word_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
-    visitors['invert-word'] = assert_type(
-        concat.level1.parse.InvertWordNode).then(invert_word_visitor)
+    visitors['invert-word'] = invert_word_visitor
 
     visitors['power-word'] = assert_type(
         concat.level1.parse.PowerWordNode).then(binary_operator_visitor('**'))
@@ -382,7 +371,7 @@ def _word_extension(
     # that does what `yield` does when called.
     # `yield` causes the nearest enclosing generator quotation on the stack to
     # yield.
-    @FunctionalVisitor
+    @assert_annotated_type
     def yield_word_visitor(
         node: concat.level1.parse.YieldWordNode
     ) -> ast.expr:
@@ -390,8 +379,7 @@ def _word_extension(
             '{}.yield_function'.format(
                 visitors.data['quote-constructor-string'])).visit(node)
 
-    visitors['yield-word'] = assert_type(
-        concat.level1.parse.YieldWordNode).then(yield_word_visitor)
+    visitors['yield-word'] = yield_word_visitor
 
     visitors.data['quote-constructor-string'] = \
         'concat.level1.stdlib.types.Quotation'
@@ -469,14 +457,14 @@ def level_1_extension(
         visitors.ref_visitor('funcdef-statement')
     )
 
-    @FunctionalVisitor
+    @assert_annotated_type
     def del_statement_visitor(
         node: concat.level1.parse.DelStatementNode
     ) -> ast.Delete:
         """This converts a DelStatementNode to a Python statement.
 
         The Python statement has the form of `del ...1,......,...n`."""
-        @FunctionalVisitor
+        @assert_annotated_type
         def subscription_subvisitor(
             node: concat.level1.parse.SubscriptionWordNode
         ):
@@ -501,7 +489,7 @@ def level_1_extension(
             target = ast.Subscript(value=object, slice=index, ctx=load)
             return target
 
-        @FunctionalVisitor
+        @assert_annotated_type
         def slice_subvisitor(node: concat.level1.parse.SliceWordNode):
             to_slice_token = concat.level0.lex.Token()
             to_slice_token.type, to_slice_token.value = 'NAME', 'to_slice'
@@ -523,10 +511,9 @@ def level_1_extension(
         targets = All(subvisitor).visit(node)
         return ast.Delete(targets=targets)
 
-    visitors['del-statement'] = assert_type(
-        concat.level1.parse.DelStatementNode).then(del_statement_visitor)
+    visitors['del-statement'] = del_statement_visitor
 
-    @FunctionalVisitor
+    @assert_annotated_type
     def async_funcdef_statement_visitor(
         node: concat.level1.parse.AsyncFuncdefStatementNode
     ) -> ast.AsyncFunctionDef:
@@ -549,11 +536,9 @@ def level_1_extension(
         py_node.decorator_list.append(coroutine_decorator)
         return py_node
 
-    visitors['async-funcdef-statement'] = assert_type(
-        concat.level1.parse.AsyncFuncdefStatementNode
-    ).then(async_funcdef_statement_visitor)
+    visitors['async-funcdef-statement'] = async_funcdef_statement_visitor
 
-    @FunctionalVisitor
+    @assert_annotated_type
     def funcdef_statement_visitor(
         node: concat.level1.parse.FuncdefStatementNode
     ) -> ast.FunctionDef:
@@ -585,13 +570,11 @@ def level_1_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
-    visitors['funcdef-statement'] = assert_type(
-        concat.level1.parse.FuncdefStatementNode
-    ).then(funcdef_statement_visitor)
+    visitors['funcdef-statement'] = funcdef_statement_visitor
 
     old_import_statement = visitors['import-statement']
 
-    @FunctionalVisitor
+    @assert_annotated_type
     def import_statement_visitor(
         node: concat.level1.parse.ImportStatementNode
     ) -> ast.If:
@@ -603,7 +586,7 @@ def level_1_extension(
             qualified_name)
         return if_statement
 
-    @FunctionalVisitor
+    @assert_annotated_type
     def from_import_statement_visitor(
         node: concat.level1.parse.FromImportStatementNode
     ) -> ast.If:
@@ -616,15 +599,9 @@ def level_1_extension(
         return if_statement
 
     visitors['import-statement'] = alt(
-        assert_type(
-            concat.level1.parse.FromImportStatementNode
-        ).then(from_import_statement_visitor),
-        assert_type(
-            concat.level1.parse.ImportStatementNode
-        ).then(import_statement_visitor)
-    )
+        from_import_statement_visitor, import_statement_visitor)
 
-    @FunctionalVisitor
+    @assert_annotated_type
     def classdef_statement_visitor(
         node: concat.level1.parse.ClassdefStatementNode
     ) -> ast.ClassDef:
@@ -654,6 +631,4 @@ def level_1_extension(
             body=py_body,
             decorator_list=py_decorators)
 
-    visitors['classdef-statement'] = assert_type(
-        concat.level1.parse.ClassdefStatementNode).then(
-        classdef_statement_visitor)
+    visitors['classdef-statement'] = classdef_statement_visitor

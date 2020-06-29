@@ -1,5 +1,5 @@
 from typing import (
-    TypeVar, Iterable, Generic, Callable, Tuple, Union, Dict, Type)
+    Any, TypeVar, Iterable, Generic, Callable, Tuple, Union, Dict, Type)
 from typing_extensions import Protocol
 import abc
 import functools
@@ -165,12 +165,19 @@ def alt(*visitors):
 
 # Useful visitors
 
-def assert_type(type: Type[object]):
+def assert_type(type: Type[object]) -> Visitor[object, None]:
     @FunctionalVisitor
     def visitor(node: object) -> None:
         if not isinstance(node, type):
             raise VisitFailureException
     return visitor
+
+
+def assert_annotated_type(
+        fun: Callable[[Any], _ReturnType1]) -> Visitor[object, _ReturnType1]:
+    arg_name = [name for name in fun.__annotations__ if name != 'return'][0]
+    type = fun.__annotations__[arg_name]
+    return assert_type(type).then(FunctionalVisitor(fun))
 
 
 _T = TypeVar('_T')
