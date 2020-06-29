@@ -6,6 +6,7 @@ from typing import (
     Iterable, List, Tuple, Sequence, Optional, Generator, Type, TYPE_CHECKING)
 from concat.level0.lex import Token
 import concat.level0.parse
+from concat.level1.operators import operators
 import concat.level1.typecheck
 from concat.astutils import Words, Location, WordsOrStatements, flatten
 import concat.parser_combinators
@@ -75,113 +76,6 @@ class SliceWordNode(concat.level0.parse.WordNode):
                          *self.stop_children, *self.step_children]
         if self.children:
             self.location = self.children[0]
-
-
-class OperatorWordNode(concat.level0.parse.WordNode, abc.ABC):
-    def __init__(self, token: concat.level0.lex.Token):
-        super().__init__()
-        self.children = []
-        self.location = token.start
-
-
-class SubtractWordNode(OperatorWordNode):
-    pass
-
-
-class PowerWordNode(OperatorWordNode):
-    pass
-
-
-class InvertWordNode(OperatorWordNode):
-    pass
-
-
-class MulWordNode(OperatorWordNode):
-    pass
-
-
-class MatMulWordNode(OperatorWordNode):
-    pass
-
-
-class FloorDivWordNode(OperatorWordNode):
-    pass
-
-
-class DivWordNode(OperatorWordNode):
-    pass
-
-
-class ModWordNode(OperatorWordNode):
-    pass
-
-
-class AddWordNode(OperatorWordNode):
-    pass
-
-
-class LeftShiftWordNode(OperatorWordNode):
-    pass
-
-
-class RightShiftWordNode(OperatorWordNode):
-    pass
-
-
-class BitwiseAndWordNode(OperatorWordNode):
-    pass
-
-
-class BitwiseXorWordNode(OperatorWordNode):
-    pass
-
-
-class BitwiseOrWordNode(OperatorWordNode):
-    pass
-
-
-class LessThanWordNode(OperatorWordNode):
-    pass
-
-
-class GreaterThanWordNode(OperatorWordNode):
-    pass
-
-
-class EqualToWordNode(OperatorWordNode):
-    pass
-
-
-class GreaterThanOrEqualToWordNode(OperatorWordNode):
-    pass
-
-
-class LessThanOrEqualToWordNode(OperatorWordNode):
-    pass
-
-
-class NotEqualToWordNode(OperatorWordNode):
-    pass
-
-
-class IsWordNode(OperatorWordNode):
-    pass
-
-
-class InWordNode(OperatorWordNode):
-    pass
-
-
-class OrWordNode(OperatorWordNode):
-    pass
-
-
-class AndWordNode(OperatorWordNode):
-    pass
-
-
-class NotWordNode(OperatorWordNode):
-    pass
 
 
 class BytesWordNode(concat.level0.parse.WordNode):
@@ -420,41 +314,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
 
     parsers['operator-word'] = parsy.fail('operator')
 
-    operators = (
-        ('power', 'DOUBLESTAR', PowerWordNode),
-        ('subtract', 'MINUS', SubtractWordNode),
-        ('mul', 'STAR', MulWordNode),
-        ('mat-mul', 'AT', MatMulWordNode),
-        ('floor-div', 'DOUBLESLASH', FloorDivWordNode),
-        ('div', 'SLASH', DivWordNode),
-        ('mod', 'PERCENT', ModWordNode),
-        ('add', 'PLUS', AddWordNode),
-        ('left-shift', 'LEFTSHIFT', LeftShiftWordNode),
-        ('right-shift', 'RIGHTSHIFT', RightShiftWordNode),
-        ('bitwise-and', 'AMPER', BitwiseAndWordNode),
-        ('bitwise-xor', 'CIRCUMFLEX', BitwiseXorWordNode),
-        ('bitwise-or', 'VBAR', BitwiseOrWordNode),
-        ('invert', 'TILDE', InvertWordNode),
-        ('less-than', 'LESS', LessThanWordNode),
-        ('greater-than', 'GREATER', GreaterThanWordNode),
-        ('equal-to', 'EQEQUAL', EqualToWordNode),
-        (
-            'greater-than-or-equal-to',
-            'GREATEREQUAL',
-            GreaterThanOrEqualToWordNode
-        ),
-        ('less-than-or-equal-to', 'LESSEQUAL', LessThanOrEqualToWordNode),
-        ('not-equal-to', 'NOTEQUAL', NotEqualToWordNode),
-        ('is', 'IS', IsWordNode),
-        # there is not 'is not'; instead we have 'is' and 'not'
-        ('in', 'IN', InWordNode),
-        # there is not 'not in'; instead we have 'in' and 'not'
-        ('or', 'OR', OrWordNode),
-        ('and', 'AND', AndWordNode),
-        ('not', 'NOT', NotWordNode)
-    )
-
-    for operator_name, token_type, node_type in operators:
+    for operator_name, token_type, node_type, _ in operators:
         parser_name = operator_name + '-word'
         parsers[parser_name] = parsers.token(token_type).map(node_type)
         parsers['operator-word'] |= parsers.ref_parser(parser_name)

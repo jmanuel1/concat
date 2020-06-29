@@ -12,6 +12,7 @@ from typing import (List, Set, Tuple, Dict, Iterator, Union,
                     Optional, Callable, Sequence, NoReturn, TYPE_CHECKING,
                     overload, cast)
 import concat.level0.parse
+import concat.level1.operators
 import concat.level1.parse
 if TYPE_CHECKING:
     import concat.astutils
@@ -528,7 +529,7 @@ def infer(
         # there's no False word at the moment
         elif isinstance(node, concat.level1.parse.TrueWordNode):
             current_effect = _Function(i, [*o, PrimitiveTypes.bool])
-        elif isinstance(node, concat.level1.parse.AddWordNode):
+        elif isinstance(node, concat.level1.operators.AddWordNode):
             # for now, only works with ints and strings
             a_bar = SequenceVariable()
             try:
@@ -651,7 +652,7 @@ def infer(
                 phi = collected_type_sub(R1(phi1(phi)))
             current_subs, current_effect = phi, phi(_Function(
                 i, [*collected_type, PrimitiveTypes.list]))
-        elif isinstance(node, concat.level1.parse.InvertWordNode):
+        elif isinstance(node, concat.level1.operators.InvertWordNode):
             out_var = SequenceVariable()
             type_var = IndividualVariable(PrimitiveInterfaces.invertible)
             phi = unify(list(o), [out_var, type_var])

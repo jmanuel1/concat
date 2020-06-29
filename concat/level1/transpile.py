@@ -12,6 +12,7 @@ Visser (2001): ACM SIGPLAN Notices 36(11):270-282 November 2001 DOI:
 
 import ast
 import concat.level0.parse
+import concat.level1.operators
 import concat.level1.parse
 from concat.visitors import (
     VisitorDict,
@@ -44,7 +45,7 @@ import astunparse  # type: ignore
 # This should stay in this module since it operates on level 1 types.
 def binary_operator_visitor(operator: str) -> Visitor[object, ast.expr]:
     expression = 'lambda s,_:s.append(s.pop(-2) {} s.pop())'.format(operator)
-    return assert_type(concat.level1.parse.OperatorWordNode).then(
+    return assert_type(concat.level1.operators.OperatorWordNode).then(
         node_to_py_string(expression))
 
 
@@ -214,106 +215,23 @@ def _word_extension(
     @visitors.add_alternative_to('operator-word', 'invert-word')
     @assert_annotated_type
     def invert_word_visitor(
-        node: concat.level1.parse.InvertWordNode
+        node: concat.level1.operators.InvertWordNode
     ) -> ast.expr:
         py_node = cast(ast.Expression, ast.parse(
             'lambda s,_:s.append(~s.pop())', mode='eval')).body
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
-    visitors.add_alternative_to('operator-word', 'power-word', assert_type(
-        concat.level1.parse.PowerWordNode).then(binary_operator_visitor('**')))
-
-    visitors.add_alternative_to('operator-word', 'mul-word', assert_type(
-        concat.level1.parse.MulWordNode).then(binary_operator_visitor('*')))
-
-    visitors.add_alternative_to('operator-word', 'floor-div-word', assert_type(
-        concat.level1.parse.FloorDivWordNode).then(
-            binary_operator_visitor('//')))
-
-    visitors.add_alternative_to('operator-word', 'div-word', assert_type(
-        concat.level1.parse.DivWordNode).then(binary_operator_visitor('/')))
-
-    visitors.add_alternative_to('operator-word', 'mod-word', assert_type(
-        concat.level1.parse.ModWordNode).then(binary_operator_visitor('%')))
-
-    visitors.add_alternative_to('operator-word', 'add-word', assert_type(
-        concat.level1.parse.AddWordNode).then(binary_operator_visitor('+')))
-
-    visitors.add_alternative_to('operator-word', 'subtract-word', assert_type(
-        concat.level1.parse.SubtractWordNode).then(
-            binary_operator_visitor('-')))
-
-    visitors.add_alternative_to(
-        'operator-word', 'left-shift-word', assert_type(
-            concat.level1.parse.LeftShiftWordNode).then(
-                binary_operator_visitor('<<')))
-
-    visitors.add_alternative_to(
-        'operator-word', 'right-shift-word', assert_type(
-            concat.level1.parse.RightShiftWordNode).then(
-                binary_operator_visitor('>>')))
-
-    visitors.add_alternative_to(
-        'operator-word', 'bitwise-and-word', assert_type(
-            concat.level1.parse.BitwiseAndWordNode).then(
-                binary_operator_visitor('&')))
-
-    visitors.add_alternative_to(
-        'operator-word', 'bitwise-xor-word', assert_type(
-            concat.level1.parse.BitwiseXorWordNode).then(
-                binary_operator_visitor('^')))
-
-    visitors.add_alternative_to(
-        'operator-word', 'bitwise-or-word', assert_type(
-            concat.level1.parse.BitwiseOrWordNode).then(
-                binary_operator_visitor('|')))
-
-    visitors.add_alternative_to(
-        'operator-word', 'less-than-word', assert_type(
-            concat.level1.parse.LessThanWordNode).then(
-                binary_operator_visitor('<')))
-
-    visitors.add_alternative_to(
-        'operator-word', 'greater-than-word', assert_type(
-            concat.level1.parse.GreaterThanWordNode).then(
-                binary_operator_visitor('>')))
-
-    visitors.add_alternative_to('operator-word', 'equal-to-word', assert_type(
-        concat.level1.parse.EqualToWordNode).then(
-            binary_operator_visitor('==')))
-
-    visitors.add_alternative_to(
-        'operator-word', 'greater-than-or-equal-to-word', assert_type(
-            concat.level1.parse.GreaterThanOrEqualToWordNode).then(
-                binary_operator_visitor('>=')))
-
-    visitors.add_alternative_to(
-        'operator-word', 'less-than-or-equal-to-word', assert_type(
-            concat.level1.parse.LessThanOrEqualToWordNode).then(
-                binary_operator_visitor('<=')))
-
-    visitors.add_alternative_to(
-        'operator-word', 'not-equal-to-word', assert_type(
-            concat.level1.parse.NotEqualToWordNode).then(
-                binary_operator_visitor('!=')))
-
-    visitors.add_alternative_to('operator-word', 'is-word', assert_type(
-        concat.level1.parse.IsWordNode).then(binary_operator_visitor('is')))
-
-    visitors.add_alternative_to('operator-word', 'in-word', assert_type(
-        concat.level1.parse.InWordNode).then(binary_operator_visitor('in')))
+    for operator_desc in concat.level1.operators.binary_operators:
+        operator_name, _, node_type, operator = operator_desc
+        visitors.add_alternative_to(
+            'operator-word', operator_name, assert_type(
+                node_type).then(binary_operator_visitor(operator)))
 
     # NOTE: 'or' and 'and' are not short-circuited!
 
-    visitors.add_alternative_to('operator-word', 'or-word', assert_type(
-        concat.level1.parse.OrWordNode).then(binary_operator_visitor('or')))
-
-    visitors.add_alternative_to('operator-word', 'and-word', assert_type(
-        concat.level1.parse.AndWordNode).then(binary_operator_visitor('and')))
-
     visitors.add_alternative_to('operator-word', 'not-word', assert_type(
-        concat.level1.parse.NotWordNode).then(
+        concat.level1.operators.NotWordNode).then(
         node_to_py_string('lambda s,_:s.append(not s.pop())')))
 
     # NOTE on semantics: `yield` pushes the value it returns onto the stack.
