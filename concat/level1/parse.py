@@ -2,16 +2,19 @@
 
 This parser is designed to extend the level zero parser.
 """
+from typing import (
+    Iterable, List, Tuple, Sequence, Optional, Generator, Type, TYPE_CHECKING)
 from concat.level0.lex import Token
 import concat.level0.parse
+from concat.level1.operators import operators
 import concat.level1.typecheck
-import concat.level2.typecheck  # NOTE: Used only for type annotations
 from concat.astutils import Words, Location, WordsOrStatements, flatten
 import concat.parser_combinators
 import abc
 import operator
-from typing import Iterable, List, Tuple, Sequence, Optional, Generator
 import parsy
+if TYPE_CHECKING:
+    from concat.level2.typecheck import StackEffectTypeNode
 
 
 # Patches to parsy for better errors--useful for debugging
@@ -73,113 +76,6 @@ class SliceWordNode(concat.level0.parse.WordNode):
                          *self.stop_children, *self.step_children]
         if self.children:
             self.location = self.children[0]
-
-
-class OperatorWordNode(concat.level0.parse.WordNode, abc.ABC):
-    def __init__(self, token: concat.level0.lex.Token):
-        super().__init__()
-        self.children = []
-        self.location = token.start
-
-
-class SubtractWordNode(OperatorWordNode):
-    pass
-
-
-class PowerWordNode(OperatorWordNode):
-    pass
-
-
-class InvertWordNode(OperatorWordNode):
-    pass
-
-
-class MulWordNode(OperatorWordNode):
-    pass
-
-
-class MatMulWordNode(OperatorWordNode):
-    pass
-
-
-class FloorDivWordNode(OperatorWordNode):
-    pass
-
-
-class DivWordNode(OperatorWordNode):
-    pass
-
-
-class ModWordNode(OperatorWordNode):
-    pass
-
-
-class AddWordNode(OperatorWordNode):
-    pass
-
-
-class LeftShiftWordNode(OperatorWordNode):
-    pass
-
-
-class RightShiftWordNode(OperatorWordNode):
-    pass
-
-
-class BitwiseAndWordNode(OperatorWordNode):
-    pass
-
-
-class BitwiseXorWordNode(OperatorWordNode):
-    pass
-
-
-class BitwiseOrWordNode(OperatorWordNode):
-    pass
-
-
-class LessThanWordNode(OperatorWordNode):
-    pass
-
-
-class GreaterThanWordNode(OperatorWordNode):
-    pass
-
-
-class EqualToWordNode(OperatorWordNode):
-    pass
-
-
-class GreaterThanOrEqualToWordNode(OperatorWordNode):
-    pass
-
-
-class LessThanOrEqualToWordNode(OperatorWordNode):
-    pass
-
-
-class NotEqualToWordNode(OperatorWordNode):
-    pass
-
-
-class IsWordNode(OperatorWordNode):
-    pass
-
-
-class InWordNode(OperatorWordNode):
-    pass
-
-
-class OrWordNode(OperatorWordNode):
-    pass
-
-
-class AndWordNode(OperatorWordNode):
-    pass
-
-
-class NotWordNode(OperatorWordNode):
-    pass
 
 
 class BytesWordNode(concat.level0.parse.WordNode):
@@ -284,7 +180,7 @@ class FuncdefStatementNode(concat.level0.parse.StatementNode):
         annotation: Optional[Iterable[concat.level0.parse.WordNode]],
         body: WordsOrStatements,
         location: Location,
-        stack_effect: Optional['concat.level2.typecheck.StackEffectTypeNode'] = None
+        stack_effect: Optional['StackEffectTypeNode'] = None
     ):
         super().__init__()
         self.location = location
@@ -416,98 +312,39 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
 
     parsers['slice-word'] = slice_word_parser
 
-    parsers['operator-word'] = parsy.alt(
-        parsers.ref_parser('subtract-word'),
-        parsers.ref_parser('power-word'),
-        parsers.ref_parser('invert-word'),
-        parsers.ref_parser('mul-word'),
-        parsers.ref_parser('mat-mul-word'),
-        parsers.ref_parser('floor-div-word'),
-        parsers.ref_parser('div-word'),
-        parsers.ref_parser('mod-word'),
-        parsers.ref_parser('add-word'),
-        parsers.ref_parser('left-shift-word'),
-        parsers.ref_parser('right-shift-word'),
-        parsers.ref_parser('bitwise-and-word'),
-        parsers.ref_parser('bitwise-xor-word'),
-        parsers.ref_parser('bitwise-or-word'),
-        parsers.ref_parser('less-than-word'),
-        parsers.ref_parser('greater-than-word'),
-        parsers.ref_parser('equal-to-word'),
-        parsers.ref_parser('greater-than-or-equal-to-word'),
-        parsers.ref_parser('less-than-or-equal-to-word'),
-        parsers.ref_parser('not-equal-to-word'),
-        parsers.ref_parser('is-word'),
-        parsers.ref_parser('in-word'),
-        parsers.ref_parser('or-word'),
-        parsers.ref_parser('and-word'),
-        parsers.ref_parser('not-word')
-    )
+    parsers['operator-word'] = parsy.fail('operator')
 
-    operators = (
-        ('power', 'DOUBLESTAR', PowerWordNode),
-        ('subtract', 'MINUS', SubtractWordNode),
-        ('mul', 'STAR', MulWordNode),
-        ('mat-mul', 'AT', MatMulWordNode),
-        ('floor-div', 'DOUBLESLASH', FloorDivWordNode),
-        ('div', 'SLASH', DivWordNode),
-        ('mod', 'PERCENT', ModWordNode),
-        ('add', 'PLUS', AddWordNode),
-        ('left-shift', 'LEFTSHIFT', LeftShiftWordNode),
-        ('right-shift', 'RIGHTSHIFT', RightShiftWordNode),
-        ('bitwise-and', 'AMPER', BitwiseAndWordNode),
-        ('bitwise-xor', 'CIRCUMFLEX', BitwiseXorWordNode),
-        ('bitwise-or', 'VBAR', BitwiseOrWordNode),
-        ('invert', 'TILDE', InvertWordNode),
-        ('less-than', 'LESS', LessThanWordNode),
-        ('greater-than', 'GREATER', GreaterThanWordNode),
-        ('equal-to', 'EQEQUAL', EqualToWordNode),
-        (
-            'greater-than-or-equal-to',
-            'GREATEREQUAL',
-            GreaterThanOrEqualToWordNode
-        ),
-        ('less-than-or-equal-to', 'LESSEQUAL', LessThanOrEqualToWordNode),
-        ('not-equal-to', 'NOTEQUAL', NotEqualToWordNode),
-        ('is', 'IS', IsWordNode),
-        # there is not 'is not'; instead we have 'is' and 'not'
-        ('in', 'IN', InWordNode),
-        # there is not 'not in'; instead we have 'in' and 'not'
-        ('or', 'OR', OrWordNode),
-        ('and', 'AND', AndWordNode),
-        ('not', 'NOT', NotWordNode)
-    )
-
-    for operator_name, token_type, node_type in operators:
+    for operator_name, token_type, node_type, _ in operators:
         parser_name = operator_name + '-word'
         parsers[parser_name] = parsers.token(token_type).map(node_type)
+        parsers['operator-word'] |= parsers.ref_parser(parser_name)
 
     # This parses a bytes word.
     # bytes word = BYTES ;
     parsers['bytes-word'] = parsers.token('BYTES').map(BytesWordNode)
 
+    def iterable_word_parser(
+        delimiter: str,
+        cls: Type[IterableWordNode],
+        desc: str
+    ) -> 'parsy.Parser[Token, IterableWordNode]':
+        @parsy.generate
+        def parser() -> Generator:
+            location = (yield parsers.token('L' + delimiter)).start
+            element_words = yield word_list_parser
+            yield parsers.token('R' + delimiter)
+            return cls(element_words, location)
+        return concat.parser_combinators.desc_cumulatively(parser, desc)
+
     # This parses a tuple word.
     # tuple word = LPAR, word list, RPAR ;
-    @parsy.generate('tuple word')
-    def tuple_word_parser() -> Generator:
-        location = (yield parsers.token('LPAR')).start
-        element_words = yield word_list_parser
-        yield parsers.token('RPAR')
-        return TupleWordNode(element_words, location)
-
-    parsers['tuple-word'] = tuple_word_parser
+    parsers['tuple-word'] = iterable_word_parser(
+        'PAR', TupleWordNode, 'tuple word')
 
     # This parses a list word.
     # list word = LSQB, word list, RSQB ;
-    @parsy.generate('list word')
-    def list_word_parser() -> Generator:
-        location = (yield parsers.token('LSQB')).start
-        element_words = yield word_list_parser
-        end = parsers.token('RSQB')
-        yield end
-        return ListWordNode(element_words, location)
-
-    parsers['list-word'] = list_word_parser
+    parsers['list-word'] = iterable_word_parser(
+        'SQB', ListWordNode, 'list word')
 
     # word list = (COMMA | word+, COMMA | word+, (COMMA, word+)+, [ COMMA ]) ;
     @parsy.generate('word list')
@@ -523,14 +360,8 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
 
     # This parses a set word.
     # list word = LBRACE, word list, RBRACE ;
-    @parsy.generate('set word')
-    def set_word_parser():
-        location = (yield parsers.token('LBRACE')).start
-        element_words = yield word_list_parser
-        yield parsers.token('RBRACE')
-        return SetWordNode(element_words, location)
-
-    parsers['set-word'] = set_word_parser
+    parsers['set-word'] = iterable_word_parser(
+        'BRACE', SetWordNode, 'set word')
 
     # This parses a dict word.
     # dict word =
