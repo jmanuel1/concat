@@ -54,10 +54,6 @@ def level_0_extension(
 
     visitors['statement'] = visitors.ref_visitor('import-statement')
 
-    def wrap_in_statement(statments: Iterable[ast.stmt]) -> ast.stmt:
-        true = ast.NameConstant(True)
-        return ast.If(test=true, body=list(statments), orelse=[])
-
     # Converts an ImportStatementNode to a Python import statement node
     @assert_annotated_type
     def import_statement_visitor(
@@ -73,7 +69,7 @@ def level_0_extension(
         assign = ast.Assign(targets=[class_store], value=module_type)
         import_node.lineno, import_node.col_offset = node.location
         assign.lineno, assign.col_offset = node.location
-        return wrap_in_statement([import_node, assign])
+        return concat.astutils.wrap_in_statement([import_node, assign])
 
     visitors['import-statement'] = import_statement_visitor
 

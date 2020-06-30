@@ -338,3 +338,8 @@ def append_to_stack(expr: ast.expr) -> ast.expr:
 def get_explicit_positional_function_parameters(
         fun: ast.FunctionDef) -> List[str]:
     return [arg.arg for arg in fun.args.args]
+
+
+def wrap_in_statement(statments: Iterable[ast.stmt]) -> ast.stmt:
+    true = ast.NameConstant(True)
+    return ast.If(test=true, body=list(statments), orelse=[])
