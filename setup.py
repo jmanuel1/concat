@@ -20,7 +20,12 @@ setup(
     ],
     keywords='concatenative',
     packages=find_packages(),  # type: ignore
-    install_requires=['astunparse>=1.3.0,<2', 'parsy>=1.3.0,<2'],
+    install_requires=[
+        'astunparse>=1.3.0,<2',
+        'parsy>=1.3.0,<2',
+        'typing-extensions>=3.7.4,<4'
+    ],
     test_suite='nose.collector',
-    tests_require=['nose', 'scripttest', 'hypothesis']
+    tests_require=[
+        'nose', 'scripttest', 'hypothesis', 'typing-extensions>=3.7.4,<4']
 )
