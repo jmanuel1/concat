@@ -1,6 +1,9 @@
 Concat
 ======
 
+[![Coverage
+Status](https://coveralls.io/repos/github/jmanuel1/concat/badge.svg?branch=master)](https://coveralls.io/github/jmanuel1/concat?branch=master)
+
 An experimental concatenative Python-based programming language.
 
 Examples are in the examples directory. To see the (out of date and incomplete)
