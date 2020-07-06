@@ -12,8 +12,38 @@ spec, go to
 
 Python 3.7+ required.
 
-Building and uploading (on Windows)
----------------------
+Development
+-----------
+
+### Code formatting
+
+Python code is formatted using [Axblack](https://github.com/axiros/axblack)
+through a [pre-commit](https://github.com/pre-commit/pre-commit) Git hook. To
+set this up in your clone of the repository, install the `dev` dependencies of
+the project (by running `pip install -e .[dev]`, for example), and then run:
+
+    pre-commit install
+
+Now Axblack and pre-commit should be working! Whenever you commit a Python file,
+Axblack will be ran on that file. If Axblack makes formatting changes, you might
+need to try restaging and recommiting.
+
+### Testing
+
+Run the tests under `coverage.py`:
+
+    pip install coverage
+    coverage run setup.py test
+
+Combine the coverage data:
+
+    coverage combine
+
+**Nota Bene**: If you have `concat` installed globally, make sure to create and
+enter a `virtualenv` before testing, so you don't end up running the installed
+version.
+
+### Building and uploading (on Windows)
 
 Change the version number in `setup.py`. **Upload will fail if you try to push
 an existing version.**
@@ -30,22 +60,6 @@ Build source and pure Python-3 distributions.
 Upload.
 
     twine upload dist/* [-r pypitest]
-
-Testing
--------
-
-Run the tests under `coverage.py`:
-
-    pip install coverage
-    coverage run setup.py test
-
-Combine the coverage data:
-
-    coverage combine
-
-**Nota Bene**: If you have `concat` installed globally, make sure to create and
-enter a `virtualenv` before testing, so you don't end up running the installed
-version.
 
 Summer of Shipping *aspirational* project goals
 -------------
