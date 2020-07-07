@@ -64,13 +64,10 @@ Upload.
 Summer of Shipping *aspirational* project goals
 -------------
 
-1. Make the project more amenable to collaboration.
-   - Code linter
-   - Code quality analysis?
-2. Simplify type checking or skip it all together (for now).
-3. Settle on some minimal core language to make functional. The language has
+1. Simplify type checking or skip it all together (for now).
+2. Settle on some minimal core language to make functional. The language has
    been growing a lot, and perhaps efforts should be more focused instead.
-4. Create an online demo.
+3. Create an online demo.
 
 Related work
 ------------
