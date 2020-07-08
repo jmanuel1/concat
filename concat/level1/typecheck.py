@@ -140,6 +140,14 @@ class PrimitiveInterface(IndividualType):
         new_name = '{}[sub {}]'.format(self._name, id(sub))
         return PrimitiveInterface(new_name, new_attributes)
 
+    @property
+    def attributes(self) -> Dict[str, Type]:
+        return self._attributes
+
+    @property
+    def name(self) -> str:
+        return self._name
+
 
 class PrimitiveType(IndividualType):
     def __init__(self, name: str = '<primitive_type>', supertypes: Tuple[Type, ...] = (), attributes: Optional[Dict[str, 'IndividualType']] = None) -> None:
@@ -502,6 +510,30 @@ def inst(sigma: Union[ForAll, PrimitiveInterface, _Function]) -> IndividualType:
     if isinstance(sigma, ForAll):
         subs = Substitutions({a: type(a)() for a in sigma.quantified_variables})
         return subs(sigma.type)
+    if isinstance(sigma, PrimitiveInterface):
+        attributes = {}
+        for name in sigma.attributes:
+            if isinstance(
+                sigma.attributes[name], (ForAll, PrimitiveInterface, _Function)
+            ):
+                attributes[name] = inst(sigma.attributes[name])
+            else:
+                attributes[name] = sigma.attributes[name]
+        return PrimitiveInterface(sigma.name + '[inst]', attributes)
+    if isinstance(sigma, _Function):
+        input = [
+            inst(type)
+            if isinstance(type, (ForAll, PrimitiveInterface, _Function))
+            else type
+            for type in sigma.input
+        ]
+        output = [
+            inst(type)
+            if isinstance(type, (ForAll, PrimitiveInterface, _Function))
+            else type
+            for type in sigma.output
+        ]
+        return _Function(input, output)
     raise builtins.TypeError(type(sigma))
 
 
