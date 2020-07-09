@@ -58,7 +58,9 @@ class Type(abc.ABC):
                 attr_type = self.get_type_of_attribute(supertype.attribute)
             except AttributeError:
                 return False
-            return attr_type.is_subtype_of(supertype.attribute_type)
+            return inst(attr_type.to_for_all()).is_subtype_of(
+                inst(supertype.attribute_type.to_for_all())
+            )
         if isinstance(supertype, _IntersectionType):
             return self.is_subtype_of(supertype.type_1) and self.is_subtype_of(
                 supertype.type_2)
