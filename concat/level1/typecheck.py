@@ -839,19 +839,15 @@ def infer(
                         kwargs = dict(
                             extensions=extensions, previous=(S, _Function(i, o))
                         )
-                        S1, (i1, o1) = extension(
+                        # NOTE: Extension compose their results with the
+                        # current effect (the `previous` keyword argument).
+                        current_subs, current_effect = extension(
                             gamma, [node], is_top_level, **kwargs
-                        )
-                    except NotImplementedError:
-                        pass
-                    else:
-                        phi = unify(S1(o), i1)
-                        current_subs, current_effect = (
-                            phi(S1(S)),
-                            phi(S1(_Function(i, o1))),
                         )
                         fail = False
                         break
+                    except NotImplementedError:
+                        pass
                 if fail:
                     raise NotImplementedError(
                         "don't know how to handle '{}'".format(node)

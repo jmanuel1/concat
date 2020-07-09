@@ -45,24 +45,31 @@ class TestTypeChecker(unittest.TestCase):
 
     def test_string_subscription(self) -> None:
         """Test that the type checker allows subscription into strings."""
-        str_sub = '"a string" [1]'
-        tree = parse(str_sub)
+        tree = parse('"a string" [1]')
         concat.level1.typecheck.infer(
             concat.level1.typecheck.Environment(),
             tree.children,
-            (concat.level1.typecheck.infer,),
+            (concat.level2.typecheck.infer,),
             True,
         )
 
     def test_list_subscription(self) -> None:
         """Test that the type checker allows subscription into lists."""
-        list_sub = '["a string", "another string",] [1]'
-        tree = parse(list_sub)
+        tree = parse('["a string", "another string",] [1]')
         concat.level1.typecheck.infer(
             concat.level1.typecheck.Environment(),
             tree.children,
-            (concat.level1.typecheck.infer,),
+            (concat.level2.typecheck.infer,),
             True,
+        )
+
+    def test_pushed_subscription(self) -> None:
+        """Test that the type checker allows pushed subscription words."""
+        tree = parse('$[0] cast (int) 1 -')
+        concat.level1.typecheck.infer(
+            concat.level1.typecheck.Environment(),
+            tree.children,
+            (concat.level2.typecheck.infer,),
         )
 
 

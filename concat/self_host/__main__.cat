@@ -31,7 +31,8 @@ def get_line_at(file:file location:tuple -- result:str):
     swap to_list
     # FIXME: We cast because we don't have *generic* interfaces for subtraction
     # and subscription.
-    $[$[0] cast (int) 1 -]
+    $[0] cast (int) 1 -  # line number
+    $[]
 
 
 def create_arg_parser:
