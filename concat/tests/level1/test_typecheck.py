@@ -17,8 +17,6 @@ def build_parsers() -> concat.level0.parse.ParserDict:
     parsers = concat.level0.parse.ParserDict()
     parsers.extend_with(concat.level0.parse.level_0_extension)
     parsers.extend_with(concat.level1.parse.level_1_extension)
-    parsers.extend_with(concat.level2.typecheck.typecheck_extension)
-    parsers.extend_with(concat.level2.parse.level_2_extension)
     return parsers
 
 
@@ -87,6 +85,20 @@ class TestTypeChecker(unittest.TestCase):
         tree = parse(try_prog)
         concat.level1.typecheck.infer(
             concat.level1.typecheck.Environment(), tree.children)
+
+
+class TestDiagnosticInfo(unittest.TestCase):
+
+    def test_attribute_error_location(self) -> None:
+        bad_code = '5 .attr'
+        tree = parse(bad_code)
+        try:
+            concat.level1.typecheck.infer(
+                concat.level1.typecheck.Environment(), tree.children)
+        except concat.level1.typecheck.TypeError as e:
+            self.assertEqual(e.location, tree.children[1].location)
+        else:
+            self.fail('no type error')
 
 
 class TestSequenceVariableTypeInference(unittest.TestCase):

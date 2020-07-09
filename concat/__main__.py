@@ -52,11 +52,12 @@ if args.file.isatty():
 else:
     try:
         python_ast = transpile(args.file.read())
-    except concat.level1.typecheck.NameError as e:
+    except concat.level1.typecheck.StaticAnalysisError as e:
         print('Error:\n')
         print(e, 'in line:')
-        print(get_line_at(args.file, e.location), end='')
-        print(' '*e.location[1] + '^')
+        if e.location:
+            print(get_line_at(args.file, e.location), end='')
+            print(' '*e.location[1] + '^')
     except Exception:
         print('An internal error has occurred.')
         print('This is a bug in Concat.')
