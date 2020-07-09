@@ -336,26 +336,80 @@ class _Function(IndividualType):
                 return False
         return True
 
-    def is_subtype_of(self, supertype: Type) -> bool:
+    def is_subtype_of(
+        self, supertype: Type, _sub: Optional['Substitutions'] = None
+    ) -> bool:
         if super().is_subtype_of(supertype):
             return True
         if isinstance(supertype, _Function):
-            if (len(self.input) != len(supertype.input)
-                    or len(self.output) != len(supertype.output)):
+            if len(self.input) != len(supertype.input) or len(
+                self.output
+            ) != len(supertype.output):
                 return False
+            # Sequence variables are handled through renaming.
+            if _sub is None:
+                _sub = Substitutions()
+            input_rename_result = self._rename_sequence_variable(
+                self.input, supertype.input, _sub
+            )
+            output_rename_result = self._rename_sequence_variable(
+                supertype.output, self.output, _sub
+            )
+            if not (input_rename_result and output_rename_result):
+                return False
+            # TODO: What about individual type variables. We should be careful
+            # with renaming those, too.
             # input types are contravariant
             for type_from_self, type_from_supertype in zip(
-                    self.input, supertype.input):
-                if not type_from_supertype.is_subtype_of(type_from_self):
-                    print(type_from_supertype, 'not subtype of', type_from_self)
+                self.input, supertype.input
+            ):
+                type_from_self, type_from_supertype = (
+                    _sub(type_from_self),
+                    _sub(type_from_supertype),
+                )
+                if isinstance(type_from_supertype, _Function):
+                    if not type_from_supertype.is_subtype_of(
+                        type_from_self, _sub
+                    ):
+                        return False
+                elif not type_from_supertype.is_subtype_of(type_from_self):
                     return False
             # output types are covariant
             for type_from_self, type_from_supertype in zip(
-                    self.output, supertype.output):
-                if not type_from_self.is_subtype_of(type_from_supertype):
+                self.output, supertype.output
+            ):
+                type_from_self, type_from_supertype = (
+                    _sub(type_from_self),
+                    _sub(type_from_supertype),
+                )
+                if isinstance(type_from_self, _Function):
+                    if not type_from_self.is_subtype_of(
+                        type_from_supertype, _sub
+                    ):
+                        return False
+                elif not type_from_self.is_subtype_of(type_from_supertype):
                     return False
             return True
         return False
+
+    @staticmethod
+    def _rename_sequence_variable(
+        supertype_list: Sequence['StackItemType'],
+        subtype_list: Sequence['StackItemType'],
+        sub: 'Substitutions',
+    ) -> bool:
+        both_lists_nonempty = supertype_list and subtype_list
+        if (
+            both_lists_nonempty
+            and isinstance(supertype_list[0], SequenceVariable)
+            and isinstance(subtype_list[0], SequenceVariable)
+        ):
+            if supertype_list[0] not in sub:
+                sub[supertype_list[0]] = subtype_list[0]
+            else:
+                if sub(supertype_list[0]) is not subtype_list[0]:
+                    return False
+        return True
 
     def __str__(self) -> str:
         in_types = ' '.join(map(str, self.input))
