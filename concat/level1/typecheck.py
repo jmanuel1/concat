@@ -364,12 +364,13 @@ class PrimitiveTypes:
     object = PrimitiveType('object')
     context_manager = PrimitiveType('context_manager')
     dict = PrimitiveType('dict')
-    str = PrimitiveType('str')
     module = PrimitiveType('module')
-    list = PrimitiveType('list')
     py_function = PrimitiveType('py_function')
-    file = PrimitiveType('file', (), {
-                         'seek': py_function, 'read': py_function})
+    str = PrimitiveType('str', (), {'__getitem__': py_function})
+    list = PrimitiveType('list', (), {'__getitem__': py_function})
+    file = PrimitiveType(
+        'file', (), {'seek': py_function, 'read': py_function}
+    )
 
 
 class PrimitiveInterfaces:

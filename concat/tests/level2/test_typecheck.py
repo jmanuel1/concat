@@ -34,8 +34,36 @@ class TestTypeChecker(unittest.TestCase):
     def test_function_with_stack_effect(self) -> None:
         funcdef = 'def f(a b -- c): ()\n'
         tree = parse(funcdef)
-        self.assertRaises(concat.level1.typecheck.TypeError,
-                          concat.level1.typecheck.infer, concat.level1.typecheck.Environment(), tree.children, (concat.level2.typecheck.infer,), True)
+        self.assertRaises(
+            concat.level1.typecheck.TypeError,
+            concat.level1.typecheck.infer,
+            concat.level1.typecheck.Environment(),
+            tree.children,
+            (concat.level2.typecheck.infer,),
+            True,
+        )
+
+    def test_string_subscription(self) -> None:
+        """Test that the type checker allows subscription into strings."""
+        str_sub = '"a string" [1]'
+        tree = parse(str_sub)
+        concat.level1.typecheck.infer(
+            concat.level1.typecheck.Environment(),
+            tree.children,
+            (concat.level1.typecheck.infer,),
+            True,
+        )
+
+    def test_list_subscription(self) -> None:
+        """Test that the type checker allows subscription into lists."""
+        list_sub = '["a string", "another string",] [1]'
+        tree = parse(list_sub)
+        concat.level1.typecheck.infer(
+            concat.level1.typecheck.Environment(),
+            tree.children,
+            (concat.level1.typecheck.infer,),
+            True,
+        )
 
 
 class TestStackEffectParser(unittest.TestCase):
@@ -45,27 +73,30 @@ class TestStackEffectParser(unittest.TestCase):
     _c = concat.level1.typecheck.IndividualVariable()
     examples: Dict[str, concat.level1.typecheck.StackEffect] = {
         'a b -- b a': concat.level1.typecheck.StackEffect(
-            [_a_bar, _b, _c], [_a_bar, _c, _b]),
+            [_a_bar, _b, _c], [_a_bar, _c, _b]
+        ),
         'a -- a a': concat.level1.typecheck.StackEffect(
-            [_a_bar, _b],
-            [_a_bar, _b, _b]),
-        'a --': concat.level1.typecheck.StackEffect(
-            [_a_bar, _b], [_a_bar]),
+            [_a_bar, _b], [_a_bar, _b, _b]
+        ),
+        'a --': concat.level1.typecheck.StackEffect([_a_bar, _b], [_a_bar]),
         'a:object b:object -- b a': concat.level1.typecheck.StackEffect(
             [
                 _a_bar,
                 concat.level1.typecheck.PrimitiveTypes.object,
-                concat.level1.typecheck.PrimitiveTypes.object
-            ], [_a_bar, *[concat.level1.typecheck.PrimitiveTypes.object] * 2]),
+                concat.level1.typecheck.PrimitiveTypes.object,
+            ],
+            [_a_bar, *[concat.level1.typecheck.PrimitiveTypes.object] * 2],
+        ),
         'a:`t -- a a': concat.level1.typecheck.StackEffect(
-            [_a_bar, _b], [_a_bar, _b, _b]),
+            [_a_bar, _b], [_a_bar, _b, _b]
+        ),
         '*i -- *i a': concat.level1.typecheck.StackEffect(
             [_a_bar], [_a_bar, _b]
         ),
         '*i fun:(*i -- *o) -- *o': concat.level1.typecheck.StackEffect(
             [_a_bar, concat.level1.typecheck.StackEffect([_a_bar], [_d_bar])],
-            [_d_bar]
-        )
+            [_d_bar],
+        ),
     }
 
     def test_examples(self) -> None:
@@ -80,5 +111,7 @@ class TestStackEffectParser(unittest.TestCase):
                     self.fail('could not parse {}\n{}'.format(example, e))
                 subs = concat.level1.typecheck.Substitutions()
                 env = concat.level1.typecheck.Environment()
-                self.assertEqual(concat.level2.typecheck.ast_to_type(
-                    effect, subs, env)[0], self.examples[example])
+                self.assertEqual(
+                    concat.level2.typecheck.ast_to_type(effect, subs, env)[0],
+                    self.examples[example],
+                )
