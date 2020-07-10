@@ -283,7 +283,11 @@ class ForAll(Type):
 
 
 class _Function(IndividualType):
-    def __init__(self, input: Sequence['StackItemType'], output: Sequence['StackItemType']) -> None:
+    def __init__(
+        self,
+        input: Sequence['StackItemType'],
+        output: Sequence['StackItemType'],
+    ) -> None:
         super().__init__()
         self.input = input
         self.output = output
@@ -322,14 +326,18 @@ class _Function(IndividualType):
         # We can't use plain unification here because variables can only map to
         # variables of the same type.
         subs = Substitutions()
-        type_pairs = zip([*self.input, *self.output],
-                         [*other.input, *other.output])
+        type_pairs = zip(
+            [*self.input, *self.output], [*other.input, *other.output]
+        )
         for type1, type2 in type_pairs:
-            if isinstance(type1, IndividualVariable) and \
-                    isinstance(type2, IndividualVariable):
+            # FIXME: Check bounds of individual type variables
+            if isinstance(type1, IndividualVariable) and isinstance(
+                type2, IndividualVariable
+            ):
                 subs[type2] = type1
-            elif isinstance(type1, SequenceVariable) and \
-                    isinstance(type2, SequenceVariable):
+            elif isinstance(type1, SequenceVariable) and isinstance(
+                type2, SequenceVariable
+            ):
                 subs[type2] = type1
             type2 = subs(type2)  # type: ignore
             if type1 != type2:
