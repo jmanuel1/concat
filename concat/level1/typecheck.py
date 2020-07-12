@@ -919,7 +919,11 @@ def unify(i1: List[StackItemType], i2: List[StackItemType]) -> Substitutions:
         phi1 = unify_ind(i1[-1], i2[-1])
         phi2 = unify(phi1(i1[:-1]), phi1(i2[:-1]))
         return phi2(phi1)
-    raise TypeError('cannot unify {} with {}'.format(i1, i2))
+    raise TypeError(
+        'cannot unify {} with {}'.format(
+            [str(t) for t in i1], [str(t) for t in i2]
+        )
+    )
 
 
 def unify_ind(t1: IndividualType, t2: IndividualType) -> Substitutions:
