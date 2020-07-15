@@ -926,7 +926,9 @@ def unify(i1: List[StackItemType], i2: List[StackItemType]) -> Substitutions:
     )
 
 
-def unify_ind(t1: IndividualType, t2: IndividualType) -> Substitutions:
+def unify_ind(
+    t1: Union[IndividualType, ForAll], t2: Union[IndividualType, ForAll]
+) -> Substitutions:
     """A modified version of the unifyInd function described by Kleffner.
 
     Since subtyping is a directional relation, we say t1 is the input type, and
@@ -934,12 +936,16 @@ def unify_ind(t1: IndividualType, t2: IndividualType) -> Substitutions:
     t2. This is inspired by Polymorphism, Subtyping, and Type Inference in
     MLsub (Dolan and Mycroft 2016). Variables can be subsituted in either
     direction."""
+    t1 = inst(t1.to_for_all())
+    t2 = inst(t2.to_for_all())
     Primitive = (PrimitiveType, PrimitiveInterface)
     if isinstance(t1, Primitive) and isinstance(t2, Primitive):
         if not t1.is_subtype_of(t2):
             raise TypeError(
-                'Primitive type {} cannot unify with primitive type {}'
-                .format(t1, t2))
+                'Primitive type {} cannot unify with primitive type {}'.format(
+                    t1, t2
+                )
+            )
         return Substitutions()
     elif isinstance(t1, IndividualVariable) and t1 not in _ftv(t2):
         phi = None
@@ -950,7 +956,8 @@ def unify_ind(t1: IndividualType, t2: IndividualType) -> Substitutions:
                 phi = unify_ind(t1.bound, t2)
         if t2.is_subtype_of(t1):
             phi = Substitutions({t1: IndividualVariable(t2)})(
-                phi or Substitutions())
+                phi or Substitutions()
+            )
         if phi is None:
             if isinstance(t2, IndividualVariable):
                 new_var = IndividualVariable(t1.bound & t2.bound)
