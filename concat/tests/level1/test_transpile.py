@@ -12,10 +12,10 @@ import astunparse  # type: ignore
 
 
 class TestSubVisitors(unittest.TestCase):
-
     def setUp(self) -> None:
         self.__visitors = concat.visitors.VisitorDict[
-            concat.level0.parse.Node, ast.AST]()
+            concat.level0.parse.Node, ast.AST
+        ]()
         self.__visitors.extend_with(concat.level0.transpile.level_0_extension)
         self.__visitors.extend_with(concat.level1.transpile.level_1_extension)
 
@@ -23,7 +23,7 @@ class TestSubVisitors(unittest.TestCase):
         self,
         node: concat.level0.parse.Node,
         visitor: str,
-        py_node_type: Type[ast.AST]
+        py_node_type: Type[ast.AST],
     ) -> ast.AST:
         try:
             py_node = self.__visitors[visitor].visit(node)
@@ -32,21 +32,21 @@ class TestSubVisitors(unittest.TestCase):
             message = message_template.format(node, visitor)
             self.fail(msg=message)
         message = 'Python node is not a {}'.format(py_node_type.__qualname__)
-        self.assertIsInstance(
-            py_node, py_node_type, msg=message)
+        self.assertIsInstance(py_node, py_node_type, msg=message)
         return py_node
 
     def _test_visitors(
         self,
         node: concat.level0.parse.Node,
         visitors: Iterable[str],
-        py_node_type: Type[ast.AST]
+        py_node_type: Type[ast.AST],
     ) -> Iterator[ast.AST]:
         for visitor in visitors:
             yield self._test_visitor(node, visitor, py_node_type)
 
     def _test_visitor_basic(
-            self, node: concat.level0.parse.Node, visitor: str) -> ast.AST:
+        self, node: concat.level0.parse.Node, visitor: str
+    ) -> ast.AST:
         return self._test_visitor(node, visitor, ast.Call)
 
     def test_none_word_visitor(self) -> None:
@@ -56,8 +56,9 @@ class TestSubVisitors(unittest.TestCase):
         node = concat.level1.parse.NoneWordNode(none)
         py_node = self._test_visitor_basic(node, 'none-word')
         value = cast(ast.NameConstant, cast(ast.Call, py_node).args[0]).value
-        self.assertIs(value, None,
-                      msg='Python None node does not contain `None`')
+        self.assertIs(
+            value, None, msg='Python None node does not contain `None`'
+        )
 
     def test_not_impl_word_visitor(self) -> None:
         """Not-impl words are transpiled to calls containing NotImplemented."""
@@ -77,7 +78,8 @@ class TestSubVisitors(unittest.TestCase):
         py_node = self._test_visitor_basic(node, 'ellipsis-word')
         message = 'The Python node within the call is not an Ellipsis'
         self.assertIsInstance(
-            cast(ast.Call, py_node).args[0], ast.Ellipsis, msg=message)
+            cast(ast.Call, py_node).args[0], ast.Ellipsis, msg=message
+        )
 
     def test_slice_word_visitor_with_step(self) -> None:
         two_token = concat.level0.lex.Token()
@@ -85,8 +87,11 @@ class TestSubVisitors(unittest.TestCase):
         two = concat.level0.parse.NumberWordNode(two_token)
         node = concat.level1.parse.SliceWordNode(([], [], [two]))
         py_node = self._test_visitor(node, 'slice-word', ast.expr)
-        self.assertIn('2', astunparse.unparse(py_node),
-                      msg='Python node does not contain 2')
+        self.assertIn(
+            '2',
+            astunparse.unparse(py_node),
+            msg='Python node does not contain 2',
+        )
 
     def test_del_statement_visitor(self) -> None:
         """Concat del statements are transpiled to Python del statements."""
@@ -101,21 +106,23 @@ class TestSubVisitors(unittest.TestCase):
         name_token = concat.level0.lex.Token()
         name_token.value, name_token.start = 'a', (0, 0)
         node = concat.level1.parse.AsyncFuncdefStatementNode(
-            name_token, [], [], [], (0, 0))
+            name_token, [], [], [], (0, 0)
+        )
 
         visitors = {'async-funcdef-statement', 'statement'}
-        self._test_visitors(
-            node, visitors, ast.AsyncFunctionDef)
+        self._test_visitors(node, visitors, ast.AsyncFunctionDef)
 
     def test_funcdef_statement_visitor(self) -> None:
         """Function definitions are transpiled to the same kind of Python statement."""
         name_token = concat.level0.lex.Token()
         name_token.value, name_token.start = 'a', (0, 0)
         node = concat.level1.parse.FuncdefStatementNode(
-            name_token, [], [], [], (0, 0))
+            name_token, [], [], [], (0, 0)
+        )
 
         self._test_visitors(
-            node, {'funcdef-statement', 'statement'}, ast.FunctionDef)
+            node, {'funcdef-statement', 'statement'}, ast.FunctionDef
+        )
 
     def test_import_statement_visitor_with_as(self) -> None:
         """import ... as ... statements are transpiled to the same kind of Python statement.
@@ -125,84 +132,141 @@ class TestSubVisitors(unittest.TestCase):
         node = concat.level1.parse.ImportStatementNode('a.submodule', 'b')
 
         for py_node in self._test_visitors(
-                node, {'import-statement', 'statement'}, ast.stmt):
-            self.assertIn('as b', astunparse.unparse(py_node),
-                          msg='as-part was not transpiled')
+            node, {'import-statement', 'statement'}, ast.stmt
+        ):
+            self.assertIn(
+                'as b',
+                astunparse.unparse(py_node),
+                msg='as-part was not transpiled',
+            )
 
     def test_import_statement_visitor_with_from(self) -> None:
         node = concat.level1.parse.FromImportStatementNode('a.submodule', 'b')
 
         for py_node in self._test_visitors(
-                node, {'import-statement', 'statement'}, ast.stmt):
-            self.assertIn('from', astunparse.unparse(py_node),
-                          msg='was not transpiled as from-import')
+            node, {'import-statement', 'statement'}, ast.stmt
+        ):
+            self.assertIn(
+                'from',
+                astunparse.unparse(py_node),
+                msg='was not transpiled as from-import',
+            )
 
     def test_import_statement_visitor_with_from_and_as(self) -> None:
         node = concat.level1.parse.FromImportStatementNode(
-            'a.submodule', 'b', 'c')
+            'a.submodule', 'b', 'c'
+        )
 
         for py_node in self._test_visitors(
-                node, {'import-statement', 'statement'}, ast.stmt):
-            self.assertIn('from', astunparse.unparse(py_node),
-                          msg='was not transpiled as from-import')
-            self.assertIn('as c', astunparse.unparse(py_node),
-                          msg='as-part was not transpiled')
+            node, {'import-statement', 'statement'}, ast.stmt
+        ):
+            self.assertIn(
+                'from',
+                astunparse.unparse(py_node),
+                msg='was not transpiled as from-import',
+            )
+            self.assertIn(
+                'as c',
+                astunparse.unparse(py_node),
+                msg='as-part was not transpiled',
+            )
 
     def test_import_statement_visitor_with_from_and_star(self) -> None:
         node = concat.level1.parse.FromImportStarStatementNode('a')
 
         for py_node in self._test_visitors(
-                node, {'import-statement', 'statement'}, ast.stmt):
-            self.assertIn('from', astunparse.unparse(py_node),
-                          msg='was not transpiled as from-import')
-            self.assertIn('*', astunparse.unparse(py_node),
-                          msg='star-part was not transpiled')
+            node, {'import-statement', 'statement'}, ast.stmt
+        ):
+            self.assertIn(
+                'from',
+                astunparse.unparse(py_node),
+                msg='was not transpiled as from-import',
+            )
+            self.assertIn(
+                '*',
+                astunparse.unparse(py_node),
+                msg='star-part was not transpiled',
+            )
 
     def test_classdef_statement_visitor(self) -> None:
         node = concat.level1.parse.ClassdefStatementNode('A', [], (0, 0))
 
         self._test_visitors(
-            node, {'classdef-statement', 'statement'}, ast.ClassDef)
+            node, {'classdef-statement', 'statement'}, ast.ClassDef
+        )
 
     def test_classdef_statement_visitor_with_decorators(self) -> None:
         name = Token()
         name.start, name.value = (0, 0), 'decorator'
         decorator = concat.level0.parse.NameWordNode(name)
         node = concat.level1.parse.ClassdefStatementNode(
-            'A', [], (0, 0), [decorator])
+            'A', [], (0, 0), [decorator]
+        )
 
         for py_node in self._test_visitors(
-                node, {'classdef-statement', 'statement'}, ast.ClassDef):
-            self.assertIn('@', astunparse.unparse(py_node),
-                          msg='decorator was not transpiled')
+            node, {'classdef-statement', 'statement'}, ast.ClassDef
+        ):
+            self.assertIn(
+                '@',
+                astunparse.unparse(py_node),
+                msg='decorator was not transpiled',
+            )
 
     def test_classdef_statement_visitor_with_bases(self) -> None:
         name = Token()
         name.start, name.value = (0, 0), 'base'
         base = concat.level0.parse.NameWordNode(name)
         node = concat.level1.parse.ClassdefStatementNode(
-            'A', [], (0, 0), [], [[base]])
+            'A', [], (0, 0), [], [[base]]
+        )
 
         for py_node in self._test_visitors(
-                node, {'classdef-statement', 'statement'}, ast.ClassDef):
-            self.assertIn('(', astunparse.unparse(py_node),
-                          msg='bases were not transpiled')
-            self.assertIn('base', astunparse.unparse(py_node),
-                          msg='bases were not transpiled')
+            node, {'classdef-statement', 'statement'}, ast.ClassDef
+        ):
+            self.assertIn(
+                '(',
+                astunparse.unparse(py_node),
+                msg='bases were not transpiled',
+            )
+            self.assertIn(
+                'base',
+                astunparse.unparse(py_node),
+                msg='bases were not transpiled',
+            )
 
     def test_classdef_statement_visitor_with_keyword_args(self) -> None:
         name = Token()
         name.start, name.value = (0, 0), 'meta'
         word = concat.level0.parse.NameWordNode(name)
         node = concat.level1.parse.ClassdefStatementNode(
-            'A', [], (0, 0), [], [], [('metaclass', word)])
+            'A', [], (0, 0), [], [], [('metaclass', word)]
+        )
 
         for py_node in self._test_visitors(
-                node, {'classdef-statement', 'statement'}, ast.ClassDef):
-            self.assertIn('(', astunparse.unparse(py_node),
-                          msg='keyword arguments were not transpiled')
-            self.assertIn('metaclass=', astunparse.unparse(
-                py_node), msg='keyword arguments were not transpiled')
+            node, {'classdef-statement', 'statement'}, ast.ClassDef
+        ):
+            self.assertIn(
+                '(',
+                astunparse.unparse(py_node),
+                msg='keyword arguments were not transpiled',
+            )
+            self.assertIn(
+                'metaclass=',
+                astunparse.unparse(py_node),
+                msg='keyword arguments were not transpiled',
+            )
+
+    def test_subtract_word(self) -> None:
+        """Tests that subtract words are successfuly transpiled."""
+        minus = Token('MINUS', '-')
+        word = concat.level1.operators.SubtractWordNode(minus)
+
+        for py_node in self._test_visitors(
+            word, {'word', 'operator-word', 'subtract-word'}, ast.expr
+        ):
+            self.assertIn(
+                '-', astunparse.unparse(py_node), msg='no subtraction operator'
+            )
 
 
 class TestMagicMethodTranspilaton(unittest.TestCase):
@@ -220,59 +284,70 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
     def setUp(self) -> None:
         self.__visitors = concat.visitors.VisitorDict[
-            concat.level0.parse.Node, ast.AST]()
+            concat.level0.parse.Node, ast.AST
+        ]()
         self.__visitors.extend_with(concat.level0.transpile.level_0_extension)
         self.__visitors.extend_with(concat.level1.transpile.level_1_extension)
 
     def _make_magic_py_method_from_name(
-            self, method_name: str) -> ast.FunctionDef:
+        self, method_name: str
+    ) -> ast.FunctionDef:
         name = Token()
         name.start, name.value = (0, 0), '__{}__'.format(method_name)
         definition = concat.level1.parse.FuncdefStatementNode(
-            name, [], None, [], (0, 0))
+            name, [], None, [], (0, 0)
+        )
         node = concat.level1.parse.ClassdefStatementNode(
-            'A', [definition], (0, 0), [], [])
+            'A', [definition], (0, 0), [], []
+        )
         py_node = cast(
-            ast.ClassDef, self.__visitors['classdef-statement'].visit(node))
+            ast.ClassDef, self.__visitors['classdef-statement'].visit(node)
+        )
         return cast(ast.FunctionDef, py_node.body[0])
 
     def _assert_explicit_positional_parameters_equal(
-            self, fun: ast.FunctionDef, params: List[str]) -> None:
+        self, fun: ast.FunctionDef, params: List[str]
+    ) -> None:
         fun_params = get_explicit_positional_function_parameters(fun)
         self.assertEqual(
-            fun_params, params, msg='wrong explicit positional parameters')
+            fun_params, params, msg='wrong explicit positional parameters'
+        )
 
     def _assert_pushes(
-        self,
-        fun: ast.FunctionDef,
-        name: str,
-        statement_number: int = 0
+        self, fun: ast.FunctionDef, name: str, statement_number: int = 0
     ) -> None:
         py_statement = fun.body[statement_number]
-        self.assertIn('stack.append({})'.format(name), astunparse.unparse(
-            py_statement), msg="doesn't push {}".format(name))
+        self.assertIn(
+            'stack.append({})'.format(name),
+            astunparse.unparse(py_statement),
+            msg="doesn't push {}".format(name),
+        )
 
-    def _assert_pushes_all_at_once(self, fun: ast.FunctionDef, *items: str) -> None:
+    def _assert_pushes_all_at_once(
+        self, fun: ast.FunctionDef, *items: str
+    ) -> None:
         py_first_statement = fun.body[0:2]
         items_str = ', '.join(items)
-        self.assertIn('stack += [{}]'.format(items_str), astunparse.unparse(
-            py_first_statement), msg="doesn't push {}".format(items_str))
+        self.assertIn(
+            'stack += [{}]'.format(items_str),
+            astunparse.unparse(py_first_statement),
+            msg="doesn't push {}".format(items_str),
+        )
 
     def _assert_returns_top_of_stack(self, fun: ast.FunctionDef) -> None:
         py_last_statement = fun.body[-1]
         message = "doesn't pop return value off stack"
-        self.assertIn('return stack.pop()', astunparse.unparse(
-            py_last_statement), msg=message)
+        self.assertIn(
+            'return stack.pop()',
+            astunparse.unparse(py_last_statement),
+            msg=message,
+        )
 
     def _test_magic_method_basic(
-        self,
-        name: str,
-        params: Sequence[str],
-        *pushed: str
+        self, name: str, params: Sequence[str], *pushed: str
     ) -> ast.FunctionDef:
         fun = self._make_magic_py_method_from_name(name)
-        self._assert_explicit_positional_parameters_equal(
-            fun, list(params))
+        self._assert_explicit_positional_parameters_equal(fun, list(params))
         for index, item in enumerate(pushed):
             self._assert_pushes(fun, item, index)
         return fun
@@ -288,9 +363,12 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         For example, def __init__ should become def __init__(self, stack, stash) and it should push self onto the stack before executing the rest of the function. The function need not return a value other than None."""
         for method in {'init', 'call'}:
-            with self.subTest(msg='testing __{}__'.format(method), method=method):
+            with self.subTest(
+                msg='testing __{}__'.format(method), method=method
+            ):
                 self._test_magic_method_basic(
-                    method, ['self', 'stack', 'stash'], 'self')
+                    method, ['self', 'stack', 'stash'], 'self'
+                )
 
     def test_self_only_methods(self) -> None:
         """Test that transpiled __(del, repr, etc.)__ methods take only self.
@@ -298,16 +376,42 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         For example, def __del__ should become def __del__(self) and it should
         push self onto the stack before executing the rest of the function.
         Then, it should return stack.pop()."""
-        for method in {'del', 'repr', 'str', 'bytes', 'hash', 'bool', 'dir',
-                       'len', 'length_hint', 'aenter', 'anext', 'aiter',
-                       'await', 'enter', 'ceil', 'floor', 'trunc', 'index',
-                       'float', 'int', 'complex', 'invert', 'abs', 'pos',
-                       'neg', 'reversed', 'iter'}:
+        for method in {
+            'del',
+            'repr',
+            'str',
+            'bytes',
+            'hash',
+            'bool',
+            'dir',
+            'len',
+            'length_hint',
+            'aenter',
+            'anext',
+            'aiter',
+            'await',
+            'enter',
+            'ceil',
+            'floor',
+            'trunc',
+            'index',
+            'float',
+            'int',
+            'complex',
+            'invert',
+            'abs',
+            'pos',
+            'neg',
+            'reversed',
+            'iter',
+        }:
             method_name = '__{}__'.format(method)
-            with self.subTest(msg='testing {}'.format(method_name),
-                              method=method_name):
+            with self.subTest(
+                msg='testing {}'.format(method_name), method=method_name
+            ):
                 py_def = self._test_magic_method_basic(
-                    method, ['self'], 'self')
+                    method, ['self'], 'self'
+                )
                 self._assert_returns_top_of_stack(py_def)
 
     def test__format__(self) -> None:
@@ -315,7 +419,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         def __format__ should become def __format__(self, format_spec) and it should push format_spec and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         py_format_def = self._test_magic_method_basic(
-            'format', ['self', 'format_spec'], 'format_spec', 'self')
+            'format', ['self', 'format_spec'], 'format_spec', 'self'
+        )
         self._assert_returns_top_of_stack(py_format_def)
 
     def test_comparisons_and_augmented_assignments(self) -> None:
@@ -324,17 +429,57 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         For example, def __lt__ should become def __lt__(self, other) and it should push self and other onto the stack before executing the rest of the function. The function should return stack.pop().
 
         __ipow__ is not tested here; it has a different signature."""
-        for method in {'lt', 'le', 'eq', 'ne', 'gt', 'ge', 'ior', 'ixor',
-                       'iand', 'irshift', 'ilshift', 'imod', 'ifloordiv',
-                       'itruediv', 'imatmul', 'imul', 'isub', 'iadd', 'ror',
-                       'rxor', 'rand', 'rrshift', 'rlshift', 'rmod',
-                       'rfloordiv', 'rtruediv', 'rmatmul', 'rmul', 'rsub',
-                       'radd', 'rpow', 'or', 'xor',
-                       'and', 'rshift', 'lshift', 'mod', 'floordiv',
-                       'truediv', 'matmul', 'mul', 'sub', 'add'}:
-            with self.subTest(msg='testing __{}__'.format(method), method=method):
+        for method in {
+            'lt',
+            'le',
+            'eq',
+            'ne',
+            'gt',
+            'ge',
+            'ior',
+            'ixor',
+            'iand',
+            'irshift',
+            'ilshift',
+            'imod',
+            'ifloordiv',
+            'itruediv',
+            'imatmul',
+            'imul',
+            'isub',
+            'iadd',
+            'ror',
+            'rxor',
+            'rand',
+            'rrshift',
+            'rlshift',
+            'rmod',
+            'rfloordiv',
+            'rtruediv',
+            'rmatmul',
+            'rmul',
+            'rsub',
+            'radd',
+            'rpow',
+            'or',
+            'xor',
+            'and',
+            'rshift',
+            'lshift',
+            'mod',
+            'floordiv',
+            'truediv',
+            'matmul',
+            'mul',
+            'sub',
+            'add',
+        }:
+            with self.subTest(
+                msg='testing __{}__'.format(method), method=method
+            ):
                 py_def = self._test_magic_method_basic(
-                    method, ['self', 'other'], 'self', 'other')
+                    method, ['self', 'other'], 'self', 'other'
+                )
                 self._assert_returns_top_of_stack(py_def)
 
     def test_attribute_methods_except_setattr_and_dir(self) -> None:
@@ -342,9 +487,12 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         For example, def __getattr__ should become def __getattr__(self, name) and it should push name and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         for method in {'getattr', 'getattribute', 'delattr'}:
-            with self.subTest(msg='testing __{}__'.format(method), method=method):
+            with self.subTest(
+                msg='testing __{}__'.format(method), method=method
+            ):
                 py_getattr_def = self._test_magic_method_basic(
-                    method, ['self', 'name'], 'name', 'self')
+                    method, ['self', 'name'], 'name', 'self'
+                )
                 self._assert_returns_top_of_stack(py_getattr_def)
 
     def test__setattr__(self) -> None:
@@ -352,9 +500,11 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         def __setattr__ should become def __setattr__(self, name, value) and it should push value, name, and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         py_setattr_def = self._test_magic_method_basic(
-            'setattr', ['self', 'name', 'value'])
+            'setattr', ['self', 'name', 'value']
+        )
         self._assert_pushes_all_at_once(
-            py_setattr_def, 'value', 'name', 'self')
+            py_setattr_def, 'value', 'name', 'self'
+        )
         self._assert_returns_top_of_stack(py_setattr_def)
 
     def test__get__(self) -> None:
@@ -362,9 +512,11 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         def __get__ should become def __get__(self, instance, owner) and it should push owner, instance, and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         py_get_def = self._test_magic_method_basic(
-            'get', ['self', 'instance', 'owner'])
+            'get', ['self', 'instance', 'owner']
+        )
         self._assert_pushes_all_at_once(
-            py_get_def, 'owner', 'instance', 'self')
+            py_get_def, 'owner', 'instance', 'self'
+        )
         self._assert_returns_top_of_stack(py_get_def)
 
     def test__set__(self) -> None:
@@ -372,9 +524,11 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         def __set__ should become def __set__(self, instance, value) and it should push value, instance, and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         py_set_def = self._test_magic_method_basic(
-            'set', ['self', 'instance', 'value'])
+            'set', ['self', 'instance', 'value']
+        )
         self._assert_pushes_all_at_once(
-            py_set_def, 'value', 'instance', 'self')
+            py_set_def, 'value', 'instance', 'self'
+        )
         self._assert_returns_top_of_stack(py_set_def)
 
     def test_methods_taking_self_and_instance(self) -> None:
@@ -382,9 +536,12 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         For example, def __delete__ should become def __delete__(self, instance) and it should push instance and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         for method in {'delete', 'instancecheck'}:
-            with self.subTest(msg='testing __{}__'.format(method), method=method):
+            with self.subTest(
+                msg='testing __{}__'.format(method), method=method
+            ):
                 py_defun = self._test_magic_method_basic(
-                    method, ['self', 'instance'])
+                    method, ['self', 'instance']
+                )
                 self._assert_pushes_all_at_once(py_defun, 'instance', 'self')
                 self._assert_returns_top_of_stack(py_defun)
 
@@ -393,13 +550,13 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         def __init_subclass__ should become def __init_subclass__(cls, **kwargs) and it should push kwargs and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         py_init_subclass_def = self._test_magic_method_basic(
-            'init_subclass', ['cls'])
+            'init_subclass', ['cls']
+        )
         py_kwarg_object = py_init_subclass_def.args.kwarg
         self.assertIsNotNone(py_kwarg_object, msg='no ** argument')
         py_kwarg = cast(ast.arg, py_kwarg_object).arg
         self.assertEqual(py_kwarg, 'kwargs', msg='wrong ** argument')
-        self._assert_pushes_all_at_once(
-            py_init_subclass_def, 'kwargs', 'self')
+        self._assert_pushes_all_at_once(py_init_subclass_def, 'kwargs', 'self')
         self._assert_returns_top_of_stack(py_init_subclass_def)
 
     def test__prepare__(self) -> None:
@@ -407,13 +564,15 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         def __prepare__ should become def __prepare__(cls, name, bases, **kwds) and it should push kwds, bases, name, and self onto the stack before executing the rest of the function. The function should return stack.pop(). It is up to the programmer to decorate the function with @classmethod."""
         py_prepare_def = self._test_magic_method_basic(
-            'prepare', ['cls', 'name', 'bases'])
+            'prepare', ['cls', 'name', 'bases']
+        )
         py_kwarg_object = py_prepare_def.args.kwarg
         self.assertIsNotNone(py_kwarg_object, msg='no ** argument')
         py_kwarg = cast(ast.arg, py_kwarg_object).arg
         self.assertEqual(py_kwarg, 'kwds', msg='wrong ** argument')
         self._assert_pushes_all_at_once(
-            py_prepare_def, 'kwds', 'bases', 'name', 'cls')
+            py_prepare_def, 'kwds', 'bases', 'name', 'cls'
+        )
         self._assert_returns_top_of_stack(py_prepare_def)
 
     def test__subclasscheck__(self) -> None:
@@ -421,9 +580,11 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         def __subclasscheck__ should become def __subclasscheck__(self, subclass) and it should push subclass and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         py_subclasscheck_def = self._test_magic_method_basic(
-            'subclasscheck', ['self', 'subclass'])
+            'subclasscheck', ['self', 'subclass']
+        )
         self._assert_pushes_all_at_once(
-            py_subclasscheck_def, 'subclass', 'self')
+            py_subclasscheck_def, 'subclass', 'self'
+        )
         self._assert_returns_top_of_stack(py_subclasscheck_def)
 
     def test_key_related_methods(self) -> None:
@@ -434,9 +595,12 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         Note: __setitem__ has a different signature."""
         for method in {'getitem', 'missing', 'delitem'}:
             method_name = '__{}__'.format(method)
-            with self.subTest(msg='testing {}'.format(method_name), method_name=method_name):
+            with self.subTest(
+                msg='testing {}'.format(method_name), method_name=method_name
+            ):
                 py_method_def = self._test_magic_method_basic(
-                    method, ['self', 'key'])
+                    method, ['self', 'key']
+                )
                 self._assert_pushes_all_at_once(py_method_def, 'key', 'self')
                 self._assert_returns_top_of_stack(py_method_def)
 
@@ -446,11 +610,18 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         For example, def __aexit__ should become def __aexit__(self, exc_type, exc_value, traceback) and it should push traceback, exc_value, exc_type, and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         for method in {'exit', 'aexit'}:
             method_name = '__{}__'.format(method)
-            with self.subTest(msg='testing {}'.format(method_name), method_name=method_name):
+            with self.subTest(
+                msg='testing {}'.format(method_name), method_name=method_name
+            ):
                 expected_params = [
-                    'self', 'exc_type', 'exc_value', 'traceback']
+                    'self',
+                    'exc_type',
+                    'exc_value',
+                    'traceback',
+                ]
                 py_method_def = self._test_magic_method_basic(
-                    method, expected_params)
+                    method, expected_params
+                )
                 self._assert_pushes_all_at_once(
                     py_method_def, 'traceback', 'exc_value', 'exc_type', 'self'
                 )
@@ -461,7 +632,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         def __round__ should become def __round__(self, ndigits) and it should push ndigits and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         py_method_def = self._test_magic_method_basic(
-            'round', ['self', 'ndigits'])
+            'round', ['self', 'ndigits']
+        )
         self._assert_pushes_all_at_once(py_method_def, 'ndigits', 'self')
         self._assert_returns_top_of_stack(py_method_def)
 
@@ -471,15 +643,25 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         def __[i]pow__ should become def __[i]pow__(self, other, modulo=1) and it should push self, other, and modulo onto the stack before executing the rest of the function. The function should return stack.pop()."""
         for method in {'pow', 'ipow'}:
             method_name = '__{}__'.format(method)
-            with self.subTest(msg='testing {}'.format(method_name), method_name=method_name):
+            with self.subTest(
+                msg='testing {}'.format(method_name), method_name=method_name
+            ):
                 py_method_def = self._test_magic_method_basic(
-                    method, ['self', 'other', 'modulo'])
+                    method, ['self', 'other', 'modulo']
+                )
                 self.assertIsInstance(
-                    py_method_def.args.defaults[-1], ast.Num, msg='modulo default is not a number')
+                    py_method_def.args.defaults[-1],
+                    ast.Num,
+                    msg='modulo default is not a number',
+                )
                 self.assertEqual(
-                    cast(ast.Num, py_method_def.args.defaults[-1]).n, 1, msg='wrong modulo default')
+                    cast(ast.Num, py_method_def.args.defaults[-1]).n,
+                    1,
+                    msg='wrong modulo default',
+                )
                 self._assert_pushes_all_at_once(
-                    py_method_def, 'self', 'other', 'modulo')
+                    py_method_def, 'self', 'other', 'modulo'
+                )
                 self._assert_returns_top_of_stack(py_method_def)
 
     def test__contains__(self) -> None:
@@ -487,7 +669,8 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         def __contains__ should become def __contains__(self, item) and it should push item and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         py_method_def = self._test_magic_method_basic(
-            'contains', ['self', 'item'])
+            'contains', ['self', 'item']
+        )
         self._assert_pushes_all_at_once(py_method_def, 'item', 'self')
         self._assert_returns_top_of_stack(py_method_def)
 
@@ -496,6 +679,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
         def __setitem__ should become def __setitem__(self, key, value) and it should push value, key, and self onto the stack before executing the rest of the function. The function should return stack.pop()."""
         py_method_def = self._test_magic_method_basic(
-            'setitem', ['self', 'key', 'value'])
+            'setitem', ['self', 'key', 'value']
+        )
         self._assert_pushes_all_at_once(py_method_def, 'value', 'key', 'self')
         self._assert_returns_top_of_stack(py_method_def)

@@ -21,7 +21,7 @@ from concat.visitors import (
     Visitor,
     assert_type,
     assert_annotated_type,
-    fail
+    fail,
 )
 from concat.transpile_visitors import node_to_py_string
 from concat.astutils import (
@@ -36,7 +36,7 @@ from concat.astutils import (
     call_concat_function,
     abstract,
     assign_self_pushing_module_type_to_all_components,
-    append_to_stack
+    append_to_stack,
 )
 from typing import Type, cast
 import astunparse  # type: ignore
@@ -46,7 +46,8 @@ import astunparse  # type: ignore
 def binary_operator_visitor(operator: str) -> Visitor[object, ast.expr]:
     expression = 'lambda s,_:s.append(s.pop(-2) {} s.pop())'.format(operator)
     return assert_type(concat.level1.operators.OperatorWordNode).then(
-        node_to_py_string(expression))
+        node_to_py_string(expression)
+    )
 
 
 def _literal_word_extension(
@@ -96,7 +97,11 @@ def _literal_word_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
-    def iterable_word_visitor(node: concat.level1.parse.IterableWordNode, kind: Type[ast.expr], **kwargs: ast.AST) -> ast.expr:
+    def iterable_word_visitor(
+        node: concat.level1.parse.IterableWordNode,
+        kind: Type[ast.expr],
+        **kwargs: ast.AST
+    ) -> ast.expr:
         """Converts a IterableWordNode to a Python expression.
 
         Lambda abstraction is used so that the inside elements of the list are
@@ -109,8 +114,9 @@ def _literal_word_extension(
             py_quote = visitors['quote-word'].visit(quote)
             stack = ast.Name(id='stack', ctx=load)
             stash = ast.Name(id='stash', ctx=load)
-            quote_call = ast.Call(func=py_quote, args=[
-                                  stack, stash], keywords=[])
+            quote_call = ast.Call(
+                func=py_quote, args=[stack, stash], keywords=[]
+            )
             subtuple = ast.Tuple(elts=[quote_call, pop_stack()], ctx=load)
             index = ast.Index(value=ast.Num(n=-1))
             last = ast.Subscript(value=subtuple, slice=index, ctx=load)
@@ -123,7 +129,8 @@ def _literal_word_extension(
     @visitors.add_alternative_to('literal-word', 'tuple-word')
     @assert_annotated_type
     def tuple_word_visitor(
-            node: concat.level1.parse.TupleWordNode) -> ast.expr:
+        node: concat.level1.parse.TupleWordNode,
+    ) -> ast.expr:
         """Converts a TupleWordNode to a Python expression."""
         return iterable_word_visitor(node, ast.Tuple, ctx=ast.Load())
 
@@ -151,18 +158,22 @@ def _literal_word_extension(
         for key, value in node.dict_children:
             key_quote = to_transpiled_quotation(key, node.location, visitors)
             value_quote = to_transpiled_quotation(
-                value, node.location, visitors)
+                value, node.location, visitors
+            )
             stack = ast.Name(id='stack', ctx=load)
             stash = ast.Name(id='stash', ctx=load)
-            key_quote_call = ast.Call(func=key_quote, args=[
-                stack, stash], keywords=[])
-            value_quote_call = ast.Call(func=value_quote, args=[
-                stack, stash], keywords=[])
+            key_quote_call = ast.Call(
+                func=key_quote, args=[stack, stash], keywords=[]
+            )
+            value_quote_call = ast.Call(
+                func=value_quote, args=[stack, stash], keywords=[]
+            )
             py_key = pack_expressions([key_quote_call, pop_stack()])
             py_value = pack_expressions([value_quote_call, pop_stack()])
             pairs.append((py_key, py_value))
-        dictionary = ast.Dict(keys=[*dict(pairs)],
-                              values=[*dict(pairs).values()])
+        dictionary = ast.Dict(
+            keys=[*dict(pairs)], values=[*dict(pairs).values()]
+        )
         push_func = ast.Name(id='push', ctx=load)
         py_node = ast.Call(func=push_func, args=[dictionary], keywords=[])
         py_node.lineno, py_node.col_offset = node.location
@@ -177,7 +188,7 @@ def _word_extension(
     @visitors.add_alternative_to('word', 'subscription-word')
     @assert_annotated_type
     def subscription_word_visitor(
-        node: concat.level1.parse.SubscriptionWordNode
+        node: concat.level1.parse.SubscriptionWordNode,
     ) -> ast.expr:
         """Converts a SubscriptionWordNode to a Python expression.
 
@@ -185,12 +196,18 @@ def _word_extension(
         stack.pop(-2)[stack.pop()])[-1](stack,stash)`.
         NOTE: The result of the subscript is called by default."""
         quotation = concat.level0.parse.QuoteWordNode(
-            node.children, node.location)
+            node.children, node.location
+        )
         py_index = ast.Index(pop_stack())
         subscription = ast.Subscript(pop_stack(-2), py_index, ast.Load())
         py_quotation = cast(ast.expr, visitors['quote-word'].visit(quotation))
-        py_node = abstract(call_concat_function(pack_expressions(
-            [call_concat_function(py_quotation), subscription])))
+        py_node = abstract(
+            call_concat_function(
+                pack_expressions(
+                    [call_concat_function(py_quotation), subscription]
+                )
+            )
+        )
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
@@ -206,33 +223,46 @@ def _word_extension(
         to_slice_token.type, to_slice_token.value = 'NAME', 'to_slice'
         to_slice = concat.level0.parse.NameWordNode(to_slice_token)
         subscription = concat.level1.parse.SubscriptionWordNode(
-            [*node.step_children, *node.stop_children, *node.start_children,
-             to_slice])
+            [
+                *node.step_children,
+                *node.stop_children,
+                *node.start_children,
+                to_slice,
+            ]
+        )
         return visitors['subscription-word'].visit(subscription)
 
-    visitors['operator-word'] = fail
+    visitors.add_alternative_to('word', 'operator-word', fail)
 
     @visitors.add_alternative_to('operator-word', 'invert-word')
     @assert_annotated_type
     def invert_word_visitor(
-        node: concat.level1.operators.InvertWordNode
+        node: concat.level1.operators.InvertWordNode,
     ) -> ast.expr:
-        py_node = cast(ast.Expression, ast.parse(
-            'lambda s,_:s.append(~s.pop())', mode='eval')).body
+        py_node = cast(
+            ast.Expression,
+            ast.parse('lambda s,_:s.append(~s.pop())', mode='eval'),
+        ).body
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
     for operator_desc in concat.level1.operators.binary_operators:
         operator_name, _, node_type, operator = operator_desc
         visitors.add_alternative_to(
-            'operator-word', operator_name, assert_type(
-                node_type).then(binary_operator_visitor(operator)))
+            'operator-word',
+            operator_name + '-word',
+            assert_type(node_type).then(binary_operator_visitor(operator)),
+        )
 
     # NOTE: 'or' and 'and' are not short-circuited!
 
-    visitors.add_alternative_to('operator-word', 'not-word', assert_type(
-        concat.level1.operators.NotWordNode).then(
-        node_to_py_string('lambda s,_:s.append(not s.pop())')))
+    visitors.add_alternative_to(
+        'operator-word',
+        'not-word',
+        assert_type(concat.level1.operators.NotWordNode).then(
+            node_to_py_string('lambda s,_:s.append(not s.pop())')
+        ),
+    )
 
     # NOTE on semantics: `yield` pushes the value it returns onto the stack.
     # `yield call` calls the value that is returned. `$yield` is a function
@@ -242,36 +272,53 @@ def _word_extension(
     # TODO: Remove yield from language or make it a statement
     @assert_annotated_type
     def yield_word_visitor(
-        node: concat.level1.parse.YieldWordNode
+        node: concat.level1.parse.YieldWordNode,
     ) -> ast.expr:
         return node_to_py_string(
             '{}.yield_function'.format(
-                visitors.data['quote-constructor-string'])).visit(node)
+                visitors.data['quote-constructor-string']
+            )
+        ).visit(node)
 
     visitors['yield-word'] = yield_word_visitor
 
-    visitors.data['quote-constructor-string'] = \
-        'concat.level1.stdlib.types.Quotation'
+    visitors.data[
+        'quote-constructor-string'
+    ] = 'concat.level1.stdlib.types.Quotation'
 
     # Converts an AwaitWordNode to a Python expression that awaits the object
     # at the top of the stack.
-    visitors.add_alternative_to('word', 'await-word', assert_type(
-        concat.level1.parse.AwaitWordNode).then(
-        node_to_py_string('''lambda s,_:exec("""
+    visitors.add_alternative_to(
+        'word',
+        'await-word',
+        assert_type(concat.level1.parse.AwaitWordNode).then(
+            node_to_py_string(
+                '''lambda s,_:exec("""
             import asyncio
-            asyncio.get_running_loop().run_until_complete(s.pop())""")''')))
+            asyncio.get_running_loop().run_until_complete(s.pop())""")'''
+            )
+        ),
+    )
 
     # Converts an AssertWordNode to the Python 'lambda s,_: exec("assert
     # s.pop()")'.
-    visitors.add_alternative_to('word', 'assert-word', assert_type(
-        concat.level1.parse.AssertWordNode).then(
-        node_to_py_string('lambda s,_:exec("assert s.pop()")')))
+    visitors.add_alternative_to(
+        'word',
+        'assert-word',
+        assert_type(concat.level1.parse.AssertWordNode).then(
+            node_to_py_string('lambda s,_:exec("assert s.pop()")')
+        ),
+    )
 
     # Converts an RaiseWordNode to the Python 'lambda s,_: exec("raise s.pop()
     # from s.pop()")'.
-    visitors.add_alternative_to('word', 'raise-word', assert_type(
-        concat.level1.parse.RaiseWordNode).then(
-        node_to_py_string('lambda s,_:exec("raise s.pop() from s.pop()")')))
+    visitors.add_alternative_to(
+        'word',
+        'raise-word',
+        assert_type(concat.level1.parse.RaiseWordNode).then(
+            node_to_py_string('lambda s,_:exec("raise s.pop() from s.pop()")')
+        ),
+    )
 
     # Converts a TryWordNode to the Python 'lambda s,t: exec("""
     #   import sys
@@ -286,10 +333,12 @@ def _word_extension(
     #       if not h: raise
     #       s.append(sys.exc_info[1])
     #       h[0][1](s,t)"""'
-    visitors.add_alternative_to('word', 'try-word', assert_type(
-        concat.level1.parse.TryWordNode
-    ).then(
-        node_to_py_string('''lambda s,t: exec("""
+    visitors.add_alternative_to(
+        'word',
+        'try-word',
+        assert_type(concat.level1.parse.TryWordNode).then(
+            node_to_py_string(
+                '''lambda s,t: exec("""
 import sys
 hs=s.pop(-2)
 a,b=s[:],t[:]
@@ -300,17 +349,22 @@ except:
     h=[h for h in hs if isinstance(sys.exc_info()[1], h[0])]
     if not h: raise
     s.append(sys.exc_info()[1])
-    h[0][1](s,t)""")''')
-    ))
+    h[0][1](s,t)""")'''
+            )
+        ),
+    )
 
     # Converts a WithWordNode to the Python 'lambda s,_: exec("with s[-1] as
     # c:s.pop(-2)(s,_)")'.
-    visitors.add_alternative_to('word', 'with-word', assert_type(
-        concat.level1.parse.WithWordNode
-    ).then(
-        node_to_py_string(
-            'lambda s,_: exec("with s[-1] as c:s.pop(-2)(s,_)")')
-    ))
+    visitors.add_alternative_to(
+        'word',
+        'with-word',
+        assert_type(concat.level1.parse.WithWordNode).then(
+            node_to_py_string(
+                'lambda s,_: exec("with s[-1] as c:s.pop(-2)(s,_)")'
+            )
+        ),
+    )
 
 
 def level_1_extension(
@@ -321,30 +375,35 @@ def level_1_extension(
     @visitors.add_alternative_to('statement', 'del-statement')
     @assert_annotated_type
     def del_statement_visitor(
-        node: concat.level1.parse.DelStatementNode
+        node: concat.level1.parse.DelStatementNode,
     ) -> ast.Delete:
         """This converts a DelStatementNode to a Python statement.
 
         The Python statement has the form of `del ...1,......,...n`."""
+
         @assert_annotated_type
         def subscription_subvisitor(
-            node: concat.level1.parse.SubscriptionWordNode
+            node: concat.level1.parse.SubscriptionWordNode,
         ):
             words = node.children
             quote = concat.level0.parse.QuoteWordNode(
                 list(words),
-                list(words)[0].location if words else node.location)
+                list(words)[0].location if words else node.location,
+            )
             py_quote = visitors['quote-word'].visit(quote)
             load = ast.Load()
             stack = ast.Name(id='stack', ctx=load)
             stash = ast.Name(id='stash', ctx=load)
-            quote_call = ast.Call(func=py_quote, args=[
-                                  stack, stash], keywords=[])
+            quote_call = ast.Call(
+                func=py_quote, args=[stack, stash], keywords=[]
+            )
             append_stash = ast.Attribute(value=stash, attr='append', ctx=load)
-            append_stash_call = ast.Call(func=append_stash, args=[
-                                         pop_stack()], ctx=load)
+            append_stash_call = ast.Call(
+                func=append_stash, args=[pop_stack()], ctx=load
+            )
             object = pack_expressions(
-                [quote_call, append_stash_call, pop_stack()])
+                [quote_call, append_stash_call, pop_stack()]
+            )
             pop_stash = ast.Attribute(value=stash, attr='pop', ctx=load)
             pop_stash_call = ast.Call(func=pop_stash, args=[], keywords=[])
             index = ast.Index(value=pop_stash_call)
@@ -357,76 +416,101 @@ def level_1_extension(
             to_slice_token.type, to_slice_token.value = 'NAME', 'to_slice'
             to_slice = concat.level0.parse.NameWordNode(to_slice_token)
             subscription = concat.level1.parse.SubscriptionWordNode(
-                [*node.step_children, *node.stop_children,
-                 *node.start_children,
-                 to_slice])
+                [
+                    *node.step_children,
+                    *node.stop_children,
+                    *node.start_children,
+                    to_slice,
+                ]
+            )
             return subscription_subvisitor.visit(subscription)
 
         subscription_subvisitor = assert_type(
             concat.level1.parse.SubscriptionWordNode
         ).then(subscription_subvisitor)
-        slice_subvisitor = assert_type(
-            concat.level1.parse.SliceWordNode
-        ).then(slice_subvisitor)
-        subvisitor = alt(visitors['name-word'], visitors['attribute-word'],
-                         subscription_subvisitor, slice_subvisitor)
+        slice_subvisitor = assert_type(concat.level1.parse.SliceWordNode).then(
+            slice_subvisitor
+        )
+        subvisitor = alt(
+            visitors['name-word'],
+            visitors['attribute-word'],
+            subscription_subvisitor,
+            slice_subvisitor,
+        )
         targets = All(subvisitor).visit(node)
         return ast.Delete(targets=targets)
 
     @visitors.add_alternative_to('statement', 'async-funcdef-statement')
     @assert_annotated_type
     def async_funcdef_statement_visitor(
-        node: concat.level1.parse.AsyncFuncdefStatementNode
+        node: concat.level1.parse.AsyncFuncdefStatementNode,
     ) -> ast.AsyncFunctionDef:
         """This converts an AsyncFuncdefStatementNode to a Python statement.
 
         The statement takes the form of  '@... @(lambda f: lambda s,t:
         s.append(f(s[:],t[:]))) async def name(stack, stash) -> ...: ...'."""
         py_func_def = cast(
-            ast.FunctionDef, visitors['funcdef-statement'].visit(node))
+            ast.FunctionDef, visitors['funcdef-statement'].visit(node)
+        )
         py_node = ast.AsyncFunctionDef(
             name=node.name,
             args=py_func_def.args,
             body=py_func_def.body,
             decorator_list=py_func_def.decorator_list,
-            returns=py_func_def.returns)
+            returns=py_func_def.returns,
+        )
         # NOTE: The stacks passed into the function are copies.
-        coroutine_decorator_string = 'lambda f:lambda s,t:s.append(f(s[:],t[:]))'
-        coroutine_decorator = cast(ast.Expression, ast.parse(
-            coroutine_decorator_string, mode='eval')).body
+        coroutine_decorator_string = (
+            'lambda f:lambda s,t:s.append(f(s[:],t[:]))'
+        )
+        coroutine_decorator = cast(
+            ast.Expression, ast.parse(coroutine_decorator_string, mode='eval')
+        ).body
         py_node.decorator_list.append(coroutine_decorator)
         return py_node
 
     @visitors.add_alternative_to('statement', 'funcdef-statement')
     @assert_annotated_type
     def funcdef_statement_visitor(
-        node: concat.level1.parse.FuncdefStatementNode
+        node: concat.level1.parse.FuncdefStatementNode,
     ) -> ast.FunctionDef:
         """This transpiles a FuncdefStatementNode to a Python statement.
 
         The statement takes the form of '@... def # name: ...'."""
         word_or_statement = alt(visitors['word'], visitors['statement'])
-        py_body = [statementfy(word_or_statement.visit(node))
-                   for node in node.body]
-        py_decorators = [to_python_decorator(
-            node, visitors) for node in node.decorators]
+        py_body = [
+            statementfy(word_or_statement.visit(node)) for node in node.body
+        ]
+        py_decorators = [
+            to_python_decorator(node, visitors) for node in node.decorators
+        ]
         py_decorators.reverse()
         py_annotation = None
         if node.annotation is not None:
             quote = to_transpiled_quotation(
-                [*node.annotation], node.location, visitors)
+                [*node.annotation], node.location, visitors
+            )
             load = ast.Load()
             stack = ast.Name(id='stack', ctx=load)
             stash = ast.Name(id='stash', ctx=load)
-            quote_call = ast.Call(func=quote, args=[
-                                  stack, stash], keywords=[])
+            quote_call = ast.Call(func=quote, args=[stack, stash], keywords=[])
             py_annotation = quote_call
         stack_args = [ast.arg('stack', None), ast.arg('stash', None)]
-        arguments = ast.arguments(args=stack_args, vararg=None, kwonlyargs=[],
-                                  kwarg=None, defaults=[], kw_defaults=[])
+        arguments = ast.arguments(
+            args=stack_args,
+            vararg=None,
+            kwonlyargs=[],
+            kwarg=None,
+            defaults=[],
+            kw_defaults=[],
+        )
         py_node = ast.FunctionDef(
-            name=node.name, args=arguments, body=py_body,
-            decorator_list=py_decorators, returns=py_annotation)
+            name=node.name,
+            args=arguments,
+            body=py_body,
+            decorator_list=py_decorators,
+            returns=py_annotation,
+        )
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
@@ -434,19 +518,20 @@ def level_1_extension(
 
     @assert_annotated_type
     def import_statement_visitor(
-        node: concat.level1.parse.ImportStatementNode
+        node: concat.level1.parse.ImportStatementNode,
     ) -> ast.If:
         if_statement = cast(ast.If, old_import_statement.visit(node))
         cast(ast.Import, if_statement.body[0]).names[0].asname = node.asname
         targets = cast(ast.Assign, if_statement.body[1]).targets
         qualified_name = astunparse.unparse(targets[0])
-        if_statement.body[1:] = assign_self_pushing_module_type_to_all_components(
-            qualified_name)
+        if_statement.body[
+            1:
+        ] = assign_self_pushing_module_type_to_all_components(qualified_name)
         return if_statement
 
     @assert_annotated_type
     def from_import_statement_visitor(
-        node: concat.level1.parse.FromImportStatementNode
+        node: concat.level1.parse.FromImportStatementNode,
     ) -> ast.If:
         if_statement = cast(ast.If, old_import_statement.visit(node))
         module = remove_leading_dots(node.value)
@@ -457,17 +542,23 @@ def level_1_extension(
         return if_statement
 
     visitors['import-statement'] = alt(
-        from_import_statement_visitor, import_statement_visitor)
+        from_import_statement_visitor, import_statement_visitor
+    )
 
     @visitors.add_alternative_to('statement', 'classdef-statement')
     @assert_annotated_type
     def classdef_statement_visitor(
-        node: concat.level1.parse.ClassdefStatementNode
+        node: concat.level1.parse.ClassdefStatementNode,
     ) -> ast.ClassDef:
-        py_body = [correct_magic_signature(statementfy(node)) for node in All(
-            alt(visitors['word'], visitors['statement'])).visit(node)]
-        py_decorators = [to_python_decorator(
-            word, visitors) for word in node.decorators]
+        py_body = [
+            correct_magic_signature(statementfy(node))
+            for node in All(
+                alt(visitors['word'], visitors['statement'])
+            ).visit(node)
+        ]
+        py_decorators = [
+            to_python_decorator(word, visitors) for word in node.decorators
+        ]
         py_decorators.reverse()
         py_bases = []
         for base in node.bases:
@@ -488,4 +579,5 @@ def level_1_extension(
             bases=py_bases,
             keywords=py_keywords,
             body=py_body,
-            decorator_list=py_decorators)
+            decorator_list=py_decorators,
+        )
