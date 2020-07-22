@@ -21,9 +21,16 @@ def transpile(code: str) -> ast.Module:
     parser.extend_with(concat.level2.parse.level_2_extension)
     concat_ast = parser.parse(tokens)
     # FIXME: Consider the type of everything entered interactively beforehand.
-    concat.typecheck.check(concat.level1.typecheck.Environment(), concat_ast.children)
-    transpiler = concat.level0.transpile.VisitorDict[concat.level0.parse.Node,
-                                                     ast.AST]()
+    concat.typecheck.check(
+        concat.level1.typecheck.Environment(), concat_ast.children
+    )
+    return transpile_ast(concat_ast)
+
+
+def transpile_ast(concat_ast: concat.level0.parse.TopLevelNode) -> ast.Module:
+    transpiler = concat.level0.transpile.VisitorDict[
+        concat.level0.parse.Node, ast.AST
+    ]()
     transpiler.extend_with(concat.level0.transpile.level_0_extension)
     transpiler.extend_with(concat.level1.transpile.level_1_extension)
     transpiler.extend_with(concat.level2.transpile.level_2_extension)
