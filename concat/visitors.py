@@ -10,7 +10,7 @@ from typing import (
     Union,
     Dict,
     Type,
-    overload
+    overload,
 )
 from typing_extensions import Protocol
 import abc
@@ -25,7 +25,6 @@ _ReturnType2 = TypeVar('_ReturnType2')
 
 
 class _InternalNode(Protocol[_NodeType1_co]):
-
     @property
     def children(self) -> Iterable[_NodeType1_co]:
         ...
@@ -44,17 +43,17 @@ class VisitFailureException(Exception):
 
 
 class Visitor(abc.ABC, Generic[_NodeType1_contra, _ReturnType1_co]):
-
     @abc.abstractmethod
     def visit(self, node: _NodeType1_contra) -> _ReturnType1_co:
         pass
 
-    def then(self,
-             other: 'Visitor[_NodeType1_contra, _ReturnType2]'
-             ) -> 'Visitor[_NodeType1_contra, _ReturnType2]':
+    def then(
+        self, other: 'Visitor[_NodeType1_contra, _ReturnType2]'
+    ) -> 'Visitor[_NodeType1_contra, _ReturnType2]':
         @FunctionalVisitor
         def visitor(node: _NodeType1_contra) -> _ReturnType2:
             return Sequence(self, other).visit(node)[1]
+
         return visitor
 
 
@@ -86,7 +85,7 @@ class Sequence(Visitor[_NodeType1, Tuple[_ReturnType1, _ReturnType2]]):
     def __init__(
         self,
         visitor1: Visitor[_NodeType1, _ReturnType1],
-        visitor2: Visitor[_NodeType1, _ReturnType2]
+        visitor2: Visitor[_NodeType1, _ReturnType2],
     ):
         super().__init__()
         self.__visitor1, self.__visitor2 = visitor1, visitor2
@@ -105,7 +104,7 @@ class Choice(Visitor[_NodeType1, Union[_ReturnType1, _ReturnType2]]):
         self,
         visitor1: Visitor[_NodeType1, _ReturnType1],
         visitor2: Visitor[_NodeType1, _ReturnType2],
-        debug: bool = False
+        debug: bool = False,
     ):
         super().__init__()
         self.__visitor1, self.__visitor2 = visitor1, visitor2
@@ -113,12 +112,13 @@ class Choice(Visitor[_NodeType1, Union[_ReturnType1, _ReturnType2]]):
 
     def visit(self, node: _NodeType1) -> Union[_ReturnType1, _ReturnType2]:
         if self.__debug:
-            print('in choice', repr(self),  '{')
+            print('in choice', repr(self), '{')
         try:
             if self.__debug:
                 print('trying', repr(self.__visitor1))
-            result: Union[_ReturnType1,
-                          _ReturnType2] = self.__visitor1.visit(node)
+            result: Union[_ReturnType1, _ReturnType2] = self.__visitor1.visit(
+                node
+            )
         except VisitFailureException:
             if self.__debug:
                 print('trying', repr(self.__visitor2))
@@ -135,6 +135,7 @@ class Choice(Visitor[_NodeType1, Union[_ReturnType1, _ReturnType2]]):
 
 # Traversal combinators
 
+
 class All(Visitor[_InternalNode[_NodeType1], Iterable[_ReturnType1]]):
     """Visser's every-child traversal combinator."""
 
@@ -147,12 +148,18 @@ class All(Visitor[_InternalNode[_NodeType1], Iterable[_ReturnType1]]):
 
     def visit(self, node: _InternalNode[_NodeType1]) -> Iterable[_ReturnType1]:
         if self.__debug:
-            print('in', repr(self), ', visiting children of',
-                  node, '(children:', node.children, ') {')
+            print(
+                'in',
+                repr(self),
+                ', visiting children of',
+                node,
+                '(children:',
+                node.children,
+                ') {',
+            )
         # return a list instead of a generator so that the subvisitor actually
         # runs
-        result = [self.__visitor.visit(child)
-                  for child in node.children]
+        result = [self.__visitor.visit(child) for child in node.children]
         if self.__debug:
             print('} end all')
         return result
@@ -174,10 +181,11 @@ class One(Visitor[_InternalNode[_NodeType1], _ReturnType1]):
                 return self.__visitor.visit(child)
             except VisitFailureException:
                 continue
-        raise VisitFailureException
+        raise VisitFailureException(node)
 
 
 # Beyond Visser's combinators
+
 
 def alt(*visitors):
     return functools.reduce(Choice, visitors, fail)
@@ -185,31 +193,33 @@ def alt(*visitors):
 
 # Useful visitors
 
+
 def assert_type(type: Type[object]) -> Visitor[object, None]:
     @FunctionalVisitor
     def visitor(node: object) -> None:
         if not isinstance(node, type):
             raise VisitFailureException(node)
+
     return visitor
 
 
 def assert_annotated_type(
-        fun: Callable[[Any], _ReturnType1]) -> Visitor[object, _ReturnType1]:
+    fun: Callable[[Any], _ReturnType1]
+) -> Visitor[object, _ReturnType1]:
     arg_name = [name for name in fun.__annotations__ if name != 'return'][0]
     type = fun.__annotations__[arg_name]
     return assert_type(type).then(FunctionalVisitor(fun))
 
 
 @FunctionalVisitor
-def fail(_: object) -> NoReturn:
-    raise VisitFailureException
+def fail(node: object) -> NoReturn:
+    raise VisitFailureException(node)
 
 
 _T = TypeVar('_T')
 
 
 class VisitorDict(Dict[str, Visitor[_NodeType1, _ReturnType1]]):
-
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.data: Dict = {}
@@ -229,9 +239,7 @@ class VisitorDict(Dict[str, Visitor[_NodeType1, _ReturnType1]]):
 
     @overload
     def add_alternative_to(
-        self,
-        choice_name: str,
-        alternative_name: str
+        self, choice_name: str, alternative_name: str
     ) -> Callable[[Visitor[_NodeType1, _ReturnType1]], None]:
         ...
 
@@ -240,7 +248,7 @@ class VisitorDict(Dict[str, Visitor[_NodeType1, _ReturnType1]]):
         self,
         choice_name: str,
         alternative_name: str,
-        visitor: Visitor[_NodeType1, _ReturnType1]
+        visitor: Visitor[_NodeType1, _ReturnType1],
     ) -> None:
         ...
 
@@ -248,12 +256,14 @@ class VisitorDict(Dict[str, Visitor[_NodeType1, _ReturnType1]]):
         self,
         choice_name: str,
         alternative_name: str,
-        visitor: Optional[Visitor[_NodeType1, _ReturnType1]] = None
+        visitor: Optional[Visitor[_NodeType1, _ReturnType1]] = None,
     ) -> Optional[Callable[[Visitor[_NodeType1, _ReturnType1]], None]]:
         self[choice_name] = Choice(
-            self[choice_name], self.ref_visitor(alternative_name))
+            self[choice_name], self.ref_visitor(alternative_name)
+        )
 
-        def partial(visitor): self.update({alternative_name: visitor})
+        def partial(visitor):
+            self.update({alternative_name: visitor})
 
         if visitor:
             return partial(visitor)
