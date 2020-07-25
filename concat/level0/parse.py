@@ -27,8 +27,17 @@ parsy is used instead of pyparsing since it supports having a separate
 tokenization phase.
 """
 import abc
-from typing import (Iterable, TypeVar, Any, Sequence, Tuple,
-                    Dict, Generator, List, Callable)
+from typing import (
+    Iterable,
+    TypeVar,
+    Any,
+    Sequence,
+    Tuple,
+    Dict,
+    Generator,
+    List,
+    Callable,
+)
 import concat.level0.lex
 import concat.astutils
 from concat.parser_combinators import desc_cumulatively
@@ -36,7 +45,6 @@ import parsy
 
 
 class Node(abc.ABC):
-
     @abc.abstractmethod
     def __init__(self):
         self.location = (0, 0)
@@ -44,11 +52,10 @@ class Node(abc.ABC):
 
 
 class TopLevelNode(Node):
-
     def __init__(
         self,
         encoding: 'concat.level0.lex.Token',
-        children: 'concat.astutils.WordsOrStatements'
+        children: 'concat.astutils.WordsOrStatements',
     ):
         super().__init__()
         self.encoding = encoding.value
@@ -60,12 +67,10 @@ class StatementNode(Node, abc.ABC):
     pass
 
 
+# TODO: Remove in favor of level 1 import statement
 class ImportStatementNode(StatementNode):
-
     def __init__(
-        self,
-        module: 'concat.level0.lex.Token',
-        location: Tuple[int, int]
+        self, module: 'concat.level0.lex.Token', location: Tuple[int, int]
     ):
         super().__init__()
         self.location = location
@@ -78,7 +83,6 @@ class WordNode(Node, abc.ABC):
 
 
 class PushWordNode(WordNode):
-
     def __init__(self, child: WordNode):
         super().__init__()
         self.location = child.location
@@ -86,7 +90,6 @@ class PushWordNode(WordNode):
 
 
 class NumberWordNode(WordNode):
-
     def __init__(self, number: 'concat.level0.lex.Token'):
         super().__init__()
         self.location = number.start
@@ -95,11 +98,11 @@ class NumberWordNode(WordNode):
             self.value = eval(number.value)
         except SyntaxError:
             raise ValueError(
-                '{!r} cannot eval to a number'.format(number.value))
+                '{!r} cannot eval to a number'.format(number.value)
+            )
 
 
 class StringWordNode(WordNode):
-
     def __init__(self, string: 'concat.level0.lex.Token') -> None:
         super().__init__()
         self.location = string.start
@@ -108,15 +111,13 @@ class StringWordNode(WordNode):
             self.value = eval(string.value)
         except SyntaxError:
             raise ValueError(
-                '{!r} cannot eval to a string'.format(string.value))
+                '{!r} cannot eval to a string'.format(string.value)
+            )
 
 
 class QuoteWordNode(WordNode):
-
     def __init__(
-        self,
-        children: Sequence[WordNode],
-        location: Tuple[int, int]
+        self, children: Sequence[WordNode], location: Tuple[int, int]
     ):
         super().__init__()
         self.location = location
@@ -124,7 +125,6 @@ class QuoteWordNode(WordNode):
 
 
 class NameWordNode(WordNode):
-
     def __init__(self, name: 'concat.level0.lex.Token'):
         super().__init__()
         self.location = name.start
@@ -133,7 +133,6 @@ class NameWordNode(WordNode):
 
 
 class AttributeWordNode(WordNode):
-
     def __init__(self, attribute: 'concat.level0.lex.Token'):
         super().__init__()
         self.location = attribute.start
@@ -145,7 +144,6 @@ T = TypeVar('T')
 
 
 class ParserDict(Dict[str, parsy.Parser]):
-
     def __init__(self) -> None:
         # These parsers act on lists of tokens.
         pass
@@ -154,8 +152,7 @@ class ParserDict(Dict[str, parsy.Parser]):
         extension(self)
 
     def parse(
-        self,
-        tokens: Sequence['concat.level0.lex.Token']
+        self, tokens: Sequence['concat.level0.lex.Token']
     ) -> TopLevelNode:
         return self['top-level'].parse(list(tokens))
 
@@ -167,6 +164,7 @@ class ParserDict(Dict[str, parsy.Parser]):
         @parsy.generate
         def parser():
             return (yield self[name])
+
         return parser
 
 
@@ -183,8 +181,10 @@ def level_0_extension(parsers: ParserDict) -> None:
         word = parsers['word']
         children = yield (word | statement | newline).many()
         children = [
-            child for child in children
-            if not isinstance(child, concat.level0.lex.Token)]
+            child
+            for child in children
+            if not isinstance(child, concat.level0.lex.Token)
+        ]
         yield parsers.token('ENDMARKER')
         return TopLevelNode(encoding, children)
 
@@ -219,10 +219,11 @@ def level_0_extension(parsers: ParserDict) -> None:
         parsers.ref_parser('quote-word'),
         parsers.ref_parser('literal-word'),
         parsers.ref_parser('name-word'),
-        parsers.ref_parser('attribute-word')
+        parsers.ref_parser('attribute-word'),
     )
     parsers['literal-word'] = parsers.ref_parser(
-        'number-word') | parsers.ref_parser('string-word')
+        'number-word'
+    ) | parsers.ref_parser('string-word')
 
     parsers['name-word'] = parsers.token('NAME').map(NameWordNode)
 
