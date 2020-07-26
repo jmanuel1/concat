@@ -1,12 +1,19 @@
 import concat.transpile
 import concat.astutils
 import concat.level0.parse
+from concat.level0.stdlib.ski import s, k, i
 from concat.level0.lex import Token
 from concat.level2.execute import execute
 import unittest
 from typing import Callable, Iterable, List, Tuple, TypeVar
-from hypothesis import given
-from hypothesis.strategies import composite, integers, text, one_of
+from hypothesis import given, assume
+from hypothesis.strategies import (
+    composite,
+    integers,
+    text,
+    one_of,
+    sampled_from,
+)
 
 
 ProgramFragment = TypeVar('Node', covariant=True)
@@ -42,9 +49,10 @@ def word(
 ) -> ProgramFragmentAndEffect[concat.level0.parse.WordNode]:
     return draw(
         one_of(
-            number_word(init_stack, init_stash),
-            string_word(init_stack, init_stash),
-            quote_word(init_stack, init_stash),
+            map(
+                lambda strategy: strategy(init_stack, init_stash),
+                [number_word, string_word, quote_word, name_word,],
+            )
         )
     )
 
@@ -88,6 +96,18 @@ def quote_word(
     return concat.level0.parse.QuoteWordNode(sub_words, (0, 0)), stack, stash
 
 
+@composite
+def name_word(
+    draw, init_stack, init_stash
+) -> ProgramFragmentAndEffect[concat.level0.parse.NameWordNode]:
+    name = draw(sampled_from('iks'))
+    name_token = Token('NAME', name)
+    return (
+        concat.level0.parse.NameWordNode(name_token),
+        *static_call(name, init_stack, init_stash),
+    )
+
+
 def static_push(
     word: concat.level0.parse.WordNode,
     stack: List[object],
@@ -106,7 +126,30 @@ def static_push(
             stack_.extend(stack),
             stash_.extend(stash),
         )
+    if isinstance(word, concat.level0.parse.NameWordNode):
+        return {'s': s, 'k': k, 'i': i}[word.value]
     raise TypeError(word)
+
+
+def static_call(
+    name: str, stack: List[object], stash: List[object]
+) -> Tuple[List[object], List[object]]:
+    stack, stash = stack[:], stash[:]
+    if name == 's':
+        assume(len(stack) >= 3)
+        assume(all(map(callable, stack[-3:])))
+        s(stack, stash)
+    elif name == 'k':
+        assume(len(stack) >= 2)
+        assume(all(map(callable, stack[-2:])))
+        k(stack, stash)
+    elif name == 'i':
+        assume(len(stack) >= 1)
+        assume(all(map(callable, stack[-1:])))
+        i(stack, stash)
+    else:
+        raise ValueError(name)
+    return stack, stash
 
 
 def stacks_equal(
@@ -138,5 +181,9 @@ class TestDynamicSemantics(unittest.TestCase):
     def test_generated_program(self, prog):
         module = concat.transpile.transpile_ast(prog[0])
         stack, stash = [], []
-        execute('<test_prog>', module, {'stack': stack, 'stash': stash})
+        execute(
+            '<test_prog>',
+            module,
+            {'stack': stack, 'stash': stash, 's': s, 'k': k, 'i': i},
+        )
         self.assertTrue(stacks_equal([stack, stash], list(prog[1:])))
