@@ -5,7 +5,7 @@ from concat.level0.stdlib.ski import s, k, i
 from concat.level0.lex import Token
 from concat.level2.execute import execute
 import unittest
-from typing import Callable, Iterable, List, Tuple, TypeVar
+from typing import Iterable, List, Tuple, TypeVar
 from hypothesis import given, assume
 from hypothesis.strategies import (
     composite,
@@ -34,12 +34,13 @@ def suite(
 ) -> ProgramFragmentAndEffect[concat.astutils.WordsOrStatements]:
     # we don't generate level 0 import statements because the higher-level
     # visitors don't accept it
-    sub_word, stack, stash = draw(word([], []))
-    push_word = concat.level0.parse.PushWordNode(sub_word)
-    return (
-        [push_word],
-        *static_push(sub_word, stack, stash, init_stack, init_stash),
-    )
+    stack, stash = init_stack, init_stash
+    count = draw(integers(min_value=0))
+    words_and_statements = []
+    for _ in range(count):
+        word_or_statement, stack, stash = draw(word(stack, stash))
+        words_and_statements.append(word_or_statement)
+    return words_and_statements, stack, stash
 
 
 @composite
@@ -56,6 +57,7 @@ def word(
                     quote_word,
                     name_word,
                     attribute_word,
+                    push_word,
                 ],
             )
         )
@@ -93,7 +95,7 @@ def quote_word(
     draw, init_stack, init_stash
 ) -> ProgramFragmentAndEffect[concat.level0.parse.QuoteWordNode]:
     sub_words = []
-    length = draw(integers())
+    length = draw(integers())  # make sure it's nonnegative
     stack, stash = init_stack, init_stash
     for _ in range(length):
         sub_word, stack, stash = draw(word(stack, stash))
@@ -136,6 +138,18 @@ def attribute_word(
     return concat.level0.parse.AttributeWordNode(attribute_token), stack, stash
 
 
+@composite
+def push_word(
+    draw, init_stack, init_stash
+) -> ProgramFragmentAndEffect[concat.level0.parse.PushWordNode]:
+    sub_word, stack, stash = draw(word([], []))
+    push_word = concat.level0.parse.PushWordNode(sub_word)
+    return (
+        push_word,
+        *static_push(sub_word, stack, stash, init_stack, init_stash),
+    )
+
+
 def static_push(
     word: concat.level0.parse.WordNode,
     stack: List[object],
@@ -172,6 +186,8 @@ def static_push(
             init_stack[:-1] + [getattr(init_stack[-1], word.value)],
             init_stash,
         )
+    # I'm not sure how to deal with pushed pushed quotations
+    assume(not isinstance(word, concat.level0.parse.PushWordNode))
     raise TypeError(word)
 
 
