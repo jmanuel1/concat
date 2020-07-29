@@ -38,8 +38,7 @@ def suite(
     push_word = concat.level0.parse.PushWordNode(sub_word)
     return (
         [push_word],
-        init_stack + [static_push(sub_word, stack, stash)],
-        init_stash,
+        *static_push(sub_word, stack, stash, init_stack, init_stash),
     )
 
 
@@ -51,7 +50,13 @@ def word(
         one_of(
             map(
                 lambda strategy: strategy(init_stack, init_stash),
-                [number_word, string_word, quote_word, name_word,],
+                [
+                    number_word,
+                    string_word,
+                    quote_word,
+                    name_word,
+                    attribute_word,
+                ],
             )
         )
     )
@@ -108,11 +113,36 @@ def name_word(
     )
 
 
+@composite
+def attribute_word(
+    draw, init_stack, init_stash
+) -> ProgramFragmentAndEffect[concat.level0.parse.AttributeWordNode]:
+    assume(init_stack)
+    *stack, obj = init_stack
+    stash = init_stash[:]
+    callable_attributes = [
+        attr for attr in dir(obj) if callable(getattr(obj, attr))
+    ]
+    assume(callable_attributes)
+    # callable_attributes cannot be empty here
+    attribute = draw(sampled_from(callable_attributes))
+    try:
+        getattr(obj, attribute)(stack, stash)
+    except TypeError:
+        assume(False)
+
+    attribute_token = Token('NAME', attribute)
+
+    return concat.level0.parse.AttributeWordNode(attribute_token), stack, stash
+
+
 def static_push(
     word: concat.level0.parse.WordNode,
     stack: List[object],
     stash: List[object],
-) -> Callable[[List[object]], List[object]]:
+    init_stack: List[object],
+    init_stash: List[object],
+) -> Tuple[List[object], List[object]]:
     if isinstance(
         word,
         (
@@ -120,14 +150,28 @@ def static_push(
             concat.level0.parse.StringWordNode,
         ),
     ):
-        return lambda stack, stash: stack.append(word.value)
-    if isinstance(word, concat.level0.parse.QuoteWordNode):
-        return lambda stack_, stash_: (
-            stack_.extend(stack),
-            stash_.extend(stash),
+        return (
+            init_stack + [lambda stack, stash: stack.append(word.value)],
+            init_stash,
         )
+    if isinstance(word, concat.level0.parse.QuoteWordNode):
+
+        def pushed_quote(stack_, stash_):
+            return (
+                stack_.extend(stack),
+                stash_.extend(stash),
+            )
+
+        return init_stack + [pushed_quote], init_stash
     if isinstance(word, concat.level0.parse.NameWordNode):
-        return {'s': s, 'k': k, 'i': i}[word.value]
+        return init_stack + [{'s': s, 'k': k, 'i': i}[word.value]], init_stash
+    if isinstance(word, concat.level0.parse.AttributeWordNode):
+        assume(init_stack)
+        assume(hasattr(init_stack[-1], word.value))
+        return (
+            init_stack[:-1] + [getattr(init_stack[-1], word.value)],
+            init_stash,
+        )
     raise TypeError(word)
 
 
