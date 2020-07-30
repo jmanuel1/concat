@@ -3,12 +3,15 @@ import tokenize
 import sys
 import io
 import dataclasses
-from typing import Optional, Iterator, Tuple, List
-import concat.astutils
+from typing import Optional, Iterator, Tuple, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import concat.astutils
 
 
 TokenTuple = Tuple[
-    str, str, concat.astutils.Location, concat.astutils.Location]
+    str, str, 'concat.astutils.Location', 'concat.astutils.Location'
+]
 
 
 class Lexer:
@@ -30,7 +33,8 @@ class Lexer:
 
         if self.tokens is None:
             self.tokens = tokenize.tokenize(
-                io.BytesIO(self.data.encode('utf-8')).readline)
+                io.BytesIO(self.data.encode('utf-8')).readline
+            )
 
         token_ = next(self.tokens, None)
 
@@ -69,10 +73,11 @@ class Token:
     self.start - starting position of token in source, as (line, col)
     self.end - ending position of token in source, as (line, col)
     """
+
     type: str = ''
     value: str = ''
-    start: concat.astutils.Location = (0, 0)
-    end: concat.astutils.Location = (0, 0)
+    start: 'concat.astutils.Location' = (0, 0)
+    end: 'concat.astutils.Location' = (0, 0)
 
 
 def to_tokens(*tokTuples: TokenTuple) -> List[Token]:

@@ -1,4 +1,13 @@
-from typing import Union, List, Tuple, Iterable, Optional, Sequence, Iterator, cast
+from typing import (
+    Union,
+    List,
+    Tuple,
+    Iterable,
+    Optional,
+    Sequence,
+    Iterator,
+    cast,
+)
 import ast
 import concat.visitors
 import concat.level0.parse
@@ -7,14 +16,17 @@ import concat.level0.parse
 # Typedefs
 
 WordsOrStatements = Sequence[
-    Union['concat.level0.parse.WordNode', 'concat.level0.parse.StatementNode']]
-Words = List[concat.level0.parse.WordNode]
+    Union['concat.level0.parse.WordNode', 'concat.level0.parse.StatementNode']
+]
+Words = List['concat.level0.parse.WordNode']
 Location = Tuple[int, int]
 _TranspilerDict = concat.visitors.VisitorDict[
-    'concat.level0.parse.Node', ast.AST]
+    'concat.level0.parse.Node', ast.AST
+]
 
 
 # AST Manipulation utilities
+
 
 def pop_stack(index: int = -1) -> ast.Call:
     load = ast.Load()
@@ -25,12 +37,11 @@ def pop_stack(index: int = -1) -> ast.Call:
 
 
 def to_transpiled_quotation(
-    words: Words,
-    default_location: Tuple[int, int],
-    visitors: _TranspilerDict
+    words: Words, default_location: Tuple[int, int], visitors: _TranspilerDict
 ) -> ast.expr:
     quote = concat.level0.parse.QuoteWordNode(
-        list(words), list(words)[0].location if words else default_location)
+        list(words), list(words)[0].location if words else default_location
+    )
     py_quote = visitors['quote-word'].visit(quote)
     return cast(ast.expr, py_quote)
 
@@ -44,11 +55,11 @@ def pack_expressions(expressions: Iterable[ast.expr]) -> ast.Subscript:
 
 
 def to_python_decorator(
-    word: 'concat.level0.parse.WordNode',
-    visitors: _TranspilerDict
+    word: 'concat.level0.parse.WordNode', visitors: _TranspilerDict
 ) -> ast.Lambda:
-    push_func = cast(ast.Expression, ast.parse(
-        'stack.append(func)', mode='eval')).body
+    push_func = cast(
+        ast.Expression, ast.parse('stack.append(func)', mode='eval')
+    ).body
     py_word = cast(ast.expr, visitors['word'].visit(word))
     body = pack_expressions([push_func, py_word, pop_stack()])
     func_arg = ast.arg('func', None)
@@ -58,7 +69,8 @@ def to_python_decorator(
         kwonlyargs=[],
         kwarg=None,
         defaults=[],
-        kw_defaults=[])
+        kw_defaults=[],
+    )
     decorator = ast.Lambda(args=arguments, body=body)
     return decorator
 
@@ -102,89 +114,169 @@ def correct_magic_signature(statement: ast.stmt) -> ast.stmt:
             push_self = ast.parse('stack.append(self)').body[0]
             body = statement.body
             body[:0] = [push_self]
-        elif name in {'__del__', '__repr__', '__str__', '__bytes__',
-                      '__hash__', '__bool__', '__dir__', '__len__',
-                      '__length_hint__', '__aenter__', '__anext__',
-                      '__aiter__', '__await__', '__enter__', '__ceil__',
-                      '__floor__', '__trunc__', '__index__', '__float__',
-                      '__int__', '__complex__', '__invert__', '__abs__',
-                      '__pos__', '__neg__', '__reversed__', '__iter__'}:
+        elif name in {
+            '__del__',
+            '__repr__',
+            '__str__',
+            '__bytes__',
+            '__hash__',
+            '__bool__',
+            '__dir__',
+            '__len__',
+            '__length_hint__',
+            '__aenter__',
+            '__anext__',
+            '__aiter__',
+            '__await__',
+            '__enter__',
+            '__ceil__',
+            '__floor__',
+            '__trunc__',
+            '__index__',
+            '__float__',
+            '__int__',
+            '__complex__',
+            '__invert__',
+            '__abs__',
+            '__pos__',
+            '__neg__',
+            '__reversed__',
+            '__iter__',
+        }:
             statement.args.args = [ast.arg('self', None)]
             push_self, pop_return = ast.parse(
-                'stack.append(self)\nreturn stack.pop()').body
+                'stack.append(self)\nreturn stack.pop()'
+            ).body
             body = statement.body
             body[:0] = [push_self]
             body.append(pop_return)
         elif name in {'__format__'}:
             statement.args.args = [
-                ast.arg('self', None), ast.arg('format_spec', None)]
+                ast.arg('self', None),
+                ast.arg('format_spec', None),
+            ]
             push_format_spec, push_self, pop_return = ast.parse(
                 'stack.append(format_spec)\n'
                 'stack.append(self)\n'
-                'return stack.pop()').body
+                'return stack.pop()'
+            ).body
             body = statement.body
             body[:0] = [push_format_spec, push_self]
             body.append(pop_return)
-        elif name in {'__lt__', '__le__', '__eq__', '__ne__', '__gt__',
-                      '__ge__', '__ior__', '__ixor__', '__iand__',
-                      '__irshift__', '__ilshift__', '__imod__',
-                      '__ifloordiv__', '__itruediv__', '__imatmul__',
-                      '__imul__', '__isub__', '__iadd__', '__ror__',
-                      '__rxor__', '__rand__', '__rrshift__', '__rlshift__',
-                      '__rmod__', '__rfloordiv__', '__rtruediv__',
-                      '__rmatmul__', '__rmul__', '__rsub__', '__radd__',
-                      '__rpow__', '__or__', '__xor__', '__and__',
-                      '__rshift__', '__lshift__', '__mod__',
-                      '__floordiv__', '__truediv__', '__matmul__',
-                      '__mul__', '__sub__', '__add__'}:
+        elif name in {
+            '__lt__',
+            '__le__',
+            '__eq__',
+            '__ne__',
+            '__gt__',
+            '__ge__',
+            '__ior__',
+            '__ixor__',
+            '__iand__',
+            '__irshift__',
+            '__ilshift__',
+            '__imod__',
+            '__ifloordiv__',
+            '__itruediv__',
+            '__imatmul__',
+            '__imul__',
+            '__isub__',
+            '__iadd__',
+            '__ror__',
+            '__rxor__',
+            '__rand__',
+            '__rrshift__',
+            '__rlshift__',
+            '__rmod__',
+            '__rfloordiv__',
+            '__rtruediv__',
+            '__rmatmul__',
+            '__rmul__',
+            '__rsub__',
+            '__radd__',
+            '__rpow__',
+            '__or__',
+            '__xor__',
+            '__and__',
+            '__rshift__',
+            '__lshift__',
+            '__mod__',
+            '__floordiv__',
+            '__truediv__',
+            '__matmul__',
+            '__mul__',
+            '__sub__',
+            '__add__',
+        }:
             statement.args.args = [
-                ast.arg('self', None), ast.arg('other', None)]
+                ast.arg('self', None),
+                ast.arg('other', None),
+            ]
             push_self, push_other, pop_return = ast.parse(
                 'stack.append(self)\n'
                 'stack.append(other)\n'
-                'return stack.pop()').body
+                'return stack.pop()'
+            ).body
             body = statement.body
             body[:0] = [push_self, push_other]
             body.append(pop_return)
         elif name in {'__getattr__', '__getattribute__', '__delattr__'}:
             statement.args.args = [
-                ast.arg('self', None), ast.arg('name', None)]
+                ast.arg('self', None),
+                ast.arg('name', None),
+            ]
             push_name, push_self, pop_return = ast.parse(
                 'stack.append(name)\n'
                 'stack.append(self)\n'
-                'return stack.pop()').body
+                'return stack.pop()'
+            ).body
             body = statement.body
             body[:0] = [push_name, push_self]
             body.append(pop_return)
         elif name in {'__setattr__'}:
-            statement.args.args = [ast.arg('self', None), ast.arg(
-                'name', None), ast.arg('value', None)]
+            statement.args.args = [
+                ast.arg('self', None),
+                ast.arg('name', None),
+                ast.arg('value', None),
+            ]
             push_args, pop_return = ast.parse(
-                'stack += [value, name, self]\nreturn stack.pop()').body
+                'stack += [value, name, self]\nreturn stack.pop()'
+            ).body
             body = statement.body
             body[:0] = [push_args]
             body.append(pop_return)
         elif name in {'__get__'}:
-            statement.args.args = [ast.arg('self', None), ast.arg(
-                'instance', None), ast.arg('owner', None)]
+            statement.args.args = [
+                ast.arg('self', None),
+                ast.arg('instance', None),
+                ast.arg('owner', None),
+            ]
             push_args, pop_return = ast.parse(
-                'stack += [owner, instance, self]\nreturn stack.pop()').body
+                'stack += [owner, instance, self]\nreturn stack.pop()'
+            ).body
             body = statement.body
             body[:0] = [push_args]
             body.append(pop_return)
         elif name in {'__set__'}:
-            statement.args.args = [ast.arg('self', None), ast.arg(
-                'instance', None), ast.arg('value', None)]
+            statement.args.args = [
+                ast.arg('self', None),
+                ast.arg('instance', None),
+                ast.arg('value', None),
+            ]
             push_args, pop_return = ast.parse(
-                'stack += [value, instance, self]\nreturn stack.pop()').body
+                'stack += [value, instance, self]\nreturn stack.pop()'
+            ).body
             body = statement.body
             body[:0] = [push_args]
             body.append(pop_return)
         elif name in {'__delete__', '__instancecheck__'}:
             statement.args.args = [
-                ast.arg('self', None), ast.arg('instance', None)]
+                ast.arg('self', None),
+                ast.arg('instance', None),
+            ]
             push_args, pop_return = ast.parse(
-                'stack += [instance, self]\nreturn stack.pop()').body
+                'stack += [instance, self]\nreturn stack.pop()'
+            ).body
             body = statement.body
             body[:0] = [push_args]
             body.append(pop_return)
@@ -192,67 +284,89 @@ def correct_magic_signature(statement: ast.stmt) -> ast.stmt:
             statement.args.args = [ast.arg('cls', None)]
             statement.args.kwarg = ast.arg('kwargs', None)
             push_args, pop_return = ast.parse(
-                'stack += [kwargs, self]\nreturn stack.pop()').body
+                'stack += [kwargs, self]\nreturn stack.pop()'
+            ).body
             body = statement.body
             body[:0] = [push_args]
             body.append(pop_return)
         elif name in {'__prepare__'}:
-            statement.args.args = [ast.arg('cls', None), ast.arg(
-                'name', None), ast.arg('bases', None)]
+            statement.args.args = [
+                ast.arg('cls', None),
+                ast.arg('name', None),
+                ast.arg('bases', None),
+            ]
             statement.args.kwarg = ast.arg('kwds', None)
             push_args, pop_return = ast.parse(
-                'stack += [kwds, bases, name, cls]\nreturn stack.pop()').body
+                'stack += [kwds, bases, name, cls]\nreturn stack.pop()'
+            ).body
             body = statement.body
             body[:0] = [push_args]
             body.append(pop_return)
         elif name in {'__subclasscheck__'}:
             statement.args.args = [
-                ast.arg('self', None), ast.arg('subclass', None)]
+                ast.arg('self', None),
+                ast.arg('subclass', None),
+            ]
             push_args, pop_return = ast.parse(
-                'stack += [subclass, self]\nreturn stack.pop()').body
+                'stack += [subclass, self]\nreturn stack.pop()'
+            ).body
             body = statement.body
             body[:0] = [push_args]
             body.append(pop_return)
         elif name in {'__getitem__', '__missing__', '__delitem__'}:
             statement.args.args = [ast.arg('self', None), ast.arg('key', None)]
             push_args, pop_return = ast.parse(
-                'stack += [key, self]\nreturn stack.pop()').body
+                'stack += [key, self]\nreturn stack.pop()'
+            ).body
             body = statement.body
             body[:0] = [push_args]
             body.append(pop_return)
         elif name in {'__aexit__', '__exit__'}:
-            statement.args.args = [ast.arg('self', None), ast.arg(
-                'exc_type', None), ast.arg('exc_value', None),
-                ast.arg('traceback', None)]
+            statement.args.args = [
+                ast.arg('self', None),
+                ast.arg('exc_type', None),
+                ast.arg('exc_value', None),
+                ast.arg('traceback', None),
+            ]
             push_args, pop_return = ast.parse(
                 'stack += [traceback, exc_value, exc_type, self]\n'
-                'return stack.pop()').body
+                'return stack.pop()'
+            ).body
             body = statement.body
             body[:0] = [push_args]
             body.append(pop_return)
         elif name in {'__round__'}:
             statement.args.args = [
-                ast.arg('self', None), ast.arg('ndigits', None)]
+                ast.arg('self', None),
+                ast.arg('ndigits', None),
+            ]
             push_args, pop_return = ast.parse(
-                'stack += [ndigits, self]\nreturn stack.pop()').body
+                'stack += [ndigits, self]\nreturn stack.pop()'
+            ).body
             body = statement.body
             body[:0] = [push_args]
             body.append(pop_return)
         elif name in {'__ipow__', '__pow__'}:
             statement.args.args = [
-                ast.arg('self', None), ast.arg('other', None),
-                ast.arg('modulo', None)]
+                ast.arg('self', None),
+                ast.arg('other', None),
+                ast.arg('modulo', None),
+            ]
             statement.args.defaults = [ast.Num(1)]
             push_args, pop_return = ast.parse(
-                'stack += [self, other, modulo]\nreturn stack.pop()').body
+                'stack += [self, other, modulo]\nreturn stack.pop()'
+            ).body
             body = statement.body
             body[:0] = [push_args]
             body.append(pop_return)
         elif name in {'__contains__'}:
             statement.args.args = [
-                ast.arg('self', None), ast.arg('item', None)]
+                ast.arg('self', None),
+                ast.arg('item', None),
+            ]
             push_args, pop_return = ast.parse(
-                'stack += [item, self]\nreturn stack.pop()').body
+                'stack += [item, self]\nreturn stack.pop()'
+            ).body
             body = statement.body
             body[:0] = [push_args]
             body.append(pop_return)
@@ -260,9 +374,11 @@ def correct_magic_signature(statement: ast.stmt) -> ast.stmt:
             statement.args.args = [
                 ast.arg('self', None),
                 ast.arg('key', None),
-                ast.arg('value', None)]
+                ast.arg('value', None),
+            ]
             push_args, pop_return = ast.parse(
-                'stack += [value, key, self]\nreturn stack.pop()').body
+                'stack += [value, key, self]\nreturn stack.pop()'
+            ).body
             body = statement.body
             body[:0] = [push_args]
             body.append(pop_return)
@@ -277,7 +393,10 @@ def statementfy(node: Union[ast.expr, ast.stmt]) -> ast.stmt:
 
 
 def parse_py_qualified_name(name: str) -> Union[ast.Name, ast.Attribute]:
-    return cast(Union[ast.Name, ast.Attribute], cast(ast.Expression, ast.parse(name, mode='eval')).body)
+    return cast(
+        Union[ast.Name, ast.Attribute],
+        cast(ast.Expression, ast.parse(name, mode='eval')).body,
+    )
 
 
 def assert_all_nodes_have_locations(tree: ast.AST) -> None:
@@ -286,8 +405,12 @@ def assert_all_nodes_have_locations(tree: ast.AST) -> None:
             print(node)
             assert hasattr(node, 'lineno')
             assert hasattr(node, 'col_offset')
-            print(node.lineno, node.col_offset, type(
-                node.lineno), type(node.col_offset))
+            print(
+                node.lineno,
+                node.col_offset,
+                type(node.lineno),
+                type(node.col_offset),
+            )
 
 
 def flatten(list: List[Union['concat.level0.parse.WordNode', Words]]) -> Words:
@@ -309,13 +432,21 @@ def call_concat_function(func: ast.expr) -> ast.Call:
 
 
 def abstract(func: ast.expr) -> ast.Lambda:
-    args = ast.arguments([ast.arg('stack', None), ast.arg(
-        'stash', None)], None, [], [], None, [])
+    args = ast.arguments(
+        [ast.arg('stack', None), ast.arg('stash', None)],
+        None,
+        [],
+        [],
+        None,
+        [],
+    )
     py_node = ast.Lambda(args, func)
     return py_node
 
 
-def assign_self_pushing_module_type_to_all_components(qualified_name: str) -> Iterator[ast.Assign]:
+def assign_self_pushing_module_type_to_all_components(
+    qualified_name: str,
+) -> Iterator[ast.Assign]:
     qualified_name = qualified_name.strip()
     components = tuple(qualified_name.split('.'))
     if qualified_name.endswith('.__class__'):
@@ -325,18 +456,22 @@ def assign_self_pushing_module_type_to_all_components(qualified_name: str) -> It
         target = '.'.join(components[:i])
         assert target
         assignment = '{}.__class__ = concat.level0.stdlib.importlib.Module'.format(
-            target)
+            target
+        )
         yield ast.parse(assignment, mode='exec').body[0]  # type: ignore
 
 
 def append_to_stack(expr: ast.expr) -> ast.expr:
-    push_func = ast.Attribute(ast.Name(id='stack', ctx=ast.Load()), 'append', ctx=ast.Load())
+    push_func = ast.Attribute(
+        ast.Name(id='stack', ctx=ast.Load()), 'append', ctx=ast.Load()
+    )
     py_node = ast.Call(func=push_func, args=[expr], keywords=[])
     return py_node
 
 
 def get_explicit_positional_function_parameters(
-        fun: ast.FunctionDef) -> List[str]:
+    fun: ast.FunctionDef,
+) -> List[str]:
     return [arg.arg for arg in fun.args.args]
 
 
