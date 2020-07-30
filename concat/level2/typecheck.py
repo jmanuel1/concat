@@ -115,16 +115,22 @@ def infer(
             S(env_with_types), program[-1].body, is_top_level=False, extensions=extensions)
         if declared_type is not None:
             declared_type = S(declared_type)
+            declared_type_inst = concat.level1.typecheck.inst(declared_type)
+            inferred_type_inst = concat.level1.typecheck.inst(S(inferred_type))
+            # We want to check that the inferred inputs are supertypes of the
+            # declared inputs, and that the inferred outputs are subtypes of
+            # the declared outputs. Thus, inferred_type should be a subtype
+            # declared_type.
             phi2 = concat.level1.typecheck.unify_ind(
-                declared_type, inferred_type)
-            if not phi2(declared_type).is_subtype_of(phi2(inferred_type)):
+                inferred_type_inst, declared_type_inst)
+            if not phi2(inferred_type_inst).is_subtype_of(phi2(declared_type_inst)):
                 message = ('declared function type {} is not compatible with '
                            'inferred type {}')
                 raise TypeError(message.format(
-                    declared_type, inferred_type))
-            effect = declared_type
+                    phi2(declared_type), phi2(inferred_type)))
+            effect = phi2(declared_type)
         else:
-            effect = inferred_type
+            effect = S(inferred_type)
         # we *mutate* the type environment
         env[name] = effect.generalized_wrt(S(env))
         return S, f

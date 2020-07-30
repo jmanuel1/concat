@@ -3,10 +3,12 @@ import concat.level0.parse
 import concat.level1.parse
 import concat.level1.typecheck
 import concat.level2.typecheck
+import concat.level2.preamble_types
 import concat.level2.parse
 import concat.astutils
 import unittest
-from typing import List, Iterable, Type, Tuple, Dict, cast
+from textwrap import dedent
+from typing import List, Dict, cast
 import parsy
 
 
@@ -42,6 +44,19 @@ class TestTypeChecker(unittest.TestCase):
             (concat.level2.typecheck.infer,),
             True,
         )
+
+    def test_function_with_strict_effect(self) -> None:
+        """Test that a function type checks with a strict annotated effect.
+
+        The type checker should allow the annotated effect of a function to be
+        stricter than what would be inferred without the annotation."""
+        tree = parse(dedent("""\
+            def seek_file(file:file offset:int whence:int --):
+                swap [(), (),] [,] swap pick $.seek py_call drop drop
+        """))
+        env = concat.level1.typecheck.Environment(concat.level2.preamble_types.types)
+        concat.level1.typecheck.infer(env, tree.children, (concat.level2.typecheck.infer,), True)
+        # If we get here, we passed
 
     def test_string_subscription(self) -> None:
         """Test that the type checker allows subscription into strings."""
