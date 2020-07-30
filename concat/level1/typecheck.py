@@ -8,12 +8,25 @@ import abc
 import dataclasses
 import builtins
 import collections.abc
-from typing import (List, Set, Tuple, Dict, Iterator, Union,
-                    Optional, Callable, Sequence, NoReturn, TYPE_CHECKING,
-                    overload, cast)
+from typing import (
+    List,
+    Set,
+    Tuple,
+    Dict,
+    Iterator,
+    Union,
+    Optional,
+    Callable,
+    Sequence,
+    NoReturn,
+    TYPE_CHECKING,
+    overload,
+    cast,
+)
 import concat.level0.parse
 import concat.level1.operators
 import concat.level1.parse
+
 if TYPE_CHECKING:
     import concat.astutils
 
@@ -23,7 +36,9 @@ class StaticAnalysisError(Exception):
         self._message = message
         self.location = None
 
-    def set_location_if_missing(self, location: 'concat.astutils.Location') -> None:
+    def set_location_if_missing(
+        self, location: 'concat.astutils.Location'
+    ) -> None:
         if not self.location:
             self.location = location
 
@@ -49,9 +64,11 @@ class NameError(StaticAnalysisError, builtins.NameError):
 
 class AttributeError(TypeError, builtins.AttributeError):
     def __init__(self, type: 'Type', attribute: str) -> None:
-        super().__init__('object of type {} does not have attribute {}'.format(
-            type, attribute
-        ))
+        super().__init__(
+            'object of type {} does not have attribute {}'.format(
+                type, attribute
+            )
+        )
         self._type = type
         self._attribute = attribute
 
@@ -76,7 +93,8 @@ class Type(abc.ABC):
             )
         if isinstance(supertype, _IntersectionType):
             return self.is_subtype_of(supertype.type_1) and self.is_subtype_of(
-                supertype.type_2)
+                supertype.type_2
+            )
         return False
 
     def get_type_of_attribute(self, name: str) -> 'IndividualType':
@@ -96,14 +114,18 @@ class IndividualType(Type, abc.ABC):
         return ForAll([], self)
 
     def __and__(self, other: object) -> '_IntersectionType':
-        if not isinstance(self, IndividualType) or not isinstance(other, IndividualType):
+        if not isinstance(self, IndividualType) or not isinstance(
+            other, IndividualType
+        ):
             return NotImplemented
         return _IntersectionType(self, other)
 
 
 @dataclasses.dataclass
 class _IntersectionType(IndividualType):
-    def __init__(self, type_1: 'IndividualType', type_2: 'IndividualType') -> None:
+    def __init__(
+        self, type_1: 'IndividualType', type_2: 'IndividualType'
+    ) -> None:
         self.type_1 = type_1
         self.type_2 = type_2
 
@@ -114,9 +136,11 @@ class _IntersectionType(IndividualType):
         return '({} & {})'.format(self.type_1, self.type_2)
 
     def is_subtype_of(self, other: Type) -> bool:
-        return (super().is_subtype_of(other)
-                or self.type_1.is_subtype_of(other)
-                or self.type_2.is_subtype_of(other))
+        return (
+            super().is_subtype_of(other)
+            or self.type_1.is_subtype_of(other)
+            or self.type_2.is_subtype_of(other)
+        )
 
     def get_type_of_attribute(self, name: str) -> 'IndividualType':
         try:
@@ -132,7 +156,11 @@ class _IntersectionType(IndividualType):
 
 
 class PrimitiveInterface(IndividualType):
-    def __init__(self, name: str = '<primitive_interface>', attributes: Optional[Dict[str, 'IndividualType']] = None) -> None:
+    def __init__(
+        self,
+        name: str = '<primitive_interface>',
+        attributes: Optional[Dict[str, 'IndividualType']] = None,
+    ) -> None:
         self._name = name
         self._attributes = {} if attributes is None else attributes
 
@@ -149,7 +177,9 @@ class PrimitiveInterface(IndividualType):
         self._attributes[attribute] = type
 
     def apply_substitution(self, sub: 'Substitutions') -> 'PrimitiveInterface':
-        new_attributes = {name: sub(type) for name, type in self._attributes.items()}
+        new_attributes = {
+            name: sub(type) for name, type in self._attributes.items()
+        }
         if new_attributes == self._attributes:
             return self
         new_name = '{}[sub {}]'.format(self._name, id(sub))
@@ -165,13 +195,20 @@ class PrimitiveInterface(IndividualType):
 
 
 class PrimitiveType(IndividualType):
-    def __init__(self, name: str = '<primitive_type>', supertypes: Tuple[Type, ...] = (), attributes: Optional[Dict[str, 'IndividualType']] = None) -> None:
+    def __init__(
+        self,
+        name: str = '<primitive_type>',
+        supertypes: Tuple[Type, ...] = (),
+        attributes: Optional[Dict[str, 'IndividualType']] = None,
+    ) -> None:
         self._name = name
         self._supertypes = supertypes
         self._attributes = {} if attributes is None else attributes
 
     def is_subtype_of(self, supertype: Type) -> bool:
-        return super().is_subtype_of(supertype) or any(map(lambda t: t.is_subtype_of(supertype), self._supertypes))
+        return super().is_subtype_of(supertype) or any(
+            map(lambda t: t.is_subtype_of(supertype), self._supertypes)
+        )
 
     def add_supertype(self, supertype: Type) -> None:
         self._supertypes += (supertype,)
@@ -189,9 +226,14 @@ class PrimitiveType(IndividualType):
             raise AttributeError(self, attribute)
 
     def apply_substitution(self, sub: 'Substitutions') -> 'PrimitiveType':
-        new_attributes = {name: sub(type) for name, type in self._attributes.items()}
+        new_attributes = {
+            name: sub(type) for name, type in self._attributes.items()
+        }
         new_supertypes = tuple(sub(type) for type in self._supertypes)
-        if new_attributes == self._attributes and new_supertypes == self._supertypes:
+        if (
+            new_attributes == self._attributes
+            and new_supertypes == self._supertypes
+        ):
             return self
         new_name = '{}[sub {}]'.format(self._name, id(sub))
         return PrimitiveType(new_name, new_supertypes, new_attributes)
@@ -203,11 +245,14 @@ class _Variable(Type, abc.ABC):
     Every type variable object is assumed to be unique. Thus, fresh type
     variables can be made simply by creating new objects. They can also be
     compared by identity."""
+
     @abc.abstractmethod
     def __init__(self) -> None:
         super().__init__()
 
-    def apply_substitution(self, sub: 'Substitutions') -> Union[IndividualType, '_Variable', List[Type]]:
+    def apply_substitution(
+        self, sub: 'Substitutions'
+    ) -> Union[IndividualType, '_Variable', List[Type]]:
         if self in sub:
             return sub[self]  # type: ignore
         return self
@@ -228,7 +273,8 @@ class IndividualVariable(_Variable, IndividualType):
 
     def is_subtype_of(self, supertype: Type):
         return super().is_subtype_of(supertype) or self.bound.is_subtype_of(
-            supertype)
+            supertype
+        )
 
     def __hash__(self) -> int:
         return hash((id(self), self.bound))
@@ -257,7 +303,9 @@ class IndividualVariable(_Variable, IndividualType):
 
 
 class ForAll(Type):
-    def __init__(self, quantified_variables: List[_Variable], type: 'IndividualType') -> None:
+    def __init__(
+        self, quantified_variables: List[_Variable], type: 'IndividualType'
+    ) -> None:
         super().__init__()
         self.quantified_variables = quantified_variables
         self.type = type
@@ -274,11 +322,13 @@ class ForAll(Type):
     def apply_substitution(self, sub: 'Substitutions') -> 'ForAll':
         return ForAll(
             self.quantified_variables,
-            Substitutions({
-                a: i
-                for a, i in sub.items()
-                if a not in self.quantified_variables
-            })(self.type)
+            Substitutions(
+                {
+                    a: i
+                    for a, i in sub.items()
+                    if a not in self.quantified_variables
+                }
+            )(self.type),
         )
 
 
@@ -452,16 +502,22 @@ class PrimitiveInterfaces:
     invertible = PrimitiveInterface('invertible')
     invertible.add_attribute('__invert__', PrimitiveTypes.py_function)
     iterable = PrimitiveInterface('iterable')
-    for type in {PrimitiveTypes.int, PrimitiveTypes.dict, PrimitiveTypes.list, PrimitiveTypes.file}:
+    for type in {
+        PrimitiveTypes.int,
+        PrimitiveTypes.dict,
+        PrimitiveTypes.list,
+        PrimitiveTypes.file,
+    }:
         type.add_supertype(iterable)
 
 
 class TypeWithAttribute(IndividualType):
-    def __init__(self, attribute: str, attribute_type: 'IndividualType') -> None:
+    def __init__(
+        self, attribute: str, attribute_type: 'IndividualType'
+    ) -> None:
         super().__init__()
         self.attribute = attribute
         self.attribute_type = attribute_type
-
 
     def __str__(self) -> str:
         type = ''
@@ -530,8 +586,7 @@ class Substitutions(Dict[_Variable, Union[Type, List[StackItemType]]]):
 
     @overload
     def __call__(
-        self,
-        arg: SequenceVariable
+        self, arg: SequenceVariable
     ) -> Union[SequenceVariable, List[StackItemType]]:
         ...
 
@@ -555,8 +610,9 @@ class Substitutions(Dict[_Variable, Union[Type, List[StackItemType]]]):
         if isinstance(arg, collections.abc.Sequence):
             subbed_types: List[StackItemType] = []
             for type in arg:
-                subbed_type: Union[StackItemType,
-                                   List[StackItemType]] = self(type)
+                subbed_type: Union[StackItemType, List[StackItemType]] = self(
+                    type
+                )
                 if isinstance(subbed_type, list):
                     subbed_types += subbed_type
                 else:
@@ -568,25 +624,43 @@ class Substitutions(Dict[_Variable, Union[Type, List[StackItemType]]]):
         return {*self}
 
     def __str__(self) -> str:
-        return '{' + ',\n'.join(map(lambda i: '{}: {}'.format(i[0], i[1]), self.items())) + '}'
+        return (
+            '{'
+            + ',\n'.join(
+                map(lambda i: '{}: {}'.format(i[0], i[1]), self.items())
+            )
+            + '}'
+        )
 
     def apply_substitution(self, sub: 'Substitutions') -> 'Substitutions':
-        return Substitutions({
-            **sub,
-            **{a: sub(i) for a, i in self.items() if a not in sub._dom()}
-        })
+        return Substitutions(
+            {
+                **sub,
+                **{a: sub(i) for a, i in self.items() if a not in sub._dom()},
+            }
+        )
 
 
 _InferFunction = Callable[
-    [Environment, 'concat.astutils.WordsOrStatements', bool, Tuple['_InferFunction'], Tuple[Substitutions, _Function]],
-    Tuple[Substitutions, _Function]
+    [
+        Environment,
+        'concat.astutils.WordsOrStatements',
+        bool,
+        Tuple['_InferFunction'],
+        Tuple[Substitutions, _Function],
+    ],
+    Tuple[Substitutions, _Function],
 ]
 
 
-def inst(sigma: Union[ForAll, PrimitiveInterface, _Function]) -> IndividualType:
+def inst(
+    sigma: Union[ForAll, PrimitiveInterface, _Function]
+) -> IndividualType:
     """This is based on the inst function described by Kleffner."""
     if isinstance(sigma, ForAll):
-        subs = Substitutions({a: type(a)() for a in sigma.quantified_variables})
+        subs = Substitutions(
+            {a: type(a)() for a in sigma.quantified_variables}
+        )
         return subs(sigma.type)
     if isinstance(sigma, PrimitiveInterface):
         attributes = {}
@@ -619,14 +693,15 @@ def infer(
     gamma: Environment,
     e: 'concat.astutils.WordsOrStatements',
     extensions: Optional[Tuple[_InferFunction]] = None,
-    is_top_level=False
+    is_top_level=False,
 ) -> Tuple[Substitutions, _Function]:
     """The infer function described by Kleffner."""
     e = list(e)
     current_subs = Substitutions()
     a_bar = SequenceVariable()
-    current_effect = _Function([], []) if is_top_level else _Function(
-        [a_bar], [a_bar])
+    current_effect = (
+        _Function([], []) if is_top_level else _Function([a_bar], [a_bar])
+    )
 
     for node in e:
         try:
@@ -645,11 +720,13 @@ def infer(
                 a_bar = SequenceVariable()
                 try:
                     phi = unify(
-                        list(o), [a_bar, PrimitiveTypes.int, PrimitiveTypes.int]
+                        list(o),
+                        [a_bar, PrimitiveTypes.int, PrimitiveTypes.int],
                     )
                 except TypeError:
                     phi = unify(
-                        list(o), [a_bar, PrimitiveTypes.str, PrimitiveTypes.str]
+                        list(o),
+                        [a_bar, PrimitiveTypes.str, PrimitiveTypes.str],
                     )
                     current_subs, current_effect = (
                         phi(S),
@@ -685,7 +762,9 @@ def infer(
                     type_of_name = inst(S(gamma)[node.value].to_for_all())
                     if not isinstance(type_of_name, _Function):
                         raise NotImplementedError(
-                            'name {} of type {}'.format(node.value, type_of_name)
+                            'name {} of type {}'.format(
+                                node.value, type_of_name
+                            )
                         )
                     i2, o2 = type_of_name
                     phi = unify(list(o1), S(i2))
@@ -750,7 +829,10 @@ def infer(
                 phi = unify(
                     list(o), [a_bar, body_type, PrimitiveTypes.context_manager]
                 )
-                current_subs, current_effect = phi(S), phi(_Function(i, [b_bar]))
+                current_subs, current_effect = (
+                    phi(S),
+                    phi(_Function(i, [b_bar])),
+                )
             elif isinstance(node, concat.level1.parse.TryWordNode):
                 a_bar, b_bar = SequenceVariable(), SequenceVariable()
                 phi = unify(
@@ -761,19 +843,25 @@ def infer(
                         _Function([a_bar], [b_bar]),
                     ],
                 )
-                current_subs, current_effect = phi(S), phi(_Function(i, [b_bar]))
+                current_subs, current_effect = (
+                    phi(S),
+                    phi(_Function(i, [b_bar])),
+                )
             elif isinstance(node, concat.level1.parse.DictWordNode):
                 phi = S
                 collected_type = o
                 for key, value in node.dict_children:
-                    phi1, (i1, o1) = infer(phi(gamma), key, extensions=extensions)
+                    phi1, (i1, o1) = infer(
+                        phi(gamma), key, extensions=extensions
+                    )
                     R1 = unify(phi1(collected_type), list(i1))
                     phi = R1(phi1(phi))
                     collected_type = phi(o1)
                     # drop the top of the stack to use as the key
-                    collected_type, collected_type_sub = drop_last_from_type_seq(
-                        collected_type
-                    )
+                    (
+                        collected_type,
+                        collected_type_sub,
+                    ) = drop_last_from_type_seq(collected_type)
                     phi = collected_type_sub(phi)
                     phi2, (i2, o2) = infer(
                         phi(gamma), value, extensions=extensions
@@ -782,9 +870,10 @@ def infer(
                     phi = R2(phi2(phi))
                     collected_type = phi(o2)
                     # drop the top of the stack to use as the value
-                    collected_type, collected_type_sub = drop_last_from_type_seq(
-                        collected_type
-                    )
+                    (
+                        collected_type,
+                        collected_type_sub,
+                    ) = drop_last_from_type_seq(collected_type)
                     phi = collected_type_sub(phi)
                 current_subs, current_effect = (
                     phi,
@@ -794,13 +883,16 @@ def infer(
                 phi = S
                 collected_type = o
                 for item in node.list_children:
-                    phi1, (i1, o1) = infer(phi(gamma), item, extensions=extensions)
+                    phi1, (i1, o1) = infer(
+                        phi(gamma), item, extensions=extensions
+                    )
                     R1 = unify(phi1(phi(collected_type)), list(i1))
                     collected_type = R1(phi1(phi(o1)))
                     # drop the top of the stack to use as the key
-                    collected_type, collected_type_sub = drop_last_from_type_seq(
-                        list(collected_type)
-                    )
+                    (
+                        collected_type,
+                        collected_type_sub,
+                    ) = drop_last_from_type_seq(list(collected_type))
                     phi = collected_type_sub(R1(phi1(phi)))
                 current_subs, current_effect = (
                     phi,
@@ -845,7 +937,8 @@ def infer(
                 for extension in extensions or []:
                     try:
                         kwargs = dict(
-                            extensions=extensions, previous=(S, _Function(i, o))
+                            extensions=extensions,
+                            previous=(S, _Function(i, o)),
                         )
                         # NOTE: Extension compose their results with the
                         # current effect (the `previous` keyword argument).
@@ -866,7 +959,9 @@ def infer(
     return current_subs, current_effect
 
 
-def _ftv(f: Union[Type, List[StackItemType], Dict[str, Type]]) -> Set[_Variable]:
+def _ftv(
+    f: Union[Type, List[StackItemType], Dict[str, Type]]
+) -> Set[_Variable]:
     """The ftv function described by Kleffner."""
     ftv: Set[_Variable]
     if isinstance(f, (PrimitiveType, PrimitiveInterface)):
@@ -910,12 +1005,18 @@ def unify(i1: List[StackItemType], i2: List[StackItemType]) -> Substitutions:
             return Substitutions({})
         elif isinstance(i1[0], SequenceVariable) and i1[0] not in _ftv(i2):
             return Substitutions({i1[0]: [*i2]})
-    if len(i2) == 1 and isinstance(i2[0], SequenceVariable) and \
-            i2[0] not in _ftv(i1):
+    if (
+        len(i2) == 1
+        and isinstance(i2[0], SequenceVariable)
+        and i2[0] not in _ftv(i1)
+    ):
         return Substitutions({i2[0]: [*i1]})
-    if len(i1) > 0 and len(i2) > 0 and \
-            isinstance(i1[-1], IndividualType) and \
-            isinstance(i2[-1], IndividualType):
+    if (
+        len(i1) > 0
+        and len(i2) > 0
+        and isinstance(i1[-1], IndividualType)
+        and isinstance(i2[-1], IndividualType)
+    ):
         phi1 = unify_ind(i1[-1], i2[-1])
         phi2 = unify(phi1(i1[:-1]), phi1(i2[:-1]))
         return phi2(phi1)
@@ -993,7 +1094,9 @@ def unify_ind(
         raise TypeError('{} cannot unify with {}'.format(t1, t2))
 
 
-def drop_last_from_type_seq(l: List[StackItemType]) -> Tuple[List[StackItemType], Substitutions]:
+def drop_last_from_type_seq(
+    l: List[StackItemType],
+) -> Tuple[List[StackItemType], Substitutions]:
     kept = SequenceVariable()
     dropped = IndividualVariable()
     drop_sub = unify(l, [kept, dropped])
