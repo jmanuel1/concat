@@ -35,7 +35,7 @@ def suite(
     # we don't generate level 0 import statements because the higher-level
     # visitors don't accept it
     stack, stash = init_stack, init_stash
-    count = draw(integers(min_value=0))
+    count = draw(integers(min_value=0, max_value=50))
     words_and_statements = []
     for _ in range(count):
         word_or_statement, stack, stash = draw(word(stack, stash))
@@ -68,7 +68,7 @@ def word(
 def number_word(
     draw, init_stack, init_stash
 ) -> ProgramFragmentAndEffect[concat.level0.parse.NumberWordNode]:
-    number = draw(integers())
+    number = draw(integers(min_value=-100, max_value=100))
     number_token = Token('NUMBER', repr(number))
     return (
         concat.level0.parse.NumberWordNode(number_token),
@@ -81,7 +81,7 @@ def number_word(
 def string_word(
     draw, init_stack, init_stash
 ) -> ProgramFragmentAndEffect[concat.level0.parse.StringWordNode]:
-    string = draw(text())
+    string = draw(text(max_size=100))
     string_token = Token('STRING', repr(string))
     return (
         concat.level0.parse.StringWordNode(string_token),
@@ -95,7 +95,7 @@ def quote_word(
     draw, init_stack, init_stash
 ) -> ProgramFragmentAndEffect[concat.level0.parse.QuoteWordNode]:
     sub_words = []
-    length = draw(integers(min_value=0))
+    length = draw(integers(min_value=0, max_value=100))
     stack, stash = init_stack, init_stash
     for _ in range(length):
         sub_word, stack, stash = draw(word(stack, stash))
