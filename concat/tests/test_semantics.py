@@ -95,7 +95,7 @@ def quote_word(
     draw, init_stack, init_stash
 ) -> ProgramFragmentAndEffect[concat.level0.parse.QuoteWordNode]:
     sub_words = []
-    length = draw(integers())  # make sure it's nonnegative
+    length = draw(integers(min_value=0))
     stack, stash = init_stack, init_stash
     for _ in range(length):
         sub_word, stack, stash = draw(word(stack, stash))
