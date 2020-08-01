@@ -70,7 +70,10 @@ class IntersectionTypeNode(IndividualTypeNode):
 
 
 class PrimitiveInterfaces:
-    subscriptable = concat.level1.typecheck.PrimitiveInterface('subscriptable')
+    subscriptable = concat.level1.typecheck.TypeWithAttribute(
+        '__getitem__',
+        concat.level1.typecheck.PrimitiveTypes.py_function,
+    )
     concat.level1.typecheck.PrimitiveTypes.list.add_supertype(subscriptable)
 
     subtractable = concat.level1.typecheck.PrimitiveInterface('subtractable')
