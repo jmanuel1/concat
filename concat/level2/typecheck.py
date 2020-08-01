@@ -4,7 +4,8 @@ import concat.level0.parse
 import concat.level1.typecheck
 import concat.level1.parse
 import concat.level2.parse
-from typing import Tuple, Generator, Sequence, Optional, Union, Dict, overload, cast
+from typing import Tuple, Generator, Sequence, Optional, Union, overload, cast
+from typing_extensions import Literal
 import dataclasses
 import abc
 import importlib
@@ -80,9 +81,18 @@ class PrimitiveInterfaces:
     concat.level1.typecheck.PrimitiveTypes.int.add_supertype(subtractable)
 
 
+class _NoReturnType(concat.level1.typecheck.PrimitiveType):
+    def __init__(self) -> None:
+        super().__init__('NoReturn')
+
+    def is_subtype_of(self, _: concat.level1.typecheck.Type) -> Literal[True]:
+        return True
+
+
 class PrimitiveTypes:
     tuple = concat.level1.typecheck.PrimitiveType(
         'tuple', (concat.level1.typecheck.PrimitiveInterfaces.iterable, PrimitiveInterfaces.subscriptable))
+    no_return = _NoReturnType()
 
 
 def infer(
