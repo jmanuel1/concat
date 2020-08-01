@@ -47,9 +47,19 @@ class StackEffectTypeNode(IndividualTypeNode):
 
         def extract_value(i):
             return (i[0].value, i[1])
-        self.input = map(extract_value, input)
+        self.input = [extract_value(i) for i in input]
         self.output_sequence_variable = out_seq_var.value if out_seq_var else None
-        self.output = map(extract_value, output)
+        self.output = [extract_value(o) for o in output]
+
+    def __repr__(self) -> str:
+        return '{}({!r}, {!r}, {!r}, {!r}, location={!r})'.format(
+            type(self).__qualname__,
+            self.input_sequence_variable,
+            self.input,
+            self.output_sequence_variable,
+            self.output,
+            self.location,
+        )
 
 
 class IntersectionTypeNode(IndividualTypeNode):
