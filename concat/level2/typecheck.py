@@ -75,7 +75,6 @@ class PrimitiveInterfaces:
         '__getitem__',
         concat.level1.typecheck.PrimitiveTypes.py_function,
     )
-    concat.level1.typecheck.PrimitiveTypes.list.add_supertype(subscriptable)
 
     subtractable = concat.level1.typecheck.PrimitiveInterface('subtractable')
     concat.level1.typecheck.PrimitiveTypes.int.add_supertype(subtractable)
@@ -94,7 +93,12 @@ class PrimitiveTypes:
     ellipsis = concat.level1.typecheck.PrimitiveType('Ellipsis')
     not_implemented = concat.level1.typecheck.PrimitiveType('NotImplemented')
     tuple = concat.level1.typecheck.PrimitiveType(
-        'tuple', (concat.level1.typecheck.PrimitiveInterfaces.iterable, PrimitiveInterfaces.subscriptable))
+        'tuple', (
+            concat.level1.typecheck.PrimitiveInterfaces.iterable,
+        ), {
+            '__getitem__': concat.level1.typecheck.PrimitiveTypes.py_function
+        }
+    )
     no_return = _NoReturnType()
 
 
