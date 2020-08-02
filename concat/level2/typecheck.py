@@ -99,6 +99,7 @@ class PrimitiveTypes:
             '__getitem__': concat.level1.typecheck.PrimitiveTypes.py_function
         }
     )
+    base_exception = concat.level1.typecheck.PrimitiveType('BaseException')
     no_return = _NoReturnType()
 
 
