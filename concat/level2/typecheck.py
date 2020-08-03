@@ -9,6 +9,7 @@ from typing_extensions import Literal
 import dataclasses
 import abc
 import importlib
+import sys
 import parsy
 
 
@@ -105,12 +106,55 @@ class PrimitiveTypes:
     no_return = _NoReturnType()
 
 
+_seq_var = concat.level1.typecheck.SequenceVariable()
+
+
+def _generate_type_of_innermost_module(
+        qualified_name: str, source_dir) -> concat.level1.typecheck.StackEffect:
+    # We resolve imports as if we are the source file.
+    sys.path, old_path = [source_dir, *sys.path], sys.path
+    module = importlib.import_module(qualified_name)
+    sys.path = old_path
+    module_type: concat.level1.typecheck.IndividualType = \
+        concat.level1.typecheck.PrimitiveTypes.module
+    for name in dir(module):
+        attribute_type = concat.level1.typecheck.PrimitiveTypes.object
+        if isinstance(getattr(module, name), int):
+            attribute_type = concat.level1.typecheck.PrimitiveTypes.int
+        elif callable(getattr(module, name)):
+            attribute_type = concat.level1.typecheck.PrimitiveTypes.py_function
+        module_type = module_type & concat.level1.typecheck.TypeWithAttribute(
+            name, attribute_type)
+    return concat.level1.typecheck.StackEffect(
+        [_seq_var], [_seq_var, module_type])
+
+
+def _generate_module_type(
+    components: Sequence[str], _full_name: Optional[str] = None, source_dir='.'
+) -> concat.level1.typecheck.ForAll:
+    module_type: concat.level1.typecheck.Type = \
+        concat.level1.typecheck.PrimitiveTypes.module
+    if _full_name is None:
+        _full_name = '.'.join(components)
+    if len(components) > 1:
+        module_type = module_type & concat.level1.typecheck.TypeWithAttribute(
+            components[1],
+            _generate_module_type(components[1:], _full_name, source_dir).type)
+        effect = concat.level1.typecheck.StackEffect(
+            [_seq_var], [_seq_var, module_type])
+        return concat.level1.typecheck.ForAll([_seq_var], effect)
+    else:
+        innermost_type = _generate_type_of_innermost_module(_full_name, source_dir)
+        return concat.level1.typecheck.ForAll([_seq_var], innermost_type)
+
+
 def infer(
     env: concat.level1.typecheck.Environment,
     program: concat.astutils.WordsOrStatements,
     is_top_level=False,
     extensions=(),
-    previous: Tuple[concat.level1.typecheck.Substitutions, concat.level1.typecheck.StackEffect] = (concat.level1.typecheck.Substitutions(), concat.level1.typecheck.StackEffect([], []))
+    previous: Tuple[concat.level1.typecheck.Substitutions, concat.level1.typecheck.StackEffect] = (concat.level1.typecheck.Substitutions(), concat.level1.typecheck.StackEffect([], [])),
+    source_dir='.',
 ) -> Tuple[concat.level1.typecheck.Substitutions, concat.level1.typecheck.StackEffect]:
     subs, (input, output) = previous
     if isinstance(program[-1], concat.level2.parse.CastWordNode):
@@ -120,19 +164,38 @@ def infer(
         effect = subs_2(
             subs(concat.level1.typecheck.StackEffect(input, [*rest, new_type])))
         return subs_2(subs), effect
-    elif isinstance(program[-1], concat.level0.parse.ImportStatementNode):
+    elif isinstance(program[-1], concat.level1.parse.FromImportStatementNode):
+        imported_name = program[-1].asname or program[-1].imported_name
+        # mutate type environment
+        env[imported_name] = concat.level1.typecheck.PrimitiveTypes.object
+        # We will try to find a more specific type.
+        sys.path, old_path = [source_dir, *sys.path], sys.path
+        module = importlib.import_module(program[-1].value)
+        sys.path = old_path
+        # For now, assume the module's written in Python.
+        try:
+            env[imported_name] = subs(
+                getattr(module, '@@types')[program[-1].imported_name])
+        except (KeyError, AttributeError):
+            # attempt instrospection to get a more specific type
+            if callable(getattr(module, program[-1].imported_name)):
+                env[imported_name] = concat.level1.typecheck.PrimitiveTypes.py_function
+        return subs, concat.level1.typecheck.StackEffect(input, output)
+    elif isinstance(program[-1], concat.level1.parse.ImportStatementNode):
         # TODO: Support all types of import correctly.
         seq_var = concat.level1.typecheck.SequenceVariable()
-        # FIXME: We should resolve imports as if we are the source file.
-        module = importlib.import_module(program[-1].value)
-        module_type: concat.level1.typecheck.Type = concat.level1.typecheck.PrimitiveTypes.module
-        for name in dir(module):
-            module_type = module_type & concat.level1.typecheck.TypeWithAttribute(
-                name, concat.level1.typecheck.PrimitiveTypes.object)
-        # mutate type environment
-        env[program[-1].value] = concat.level1.typecheck.ForAll([seq_var], concat.level1.typecheck.StackEffect([seq_var],
-                                                                                                               [seq_var, module_type]))
-        return previous
+        if program[-1].asname is not None:
+            env[program[-1].asname] = subs(_generate_type_of_innermost_module(
+                program[-1].value, source_dir).generalized_wrt(subs(env)))
+        else:
+            imported_name = program[-1].value
+            # mutate type environment
+            components = program[-1].value.split('.')
+            # FIXME: This replaces whatever was previously imported. I really
+            # should implement namespaces properly.
+            env[components[0]] = subs(
+                _generate_module_type(components, source_dir=source_dir))
+        return subs, concat.level1.typecheck.StackEffect(input, output)
     elif isinstance(program[-1], concat.level1.parse.FuncdefStatementNode):
         S = subs
         f = concat.level1.typecheck.StackEffect(input, output)

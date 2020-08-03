@@ -27,6 +27,8 @@ def _run(
 ) -> None:
     globals = {} if globals is None else globals
     try:
+        # FIXME: Imports should be resolved from the location of the source
+        # file.
         exec(prog, globals, globals if locals is None else locals)
     except Exception as e:
         # throw away all of the traceback outside the code

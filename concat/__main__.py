@@ -7,6 +7,7 @@ import concat.level1.typecheck
 import concat.level2.stdlib.repl
 import concat.level2.execute
 import argparse
+import os.path
 import sys
 import io
 from typing import Callable, IO, AnyStr, TextIO
@@ -51,7 +52,7 @@ if args.file.isatty():
     concat.level2.stdlib.repl.repl([], [], args.debug)
 else:
     try:
-        python_ast = transpile(args.file.read())
+        python_ast = transpile(args.file.read(), os.path.dirname(filename))
     except concat.level1.typecheck.StaticAnalysisError as e:
         print('Error:\n')
         print(e, 'in line:')

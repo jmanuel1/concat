@@ -755,6 +755,7 @@ def infer(
     e: 'concat.astutils.WordsOrStatements',
     extensions: Optional[Tuple[_InferFunction]] = None,
     is_top_level=False,
+    source_dir='.'
 ) -> Tuple[Substitutions, _Function]:
     """The infer function described by Kleffner."""
     e = list(e)
@@ -865,7 +866,7 @@ def infer(
                     )
                 else:
                     S2, (i2, o2) = infer(
-                        S1(gamma), node.children, extensions=extensions
+                        S1(gamma), node.children, extensions=extensions, source_dir=source_dir
                     )
                     current_subs, current_effect = (
                         S2(S1),
@@ -874,7 +875,7 @@ def infer(
             elif isinstance(node, concat.level0.parse.QuoteWordNode):
                 quotation = cast(concat.level0.parse.QuoteWordNode, node)
                 S1, (i1, o1) = infer(
-                    gamma, [*quotation.children], extensions=extensions
+                    gamma, [*quotation.children], extensions=extensions, source_dir=source_dir
                 )
                 phi = unify(S1(o), i1)
                 current_subs, current_effect = (
@@ -913,7 +914,7 @@ def infer(
                 collected_type = o
                 for key, value in node.dict_children:
                     phi1, (i1, o1) = infer(
-                        phi(gamma), key, extensions=extensions
+                        phi(gamma), key, extensions=extensions, source_dir=source_dir
                     )
                     R1 = unify(phi1(collected_type), list(i1))
                     phi = R1(phi1(phi))
@@ -925,7 +926,7 @@ def infer(
                     ) = drop_last_from_type_seq(collected_type)
                     phi = collected_type_sub(phi)
                     phi2, (i2, o2) = infer(
-                        phi(gamma), value, extensions=extensions
+                        phi(gamma), value, extensions=extensions, source_dir=source_dir
                     )
                     R2 = unify(phi2(collected_type), list(i2))
                     phi = R2(phi2(phi))
@@ -945,7 +946,7 @@ def infer(
                 collected_type = o
                 for item in node.list_children:
                     phi1, (i1, o1) = infer(
-                        phi(gamma), item, extensions=extensions
+                        phi(gamma), item, extensions=extensions, source_dir=source_dir
                     )
                     R1 = unify(phi1(phi(collected_type)), list(i1))
                     collected_type = R1(phi1(phi(o1)))
@@ -1000,6 +1001,7 @@ def infer(
                         kwargs = dict(
                             extensions=extensions,
                             previous=(S, _Function(i, o)),
+                            source_dir=source_dir,
                         )
                         # NOTE: Extension compose their results with the
                         # current effect (the `previous` keyword argument).

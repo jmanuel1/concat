@@ -12,7 +12,7 @@ import concat.level2.typecheck
 from typing import cast
 
 
-def transpile(code: str) -> ast.Module:
+def transpile(code: str, source_dir: str = '.') -> ast.Module:
     tokens = tokenize(code)
     parser = concat.level0.parse.ParserDict()
     parser.extend_with(concat.level0.parse.level_0_extension)
@@ -22,7 +22,7 @@ def transpile(code: str) -> ast.Module:
     concat_ast = parser.parse(tokens)
     # FIXME: Consider the type of everything entered interactively beforehand.
     concat.typecheck.check(
-        concat.level1.typecheck.Environment(), concat_ast.children
+        concat.level1.typecheck.Environment(), concat_ast.children, source_dir
     )
     return transpile_ast(concat_ast)
 
