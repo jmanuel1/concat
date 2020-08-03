@@ -163,9 +163,32 @@ class PrimitiveInterface(IndividualType):
     ) -> None:
         self._name = name
         self._attributes = {} if attributes is None else attributes
+        self._type_arguments: Optional[Sequence[IndividualType]] = None
+        self._type_argument_cache: Dict[
+            Sequence[IndividualType], 'PrimitiveInterface'
+        ] = {}
+        self._parent: Optional[PrimitiveInterface] = None
 
     def __str__(self) -> str:
-        return 'interface {}'.format(self._name)
+        type_arguments_str = ''
+        if self._type_arguments is not None:
+            joined_argument_strs = ', '.join(map(str, self._type_arguments))
+            type_arguments_str = '[' + joined_argument_strs + ']'
+        return 'interface {}{}'.format(self._name, type_arguments_str)
+
+    def __getitem__(
+        self, types: Union[IndividualType, Sequence[IndividualType]]
+    ) -> 'PrimitiveInterface':
+        if not isinstance(types, collections.abc.Sequence):
+            types = (types,)
+        if types in self._type_argument_cache:
+            return self._type_argument_cache[types]
+        new_interface = PrimitiveInterface(self._name, self._attributes)
+        new_interface._type_arguments = types
+        new_interface._type_argument_cache = self._type_argument_cache
+        new_interface._parent = self
+        self._type_argument_cache[types] = new_interface
+        return new_interface
 
     def get_type_of_attribute(self, attribute: str) -> 'IndividualType':
         try:
@@ -183,7 +206,10 @@ class PrimitiveInterface(IndividualType):
         if new_attributes == self._attributes:
             return self
         new_name = '{}[sub {}]'.format(self._name, id(sub))
-        return PrimitiveInterface(new_name, new_attributes)
+        new_type_arguments = sub(self._type_arguments)
+        new_interface = PrimitiveInterface(new_name, new_attributes)
+        new_interface._type_arguments = new_type_arguments
+        return new_interface
 
     @property
     def attributes(self) -> Dict[str, Type]:
@@ -192,6 +218,37 @@ class PrimitiveInterface(IndividualType):
     @property
     def name(self) -> str:
         return self._name
+
+    def is_subtype_of(self, supertype: Type) -> bool:
+        if super().is_subtype_of(supertype):
+            return True
+        if isinstance(supertype, PrimitiveInterface):
+            if not self.is_related_to(supertype):
+                return False
+            if supertype._type_arguments is None:
+                return True
+            if self._type_arguments is None:
+                return False
+            # since the type arguments are just sequences of individual types,
+            # we can use the unifier
+            try:
+                unify([*self._type_arguments], [*supertype._type_arguments])
+            except TypeError:
+                return False
+            return True
+        return False
+
+    def is_related_to(self, other: 'PrimitiveInterface') -> bool:
+        return self._get_earliest_ancestor() is other._get_earliest_ancestor()
+
+    def _get_earliest_ancestor(self) -> 'PrimitiveInterface':
+        if self._parent is None:
+            return self
+        return self._parent._get_earliest_ancestor()
+
+    @property
+    def type_arguments(self) -> Sequence[IndividualType]:
+        return self._type_arguments
 
 
 class PrimitiveType(IndividualType):
@@ -237,6 +294,10 @@ class PrimitiveType(IndividualType):
             return self
         new_name = '{}[sub {}]'.format(self._name, id(sub))
         return PrimitiveType(new_name, new_supertypes, new_attributes)
+
+    @property
+    def supertypes(self) -> Sequence[Type]:
+        return self._supertypes
 
 
 class _Variable(Type, abc.ABC):
@@ -1040,7 +1101,27 @@ def unify_ind(
     t1 = inst(t1.to_for_all())
     t2 = inst(t2.to_for_all())
     Primitive = (PrimitiveType, PrimitiveInterface)
-    if isinstance(t1, Primitive) and isinstance(t2, Primitive):
+    if isinstance(t1, PrimitiveInterface) and isinstance(t2, PrimitiveInterface):
+        if not t1.is_related_to(t2):
+            raise TypeError('{} and {} are not derived from the same interface'.format(t1, t2))
+        if t2.type_arguments is None:
+            return Substitutions()
+        if t1.type_arguments is None:
+            raise TypeError('{} has no type arguments, but {} does'.format(t1, t2))
+        return unify([*t1.type_arguments], [*t2.type_arguments])
+    elif isinstance(t1, PrimitiveType) and isinstance(t2, PrimitiveInterface):
+        phi = Substitutions()
+        fail = True
+        for type in t1.supertypes:
+            try:
+                phi = unify_ind(type, t2)(phi)
+                fail = False
+            except TypeError:
+                pass
+        if fail:
+            raise TypeError('{} does not implement {}'.format(t1, t2))
+        return phi
+    elif isinstance(t1, Primitive) and isinstance(t2, PrimitiveType):
         if not t1.is_subtype_of(t2):
             raise TypeError(
                 'Primitive type {} cannot unify with primitive type {}'.format(

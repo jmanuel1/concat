@@ -77,7 +77,9 @@ class PrimitiveInterfaces:
     )
 
     subtractable = concat.level1.typecheck.PrimitiveInterface('subtractable')
-    concat.level1.typecheck.PrimitiveTypes.int.add_supertype(subtractable)
+    concat.level1.typecheck.PrimitiveTypes.int.add_supertype(
+        subtractable[concat.level1.typecheck.PrimitiveTypes.int],
+    )
 
 
 class _NoReturnType(concat.level1.typecheck.PrimitiveType):
