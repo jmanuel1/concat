@@ -35,7 +35,7 @@ def suite(
     # we don't generate level 0 import statements because the higher-level
     # visitors don't accept it
     stack, stash = init_stack, init_stash
-    count = draw(integers(min_value=0, max_value=25))
+    count = draw(integers(min_value=0, max_value=10))
     words_and_statements = []
     for _ in range(count):
         word_or_statement, stack, stash = draw(word(stack, stash))
