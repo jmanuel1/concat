@@ -51,14 +51,21 @@ class TypeError(StaticAnalysisError, builtins.TypeError):
 
 
 class NameError(StaticAnalysisError, builtins.NameError):
-    def __init__(self, name: concat.level0.parse.NameWordNode):
+    def __init__(
+        self,
+        name: Union[concat.level0.parse.NameWordNode, str],
+        location: Optional[concat.astutils.Location] = None,
+    ) -> None:
         super().__init__(name)
+        if isinstance(name, concat.level0.parse.NameWordNode):
+            name = name.value
+            self.location = name.location
         self._name = name
-        self.location = name.location
+        self.location = location or self.location
 
-    def __str__(self):
+    def __str__(self) -> str:
         return 'name "{}" not previously defined (error at {}:{})'.format(
-            self._name.value, *self.location
+            self._name, *self.location
         )
 
 

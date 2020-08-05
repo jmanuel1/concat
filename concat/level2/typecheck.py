@@ -263,13 +263,24 @@ def ast_to_type(ast: IndividualTypeNode, subs: concat.level1.typecheck.Substitut
     ...
 
 
+# TODO: Remove subs parameter, I don't use it
 def ast_to_type(ast: TypeNode, subs: concat.level1.typecheck.Substitutions, env: concat.level1.typecheck.Environment) -> Tuple[concat.level1.typecheck.IndividualType, concat.level1.typecheck.Environment]:
     if isinstance(ast, AttributeTypeNode):
         attr_type, new_env = ast_to_type(ast.type, subs, env)
         return concat.level1.typecheck.TypeWithAttribute(ast.name, attr_type), new_env
     elif isinstance(ast, NamedTypeNode):
-        # FIXME: We should look in the environment.
-        return getattr(concat.level1.typecheck.PrimitiveTypes, ast.name), env
+        type = getattr(PrimitiveInterfaces, ast.name, None)
+        type = getattr(PrimitiveTypes, ast.name, type)
+        type = getattr(
+            concat.level1.typecheck.PrimitiveInterfaces, ast.name, type
+        )
+        type = getattr(
+            concat.level1.typecheck.PrimitiveTypes, ast.name, type
+        )
+        type = env.get(ast.name, type)
+        if type is None:
+            raise concat.level1.typecheck.NameError(ast.name, ast.location)
+        return type, env
     elif isinstance(ast, StackEffectTypeNode):
         a_bar = concat.level1.typecheck.SequenceVariable()
         b_bar = a_bar
