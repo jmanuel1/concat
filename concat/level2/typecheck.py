@@ -198,6 +198,31 @@ def infer(
             env[components[0]] = subs(
                 _generate_module_type(components, source_dir=source_dir))
         return subs, concat.level1.typecheck.StackEffect(input, output)
+    elif isinstance(program[-1], concat.level1.parse.SubscriptionWordNode):
+        # TODO: This should be a call.
+        # FIXME: The object being indexed is not popped before computing the
+        # index.
+        seq_var = concat.level1.typecheck.SequenceVariable()
+        index_type_var = concat.level1.typecheck.IndividualVariable()
+        result_type_var = concat.level1.typecheck.IndividualVariable()
+        subscriptable_interface = PrimitiveInterfaces.subscriptable[index_type_var, result_type_var]
+        subs_2 = concat.level1.typecheck.unify(
+            list(output), [seq_var, subscriptable_interface])
+        index_subs, (index_input, index_output) = concat.level1.typecheck.infer(
+            subs_2(subs(env)), program[-1].children)
+        subs_3 = concat.level1.typecheck.unify(
+            subs_2(subs([seq_var])), subs_2(subs(index_input)))
+        seq_var_2 = concat.level1.typecheck.SequenceVariable()
+
+        # HACK: Here, we're going to assume that the result of a subscription
+        # is a string. We also assume that we use integers for indices.
+        index_types = [seq_var_2, index_type_var]
+        result_types = [seq_var_2, result_type_var]
+
+        final_subs = concat.level1.typecheck.unify(
+            subs_3(subs_2(subs(index_output))), subs_3(subs_2(subs([*index_types]))))
+        final_subs = final_subs(subs_3(subs_2(subs)))
+        return final_subs, final_subs(concat.level1.typecheck.StackEffect(input, result_types))
     elif isinstance(program[-1], concat.level1.parse.FuncdefStatementNode):
         S = subs
         f = concat.level1.typecheck.StackEffect(input, output)
