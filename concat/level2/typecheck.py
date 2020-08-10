@@ -72,10 +72,12 @@ class IntersectionTypeNode(IndividualTypeNode):
 
 
 class PrimitiveInterfaces:
-    subscriptable = concat.level1.typecheck.TypeWithAttribute(
+    __index_type_var = concat.level1.typecheck.IndividualVariable()
+    __result_type_var = concat.level1.typecheck.IndividualVariable()
+    subscriptable = concat.level1.typecheck.ForAll([__index_type_var, __result_type_var], concat.level1.typecheck.TypeWithAttribute(
         '__getitem__',
-        concat.level1.typecheck.PrimitiveTypes.py_function,
-    )
+        concat.level1.typecheck.PrimitiveTypes.py_function[__index_type_var, __result_type_var],
+    ))
 
     subtractable = concat.level1.typecheck.PrimitiveInterface('subtractable')
     concat.level1.typecheck.PrimitiveTypes.int.add_supertype(
@@ -232,15 +234,28 @@ def infer(
         return S, f
     elif isinstance(program[-1], concat.level0.parse.PushWordNode):
         child = program[-1].children[0]
-        rest = concat.level1.typecheck.SequenceVariable()
+        rest_var = concat.level1.typecheck.SequenceVariable()
         # special case for subscription words
         if isinstance(child, concat.level1.parse.SubscriptionWordNode):
             S2, (i2, o2) = concat.level1.typecheck.infer(
-                subs(env), child.children)
+                subs(env), child.children, extensions=extensions)
             phi1 = concat.level1.typecheck.unify(S2(output), subs(i2))
-            phi2 = concat.level1.typecheck.unify(
-                phi1(subs(o2)), [rest, PrimitiveInterfaces.subscriptable, concat.level1.typecheck.PrimitiveTypes.int])
-            return phi2(phi1(S2(subs))), phi2(phi1(S2(subs((concat.level1.typecheck.StackEffect(input, [rest, concat.level1.typecheck.PrimitiveTypes.str]))))))
+            # FIXME: Should be generic
+            subscriptable_interface = PrimitiveInterfaces.subscriptable[
+                concat.level1.typecheck.PrimitiveTypes.int,
+                concat.level1.typecheck.PrimitiveTypes.str,
+            ]
+            expected_o2 = [
+                rest_var,
+                subscriptable_interface,
+                concat.level1.typecheck.PrimitiveTypes.int,
+            ]
+            phi2 = concat.level1.typecheck.unify(phi1(subs(o2)), expected_o2)
+            effect = phi2(phi1(S2(subs((concat.level1.typecheck.StackEffect(
+                input,
+                [rest_var, concat.level1.typecheck.PrimitiveTypes.str],
+            ))))))
+            return phi2(phi1(S2(subs))), effect
         else:
             raise NotImplementedError(child)
     else:
