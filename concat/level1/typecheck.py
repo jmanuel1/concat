@@ -272,7 +272,9 @@ class PrimitiveType(IndividualType):
         self._type_parameters = type_parameters
         self._type_arguments: Optional[Sequence[IndividualType]] = None
         self._parent: Optional[PrimitiveType] = None
-        self._type_argument_cache: Dict[Sequence[IndividualType], PrimitiveType] = {}
+        self._type_argument_cache: Dict[
+            Sequence[IndividualType], PrimitiveType
+        ] = {}
 
     def is_subtype_of(self, supertype: Type) -> bool:
         return super().is_subtype_of(supertype) or any(
@@ -288,7 +290,11 @@ class PrimitiveType(IndividualType):
         if not isinstance(types, collections.abc.Sequence):
             types = (types,)
         if len(types) != len(self._type_parameters):
-            raise TypeError('type argument mismatch: {} takes {} type arguments, given {}'.format(self, len(self._type_parameters), len(types)))
+            raise TypeError(
+                'type argument mismatch: {} takes {} type arguments, given {}'.format(
+                    self, len(self._type_parameters), len(types)
+                )
+            )
         if types in self._type_argument_cache:
             return self._type_argument_cache[types]
         sub = Substitutions(zip(self._type_parameters, types))
@@ -303,7 +309,9 @@ class PrimitiveType(IndividualType):
     def __str__(self) -> str:
         type_arguments_str = ''
         if self._type_arguments is not None:
-            type_arguments_str = '[{}]'.format(', '.join(str(arg) for arg in self._type_arguments))
+            type_arguments_str = '[{}]'.format(
+                ', '.join(str(arg) for arg in self._type_arguments)
+            )
         return self._name + type_arguments_str
 
     def add_attribute(self, attribute: str, type: 'IndividualType') -> None:
@@ -407,15 +415,38 @@ class ForAll(Type):
     def to_for_all(self) -> 'ForAll':
         return self
 
-    def __getitem__(self, type_arguments: Sequence[Union['StackItemType', Sequence['StackItemType']]]) -> IndividualType:
+    def __getitem__(
+        self,
+        type_arguments: Sequence[
+            Union['StackItemType', Sequence['StackItemType']]
+        ],
+    ) -> IndividualType:
         sub = Substitutions()
         if len(type_arguments) != len(self.quantified_variables):
-            raise TypeError('type argument mismatch in forall type: arguments are {!r}, quantified variables are {!r}'.format(type_arguments, self.quantified_variables))
-        for argument, variable in zip(type_arguments, self.quantified_variables):
-            if isinstance(variable, IndividualVariable) and not isinstance(argument, IndividualType):
-                raise TypeError('type argument mismatch in forall type: expected individual type for {!r}, got {!r}'.format(variable, argument))
-            if isinstance(variable, SequenceVariable) and not isinstance(argument, (SequenceVariable, collections.abc.Sequence)):
-                raise TypeError('type argument mismatch in forall type: expected sequence type for {!r}, got {!r}'.format(variable, argument))
+            raise TypeError(
+                'type argument mismatch in forall type: arguments are {!r}, quantified variables are {!r}'.format(
+                    type_arguments, self.quantified_variables
+                )
+            )
+        for argument, variable in zip(
+            type_arguments, self.quantified_variables
+        ):
+            if isinstance(variable, IndividualVariable) and not isinstance(
+                argument, IndividualType
+            ):
+                raise TypeError(
+                    'type argument mismatch in forall type: expected individual type for {!r}, got {!r}'.format(
+                        variable, argument
+                    )
+                )
+            if isinstance(variable, SequenceVariable) and not isinstance(
+                argument, (SequenceVariable, collections.abc.Sequence)
+            ):
+                raise TypeError(
+                    'type argument mismatch in forall type: expected sequence type for {!r}, got {!r}'.format(
+                        variable, argument
+                    )
+                )
             sub[variable] = argument
         return sub(self.type)
 
@@ -424,6 +455,16 @@ class ForAll(Type):
         string += ' '.join(map(str, self.quantified_variables))
         string += '. {}'.format(self.type)
         return string
+
+    def __and__(self, other: object) -> 'ForAll':
+        if not isinstance(other, ForAll):
+            return NotImplemented
+        # TODO: Make variables unique
+        # FIXME: This could inadvertently capture free variables in either operand
+        return ForAll(
+            self.quantified_variables + other.quantified_variables,
+            self.type & other.type,
+        )
 
     def apply_substitution(self, sub: 'Substitutions') -> 'ForAll':
         return ForAll(
@@ -652,7 +693,9 @@ class Substitutions(Dict[_Variable, Union[Type, List['StackItemType']]]):
         ...
 
     @overload
-    def __call__(self, arg: Sequence['StackItemType']) -> List['StackItemType']:
+    def __call__(
+        self, arg: Sequence['StackItemType']
+    ) -> List['StackItemType']:
         ...
 
     @overload
@@ -696,16 +739,32 @@ class Substitutions(Dict[_Variable, Union[Type, List['StackItemType']]]):
 
 _arg_type_var = IndividualVariable()
 _return_type_var = IndividualVariable()
-PrimitiveTypes.py_function = PrimitiveType('py_function', (), {}, [_arg_type_var, _return_type_var])
+PrimitiveTypes.py_function = PrimitiveType(
+    'py_function', (), {}, [_arg_type_var, _return_type_var]
+)
 
-PrimitiveTypes.str.add_attribute('__getitem__', PrimitiveTypes.py_function[PrimitiveTypes.int, PrimitiveTypes.str])
+PrimitiveTypes.str.add_attribute(
+    '__getitem__',
+    PrimitiveTypes.py_function[PrimitiveTypes.int, PrimitiveTypes.str],
+)
 
 PrimitiveTypes.file = PrimitiveType(
-    'file', (), {'seek': PrimitiveTypes.py_function, 'read': PrimitiveTypes.py_function}
+    'file',
+    (),
+    {'seek': PrimitiveTypes.py_function, 'read': PrimitiveTypes.py_function},
 )
 
 _element_type_var = IndividualVariable()
-PrimitiveTypes.list = PrimitiveType('list', (), {'__getitem__': PrimitiveTypes.py_function[PrimitiveTypes.int, _element_type_var]}, [_element_type_var])
+PrimitiveTypes.list = PrimitiveType(
+    'list',
+    (),
+    {
+        '__getitem__': PrimitiveTypes.py_function[
+            PrimitiveTypes.int, _element_type_var
+        ]
+    },
+    [_element_type_var],
+)
 
 
 class PrimitiveInterfaces:
@@ -811,7 +870,7 @@ def infer(
     e: 'concat.astutils.WordsOrStatements',
     extensions: Optional[Tuple[_InferFunction]] = None,
     is_top_level=False,
-    source_dir='.'
+    source_dir='.',
 ) -> Tuple[Substitutions, _Function]:
     """The infer function described by Kleffner."""
     e = list(e)
@@ -922,7 +981,10 @@ def infer(
                     )
                 else:
                     S2, (i2, o2) = infer(
-                        S1(gamma), node.children, extensions=extensions, source_dir=source_dir
+                        S1(gamma),
+                        node.children,
+                        extensions=extensions,
+                        source_dir=source_dir,
                     )
                     current_subs, current_effect = (
                         S2(S1),
@@ -931,7 +993,10 @@ def infer(
             elif isinstance(node, concat.level0.parse.QuoteWordNode):
                 quotation = cast(concat.level0.parse.QuoteWordNode, node)
                 S1, (i1, o1) = infer(
-                    gamma, [*quotation.children], extensions=extensions, source_dir=source_dir
+                    gamma,
+                    [*quotation.children],
+                    extensions=extensions,
+                    source_dir=source_dir,
                 )
                 phi = unify(S1(o), i1)
                 current_subs, current_effect = (
@@ -970,7 +1035,10 @@ def infer(
                 collected_type = o
                 for key, value in node.dict_children:
                     phi1, (i1, o1) = infer(
-                        phi(gamma), key, extensions=extensions, source_dir=source_dir
+                        phi(gamma),
+                        key,
+                        extensions=extensions,
+                        source_dir=source_dir,
                     )
                     R1 = unify(phi1(collected_type), list(i1))
                     phi = R1(phi1(phi))
@@ -982,7 +1050,10 @@ def infer(
                     ) = drop_last_from_type_seq(collected_type)
                     phi = collected_type_sub(phi)
                     phi2, (i2, o2) = infer(
-                        phi(gamma), value, extensions=extensions, source_dir=source_dir
+                        phi(gamma),
+                        value,
+                        extensions=extensions,
+                        source_dir=source_dir,
                     )
                     R2 = unify(phi2(collected_type), list(i2))
                     phi = R2(phi2(phi))
@@ -1002,7 +1073,10 @@ def infer(
                 collected_type = o
                 for item in node.list_children:
                     phi1, (i1, o1) = infer(
-                        phi(gamma), item, extensions=extensions, source_dir=source_dir
+                        phi(gamma),
+                        item,
+                        extensions=extensions,
+                        source_dir=source_dir,
                     )
                     R1 = unify(phi1(phi(collected_type)), list(i1))
                     collected_type = R1(phi1(phi(o1)))
@@ -1159,13 +1233,21 @@ def unify_ind(
     t1 = inst(t1.to_for_all())
     t2 = inst(t2.to_for_all())
     Primitive = (PrimitiveType, PrimitiveInterface)
-    if isinstance(t1, PrimitiveInterface) and isinstance(t2, PrimitiveInterface):
+    if isinstance(t1, PrimitiveInterface) and isinstance(
+        t2, PrimitiveInterface
+    ):
         if not t1.is_related_to(t2):
-            raise TypeError('{} and {} are not derived from the same interface'.format(t1, t2))
+            raise TypeError(
+                '{} and {} are not derived from the same interface'.format(
+                    t1, t2
+                )
+            )
         if t2.type_arguments is None:
             return Substitutions()
         if t1.type_arguments is None:
-            raise TypeError('{} has no type arguments, but {} does'.format(t1, t2))
+            raise TypeError(
+                '{} has no type arguments, but {} does'.format(t1, t2)
+            )
         return unify([*t1.type_arguments], [*t2.type_arguments])
     elif isinstance(t1, PrimitiveType) and isinstance(t2, PrimitiveInterface):
         phi = Substitutions()
