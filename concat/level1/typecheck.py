@@ -121,10 +121,16 @@ class IndividualType(Type, abc.ABC):
         return ForAll([], self)
 
     def __and__(self, other: object) -> '_IntersectionType':
-        if not isinstance(self, IndividualType) or not isinstance(
+        if not isinstance(
             other, IndividualType
         ):
             return NotImplemented
+        elif self is PrimitiveTypes.object:
+            return other
+        elif other is PrimitiveTypes.object:
+            return self
+        # XXX: Think about this... perhaps recursively by cases
+        # elif isinstance(self, _Function) and isinstance(self, _Function):
         return _IntersectionType(self, other)
 
 
