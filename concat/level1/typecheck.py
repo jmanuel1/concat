@@ -945,8 +945,8 @@ def infer(
                     type_of_name = inst(S(gamma)[node.value].to_for_all())
                     if not isinstance(type_of_name, _Function):
                         raise NotImplementedError(
-                            'name {} of type {}'.format(
-                                node.value, type_of_name
+                            'name {} of type {} (repr {!r})'.format(
+                                node.value, type_of_name, type_of_name
                             )
                         )
                     i2, o2 = type_of_name
