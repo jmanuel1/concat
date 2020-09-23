@@ -131,6 +131,13 @@ class IndividualType(Type, abc.ABC):
             return self
         return _IntersectionType(self, other)
 
+    def is_subtype_of(self, supertype: Type) -> bool:
+        if isinstance(supertype, PrimitiveType) and supertype.parent is PrimitiveTypes.optional:
+            if self is PrimitiveTypes.none or not supertype.type_arguments or self.is_subtype_of(supertype.type_arguments[0]):
+                return True
+            return False
+        return super().is_subtype_of(supertype)
+
 
 @dataclasses.dataclass
 class _IntersectionType(IndividualType):
@@ -343,6 +350,14 @@ class PrimitiveType(IndividualType):
     @property
     def supertypes(self) -> Sequence[Type]:
         return self._supertypes
+
+    @property
+    def parent(self) -> 'PrimitiveType':
+        return self._parent
+
+    @property
+    def type_arguments(self) -> Optional[Sequence[IndividualType]]:
+        return self._type_arguments
 
 
 class _Variable(Type, abc.ABC):
@@ -652,6 +667,8 @@ class PrimitiveTypes:
     list: PrimitiveType
     str = PrimitiveType('str')
     py_function: PrimitiveType
+    none = PrimitiveType('None')
+    optional: PrimitiveType
 
 
 class Substitutions(Dict[_Variable, Union[Type, List['StackItemType']]]):
@@ -777,6 +794,9 @@ PrimitiveTypes.list = PrimitiveType(
     },
     [_element_type_var],
 )
+
+_of_type_var = IndividualVariable()
+PrimitiveTypes.optional = PrimitiveType('Optional', type_parameters=[_of_type_var])
 
 
 class PrimitiveInterfaces:

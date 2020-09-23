@@ -150,7 +150,6 @@ class _NoReturnType(concat.level1.typecheck.PrimitiveType):
 
 
 class PrimitiveTypes:
-    none = concat.level1.typecheck.PrimitiveType('None')
     ellipsis = concat.level1.typecheck.PrimitiveType('Ellipsis')
     not_implemented = concat.level1.typecheck.PrimitiveType('NotImplemented')
     tuple = concat.level1.typecheck.PrimitiveType(
