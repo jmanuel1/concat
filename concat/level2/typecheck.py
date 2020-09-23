@@ -3,8 +3,9 @@ import concat.level0.lex
 import concat.level0.parse
 import concat.level1.typecheck
 import concat.level1.parse
+import concat.level1.operators
 import concat.level2.parse
-from typing import Tuple, Generator, Sequence, Optional, Union, overload, cast
+from typing import Tuple, Generator, Sequence, Optional, Union, cast
 from typing_extensions import Literal
 import dataclasses
 import abc
@@ -16,6 +17,10 @@ import parsy
 @dataclasses.dataclass
 class TypeNode(concat.level0.parse.Node, abc.ABC):
     location: concat.astutils.Location
+
+    @abc.abstractmethod
+    def to_type(self, env: concat.level1.typecheck.Environment) -> Tuple[concat.level1.typecheck.Type, concat.level1.typecheck.Environment]:
+        pass
 
 
 class IndividualTypeNode(TypeNode, abc.ABC):
@@ -32,6 +37,10 @@ class AttributeTypeNode(IndividualTypeNode):
         self.name = name
         self.type = type
 
+    def to_type(self, env: concat.level1.typecheck.Environment) -> Tuple[concat.level1.typecheck.IndividualType, concat.level1.typecheck.Environment]:
+        attr_type, new_env = self.type.to_type(env)
+        return concat.level1.typecheck.TypeWithAttribute(self.name, attr_type), new_env
+
 
 class NamedTypeNode(IndividualTypeNode):
     def __init__(self, location: concat.astutils.Location, name: str) -> None:
@@ -40,6 +49,20 @@ class NamedTypeNode(IndividualTypeNode):
 
     def __repr__(self) -> str:
         return '{}({!r}, {!r})'.format(type(self).__qualname__, self.location, self.name)
+
+    def to_type(self, env: concat.level1.typecheck.Environment) -> Tuple[concat.level1.typecheck.IndividualType, concat.level1.typecheck.Environment]:
+        type = getattr(PrimitiveInterfaces, self.name, None)
+        type = getattr(PrimitiveTypes, self.name, type)
+        type = getattr(
+            concat.level1.typecheck.PrimitiveInterfaces, self.name, type
+        )
+        type = getattr(
+            concat.level1.typecheck.PrimitiveTypes, self.name, type
+        )
+        type = env.get(self.name, type)
+        if type is None:
+            raise concat.level1.typecheck.NameError(self.name, self.location)
+        return type, env
 
 
 class StackEffectTypeNode(IndividualTypeNode):
@@ -63,12 +86,45 @@ class StackEffectTypeNode(IndividualTypeNode):
             self.location,
         )
 
+    def to_type(self, env: concat.level1.typecheck.Environment) -> Tuple[concat.level1.typecheck.IndividualType, concat.level1.typecheck.Environment]:
+        a_bar = concat.level1.typecheck.SequenceVariable()
+        b_bar = a_bar
+        new_env = env.copy()
+        if self.input_sequence_variable is not None:
+            if self.input_sequence_variable in env:
+                a_bar = cast(concat.level1.typecheck.SequenceVariable,
+                             env[self.input_sequence_variable])
+            new_env[self.input_sequence_variable] = a_bar
+        if self.output_sequence_variable is not None:
+            if self.output_sequence_variable in env:
+                b_bar = cast(concat.level1.typecheck.SequenceVariable,
+                             env[self.output_sequence_variable])
+            else:
+                b_bar = concat.level1.typecheck.SequenceVariable()
+                new_env[self.output_sequence_variable] = b_bar
+
+        in_types = []
+        for item in self.input:
+            type, new_env = _ensure_type(item[1], new_env, item[0])
+            in_types.append(type)
+        out_types = []
+        for item in self.output:
+            type, new_env = _ensure_type(item[1], new_env, item[0])
+            out_types.append(type)
+
+        return concat.level1.typecheck.StackEffect([a_bar, *in_types], [b_bar, *out_types]), new_env
+
 
 class IntersectionTypeNode(IndividualTypeNode):
     def __init__(self, location: concat.astutils.Location, type_1: IndividualTypeNode, type_2: IndividualTypeNode):
         super().__init__(location)
         self.type_1 = type_1
         self.type_2 = type_2
+
+    def to_type(self, env: concat.level1.typecheck.Environment) -> Tuple[concat.level1.typecheck.IndividualType, concat.level1.typecheck.Environment]:
+        type_1, new_env = self.type_1.to_type(env)
+        type_2, newer_env = self.type_2.to_type(new_env)
+        return type_1 & type_2, newer_env
 
 
 class PrimitiveInterfaces:
@@ -160,7 +216,7 @@ def infer(
 ) -> Tuple[concat.level1.typecheck.Substitutions, concat.level1.typecheck.StackEffect]:
     subs, (input, output) = previous
     if isinstance(program[-1], concat.level2.parse.CastWordNode):
-        new_type, _ = ast_to_type(program[-1].type, subs, env)
+        new_type, _ = program[-1].type.to_type(env)
         rest, subs_2 = concat.level1.typecheck.drop_last_from_type_seq(
             list(output))
         effect = subs_2(
@@ -227,8 +283,7 @@ def infer(
         name = program[-1].name
         declared_type: Optional[concat.level1.typecheck.StackEffect]
         if program[-1].stack_effect:
-            declared_type, env_with_types = ast_to_type(
-                program[-1].stack_effect, S, S(env))
+            declared_type, env_with_types = program[-1].stack_effect.to_type(S(env))
         else:
             declared_type = None
             env_with_types = env.copy()
@@ -285,86 +340,21 @@ def infer(
         raise NotImplementedError
 
 
-# TODO: Make this a type node method?
-@overload
-def ast_to_type(ast: AttributeTypeNode, subs: concat.level1.typecheck.Substitutions, env: concat.level1.typecheck.Environment) -> Tuple[concat.level1.typecheck.TypeWithAttribute, concat.level1.typecheck.Environment]:
-    ...
-
-
-@overload
-def ast_to_type(ast: StackEffectTypeNode, subs: concat.level1.typecheck.Substitutions, env: concat.level1.typecheck.Environment) -> Tuple[concat.level1.typecheck.StackEffect, concat.level1.typecheck.Environment]:
-    ...
-
-
-@overload
-def ast_to_type(ast: IndividualTypeNode, subs: concat.level1.typecheck.Substitutions, env: concat.level1.typecheck.Environment) -> Tuple[concat.level1.typecheck.IndividualType, concat.level1.typecheck.Environment]:
-    ...
-
-
-# TODO: Remove subs parameter, I don't use it
-def ast_to_type(ast: TypeNode, subs: concat.level1.typecheck.Substitutions, env: concat.level1.typecheck.Environment) -> Tuple[concat.level1.typecheck.IndividualType, concat.level1.typecheck.Environment]:
-    if isinstance(ast, AttributeTypeNode):
-        attr_type, new_env = ast_to_type(ast.type, subs, env)
-        return concat.level1.typecheck.TypeWithAttribute(ast.name, attr_type), new_env
-    elif isinstance(ast, NamedTypeNode):
-        type = getattr(PrimitiveInterfaces, ast.name, None)
-        type = getattr(PrimitiveTypes, ast.name, type)
-        type = getattr(
-            concat.level1.typecheck.PrimitiveInterfaces, ast.name, type
-        )
-        type = getattr(
-            concat.level1.typecheck.PrimitiveTypes, ast.name, type
-        )
-        type = env.get(ast.name, type)
-        if type is None:
-            raise concat.level1.typecheck.NameError(ast.name, ast.location)
-        return type, env
-    elif isinstance(ast, StackEffectTypeNode):
-        a_bar = concat.level1.typecheck.SequenceVariable()
-        b_bar = a_bar
-        new_env = env.copy()
-        if ast.input_sequence_variable is not None:
-            if ast.input_sequence_variable in env:
-                a_bar = cast(concat.level1.typecheck.SequenceVariable,
-                             env[ast.input_sequence_variable])
-            new_env[ast.input_sequence_variable] = a_bar
-        if ast.output_sequence_variable is not None:
-            if ast.output_sequence_variable in env:
-                b_bar = cast(concat.level1.typecheck.SequenceVariable,
-                             env[ast.output_sequence_variable])
-            else:
-                b_bar = concat.level1.typecheck.SequenceVariable()
-                new_env[ast.output_sequence_variable] = b_bar
-
-        in_types = [_ensure_type(item[1], env, item[0]) for item in ast.input]
-        out_types = [_ensure_type(item[1], env, item[0]) for item in ast.output]
-        return concat.level1.typecheck.StackEffect([a_bar, *in_types], [b_bar, *out_types]), new_env
-    elif isinstance(ast, IntersectionTypeNode):
-        type_1, new_env = ast_to_type(ast.type_1, subs, env)
-        type_2, newer_env = ast_to_type(ast.type_2, subs, new_env)
-        return type_1 & type_2, newer_env
-    else:
-        raise NotImplementedError(ast)
-
-
 def _ensure_type(
     typename: Union[Optional[NamedTypeNode], StackEffectTypeNode],
     env: concat.level1.typecheck.Environment,
     obj_name: str
-) -> concat.level1.typecheck.StackItemType:
+) -> Tuple[concat.level1.typecheck.StackItemType, concat.level1.typecheck.Environment]:
     type: concat.level1.typecheck.StackItemType
     if obj_name in env:
         type = cast(concat.level1.typecheck.StackItemType, env[obj_name])
     elif typename is None:
-        # REVIEW: If this is the output side of the stack effect, we should
-        # default to object. Otherwise, we can end up with sn unbound type
-        # variable which will be bound to the first type it's used as. That
-        # could lead to some suprising behavior. (???)
+        # NOTE: This could lead type varibles in the output of a function that
+        # are unconstrained. In other words, it would basically become an Any
+        # type.
         type = concat.level1.typecheck.IndividualVariable()
     elif isinstance(typename, StackEffectTypeNode):
-        # FIXME: Don't discard new env
-        type, _ = ast_to_type(
-            typename, concat.level1.typecheck.Substitutions(), env)
+        type, env = typename.to_type(env)
     else:
         try:
             type = getattr(
@@ -372,7 +362,7 @@ def _ensure_type(
         except AttributeError:
             type = getattr(PrimitiveTypes, typename.name)
     env[obj_name] = type
-    return type
+    return type, env
 
 
 # Parsing type annotations
