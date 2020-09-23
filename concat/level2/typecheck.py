@@ -214,8 +214,6 @@ def infer(
             subs_2(subs([seq_var])), subs_2(subs(index_input)))
         seq_var_2 = concat.level1.typecheck.SequenceVariable()
 
-        # HACK: Here, we're going to assume that the result of a subscription
-        # is a string. We also assume that we use integers for indices.
         index_types = [seq_var_2, index_type_var]
         result_types = [seq_var_2, result_type_var]
 
