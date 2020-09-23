@@ -129,8 +129,6 @@ class IndividualType(Type, abc.ABC):
             return other
         elif other is PrimitiveTypes.object:
             return self
-        # XXX: Think about this... perhaps recursively by cases
-        # elif isinstance(self, _Function) and isinstance(self, _Function):
         return _IntersectionType(self, other)
 
 
@@ -533,11 +531,12 @@ class _Function(IndividualType):
             [*self.input, *self.output], [*other.input, *other.output]
         )
         for type1, type2 in type_pairs:
-            # FIXME: Check bounds of individual type variables
             if isinstance(type1, IndividualVariable) and isinstance(
                 type2, IndividualVariable
             ):
-                subs[type2] = type1
+                # FIXME: This equality check should include alpha equivalence.
+                if type1.bound == type2.bound:
+                    subs[type2] = type1
             elif isinstance(type1, SequenceVariable) and isinstance(
                 type2, SequenceVariable
             ):
@@ -626,6 +625,13 @@ class _Function(IndividualType):
         in_types = ' '.join(map(str, self.input))
         out_types = ' '.join(map(str, self.output))
         return '({} -- {})'.format(in_types, out_types)
+
+    def __and__(self, other: IndividualType) -> IndividualType:
+        if isinstance(other, _Function):
+            input = _intersect_sequences(self.input, other.input)
+            output = _intersect_sequences(self.output, other.output)
+            return _Function(input, output)
+        return super().__and__(other)
 
     def get_type_of_attribute(self, name: str) -> '_Function':
         if name == '__call__':
@@ -821,6 +827,17 @@ class Environment(Dict[str, Type]):
 
     def apply_substitution(self, sub: 'Substitutions') -> 'Environment':
         return Environment({name: sub(t) for name, t in self.items()})
+
+
+def _intersect_sequences(seq1: Sequence['StackItemType'], seq2: Sequence['StackItemType']) -> Sequence['StackItemType']:
+    if seq1 and isinstance(seq1[-1], SequenceVariable):
+        return seq2
+    elif seq2 and isinstance(seq2[-1], SequenceVariable):
+        return seq1
+    elif not seq1 and not seq2:
+        return ()
+    else:
+        return (*_intersect_sequences(seq1[:-1], seq2[:-1]), seq1[-1] & seq2[-1])
 
 
 _InferFunction = Callable[
