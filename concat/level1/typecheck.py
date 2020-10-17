@@ -121,9 +121,7 @@ class IndividualType(Type, abc.ABC):
         return ForAll([], self)
 
     def __and__(self, other: object) -> '_IntersectionType':
-        if not isinstance(
-            other, IndividualType
-        ):
+        if not isinstance(other, IndividualType):
             return NotImplemented
         elif self is PrimitiveTypes.object:
             return other
@@ -132,8 +130,15 @@ class IndividualType(Type, abc.ABC):
         return _IntersectionType(self, other)
 
     def is_subtype_of(self, supertype: Type) -> bool:
-        if isinstance(supertype, PrimitiveType) and supertype.parent is PrimitiveTypes.optional:
-            if self is PrimitiveTypes.none or not supertype.type_arguments or self.is_subtype_of(supertype.type_arguments[0]):
+        if (
+            isinstance(supertype, PrimitiveType)
+            and supertype.parent is PrimitiveTypes.optional
+        ):
+            if (
+                self is PrimitiveTypes.none
+                or not supertype.type_arguments
+                or self.is_subtype_of(supertype.type_arguments[0])
+            ):
                 return True
             return False
         return super().is_subtype_of(supertype)
@@ -796,7 +801,9 @@ PrimitiveTypes.list = PrimitiveType(
 )
 
 _of_type_var = IndividualVariable()
-PrimitiveTypes.optional = PrimitiveType('Optional', type_parameters=[_of_type_var])
+PrimitiveTypes.optional = PrimitiveType(
+    'Optional', type_parameters=[_of_type_var]
+)
 
 
 class PrimitiveInterfaces:
@@ -849,7 +856,9 @@ class Environment(Dict[str, Type]):
         return Environment({name: sub(t) for name, t in self.items()})
 
 
-def _intersect_sequences(seq1: Sequence['StackItemType'], seq2: Sequence['StackItemType']) -> Sequence['StackItemType']:
+def _intersect_sequences(
+    seq1: Sequence['StackItemType'], seq2: Sequence['StackItemType']
+) -> Sequence['StackItemType']:
     if seq1 and isinstance(seq1[-1], SequenceVariable):
         return seq2
     elif seq2 and isinstance(seq2[-1], SequenceVariable):
@@ -857,7 +866,10 @@ def _intersect_sequences(seq1: Sequence['StackItemType'], seq2: Sequence['StackI
     elif not seq1 and not seq2:
         return ()
     else:
-        return (*_intersect_sequences(seq1[:-1], seq2[:-1]), seq1[-1] & seq2[-1])
+        return (
+            *_intersect_sequences(seq1[:-1], seq2[:-1]),
+            seq1[-1] & seq2[-1],
+        )
 
 
 _InferFunction = Callable[
@@ -1169,6 +1181,7 @@ def infer(
                 )
             else:
                 fail = True
+                original_error = None
                 for extension in extensions or []:
                     try:
                         kwargs = dict(
@@ -1183,12 +1196,12 @@ def infer(
                         )
                         fail = False
                         break
-                    except NotImplementedError:
-                        pass
+                    except NotImplementedError as e:
+                        original_error = e
                 if fail:
                     raise NotImplementedError(
                         "don't know how to handle '{}'".format(node)
-                    )
+                    ) from original_error
         except TypeError as e:
             e.set_location_if_missing(node.location)
             raise
