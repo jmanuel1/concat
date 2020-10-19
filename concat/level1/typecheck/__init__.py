@@ -104,12 +104,17 @@ class Type(abc.ABC):
             )
         return False
 
+    __le__ = is_subtype_of
+
     def get_type_of_attribute(self, name: str) -> 'IndividualType':
         raise AttributeError(self, name)
 
     @abc.abstractmethod
     def apply_substitution(self, _: 'Substitutions') -> 'Type':
         pass
+
+
+
 
 
 class IndividualType(Type, abc.ABC):
