@@ -3,6 +3,15 @@ import concat.level0.parse
 import concat.level1.parse
 import concat.level1.typecheck
 import unittest
+from hypothesis import given, assume
+from hypothesis.strategies import (
+    composite,
+    from_type,
+    integers,
+    text,
+    one_of,
+    sampled_from,
+)
 from typing import cast
 
 
@@ -86,6 +95,14 @@ class TestTypeChecker(unittest.TestCase):
         concat.level1.typecheck.infer(
             concat.level1.typecheck.Environment(), tree.children)
 
+    @given(from_type(concat.level0.parse.AttributeWordNode))
+    def test_attribute_word(self, attr_word) -> None:
+        _, type = concat.level1.typecheck.infer(
+            concat.level1.typecheck.Environment(), [attr_word]
+        )
+        type = type.collapse_bounds()
+        attr_type = cast(concat.level1.typecheck.TypeWithAttribute, type.input[-1])
+        self.assertEqual(attr_type.attribute, attr_word.value)
 
 class TestDiagnosticInfo(unittest.TestCase):
 

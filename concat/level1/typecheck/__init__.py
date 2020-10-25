@@ -148,6 +148,10 @@ class IndividualType(Type, abc.ABC):
             return False
         return super().is_subtype_of(supertype)
 
+    @abc.abstractmethod
+    def collapse_bounds(self) -> 'IndividualType':
+        pass
+
 
 @dataclasses.dataclass
 class _IntersectionType(IndividualType):
@@ -181,6 +185,9 @@ class _IntersectionType(IndividualType):
 
     def apply_substitution(self, sub: 'Substitutions') -> '_IntersectionType':
         return sub(self.type_1) & sub(self.type_2)
+
+    def collapse_bounds(self) -> '_IntersectionType':
+        return self.type_1.collapse_bounds() & self.type_2.collapse_bounds()
 
 
 class PrimitiveInterface(IndividualType):
@@ -237,6 +244,16 @@ class PrimitiveInterface(IndividualType):
         new_type_arguments = sub(self._type_arguments)
         new_interface = PrimitiveInterface(new_name, new_attributes)
         new_interface._type_arguments = new_type_arguments
+        return new_interface
+
+    def collapse_bounds(self) -> 'PrimitiveInterface':
+        new_attributes = {
+            name: type.collapse_bounds() for name, type in self._attributes.items()
+        }
+        if new_attributes == self._attributes:
+            return self
+        new_interface = PrimitiveInterface(self.name, new_attributes)
+        new_interface._type_arguments = self._type_arguments
         return new_interface
 
     @property
@@ -357,6 +374,18 @@ class PrimitiveType(IndividualType):
         new_name = '{}[sub {}]'.format(self._name, id(sub))
         return PrimitiveType(new_name, new_supertypes, new_attributes)
 
+    def collapse_bounds(self) -> 'PrimitiveType':
+        new_attributes = {
+            name: type.collapse_bounds() for name, type in self._attributes.items()
+        }
+        new_supertypes = tuple(type.collapse_bounds() for type in self._supertypes)
+        if (
+            new_attributes == self._attributes
+            and new_supertypes == self._supertypes
+        ):
+            return self
+        return PrimitiveType(self.name, new_supertypes, new_attributes)
+
     @property
     def supertypes(self) -> Sequence[Type]:
         return self._supertypes
@@ -431,6 +460,9 @@ class IndividualVariable(_Variable, IndividualType):
             return self
         # NOTE: This returns a new, distinct type variable!
         return IndividualVariable(bound)
+
+    def collapse_bounds(self) -> IndividualType:
+        return self.bound.collapse_bounds()
 
 
 class ForAll(Type):
@@ -571,6 +603,10 @@ class _Function(IndividualType):
                 return False
         return True
 
+    def __hash__(self) -> int:
+        # FIXME: Alpha equivalence
+        return hash((self.input, self.output))
+
     def is_subtype_of(
         self, supertype: Type, _sub: Optional['Substitutions'] = None
     ) -> bool:
@@ -665,6 +701,23 @@ class _Function(IndividualType):
 
     def apply_substitution(self, sub: 'Substitutions') -> '_Function':
         return _Function(sub(self.input), sub(self.output))
+
+    def collapse_bounds(self) -> '_Function':
+        counts = {}
+        for type in self.input + self.output:
+            counts[type] = counts.get(type, 0) + 1
+        collapsed_input, collapsed_output = [], []
+        for type in self.input:
+            if isinstance(type, SequenceVariable) or counts[type] > 1:
+                collapsed_input.append(type)
+            else:
+                collapsed_input.append(type.collapse_bounds())
+        for type in self.output:
+            if isinstance(type, SequenceVariable) or counts[type] > 1:
+                collapsed_output.append(type)
+            else:
+                collapsed_output.append(type.collapse_bounds())
+        return _Function(collapsed_input, collapsed_output)
 
 
 class PrimitiveTypes:
@@ -845,6 +898,9 @@ class TypeWithAttribute(IndividualType):
 
     def apply_substitution(self, sub: 'Substitutions') -> 'TypeWithAttribute':
         return TypeWithAttribute(self.attribute, sub(self.attribute_type))
+
+    def collapse_bounds(self) -> 'TypeWithAttribute':
+        return TypeWithAttribute(self.attribute, self.attribute_type.collapse_bounds())
 
 
 StackItemType = Union[SequenceVariable, IndividualType]
