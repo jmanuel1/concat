@@ -8,16 +8,15 @@ import concat.level1.operators
 import concat.level2.parse
 from typing import Tuple, Generator, Sequence, Optional, Union, cast
 from typing_extensions import Literal
-import dataclasses
 import abc
 import importlib
 import sys
 import parsy
 
 
-@dataclasses.dataclass
 class TypeNode(concat.level0.parse.Node, abc.ABC):
-    location: concat.astutils.Location
+    def __init__(self, location: concat.astutils.Location) -> None:
+        self.location = location
 
     @abc.abstractmethod
     def to_type(self, env: Environment) -> Tuple[Type, Environment]:
