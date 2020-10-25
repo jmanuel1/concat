@@ -2,6 +2,7 @@ import concat.astutils
 import concat.level0.lex
 import concat.level0.parse
 import concat.level1.typecheck
+from concat.level1.typecheck import Environment, IndividualType, StackEffect, Type, TypeWithAttribute
 import concat.level1.parse
 import concat.level1.operators
 import concat.level2.parse
@@ -19,7 +20,7 @@ class TypeNode(concat.level0.parse.Node, abc.ABC):
     location: concat.astutils.Location
 
     @abc.abstractmethod
-    def to_type(self, env: concat.level1.typecheck.Environment) -> Tuple[concat.level1.typecheck.Type, concat.level1.typecheck.Environment]:
+    def to_type(self, env: Environment) -> Tuple[Type, Environment]:
         pass
 
 
@@ -27,6 +28,10 @@ class IndividualTypeNode(TypeNode, abc.ABC):
     @abc.abstractmethod
     def __init__(self, location: concat.astutils.Location) -> None:
         super().__init__(location)
+
+    @abc.abstractmethod
+    def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
+        pass
 
 
 # A dataclass is not used here because making this a subclass of an abstract
@@ -37,7 +42,7 @@ class AttributeTypeNode(IndividualTypeNode):
         self.name = name
         self.type = type
 
-    def to_type(self, env: concat.level1.typecheck.Environment) -> Tuple[concat.level1.typecheck.IndividualType, concat.level1.typecheck.Environment]:
+    def to_type(self, env: Environment) -> Tuple[TypeWithAttribute, Environment]:
         attr_type, new_env = self.type.to_type(env)
         return concat.level1.typecheck.TypeWithAttribute(self.name, attr_type), new_env
 
@@ -50,7 +55,7 @@ class NamedTypeNode(IndividualTypeNode):
     def __repr__(self) -> str:
         return '{}({!r}, {!r})'.format(type(self).__qualname__, self.location, self.name)
 
-    def to_type(self, env: concat.level1.typecheck.Environment) -> Tuple[concat.level1.typecheck.IndividualType, concat.level1.typecheck.Environment]:
+    def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
         type = getattr(PrimitiveInterfaces, self.name, None)
         type = getattr(PrimitiveTypes, self.name, type)
         type = getattr(
@@ -86,7 +91,7 @@ class StackEffectTypeNode(IndividualTypeNode):
             self.location,
         )
 
-    def to_type(self, env: concat.level1.typecheck.Environment) -> Tuple[concat.level1.typecheck.IndividualType, concat.level1.typecheck.Environment]:
+    def to_type(self, env: Environment) -> Tuple[StackEffect, Environment]:
         a_bar = concat.level1.typecheck.SequenceVariable()
         b_bar = a_bar
         new_env = env.copy()
@@ -121,7 +126,7 @@ class IntersectionTypeNode(IndividualTypeNode):
         self.type_1 = type_1
         self.type_2 = type_2
 
-    def to_type(self, env: concat.level1.typecheck.Environment) -> Tuple[concat.level1.typecheck.IndividualType, concat.level1.typecheck.Environment]:
+    def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
         type_1, new_env = self.type_1.to_type(env)
         type_2, newer_env = self.type_2.to_type(new_env)
         return type_1 & type_2, newer_env
