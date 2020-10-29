@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 class StaticAnalysisError(Exception):
     def __init__(self, message: str) -> None:
         self._message = message
-        self.location = None
+        self.location: Optional['concat.astutils.Location'] = None
 
     def set_location_if_missing(
         self, location: 'concat.astutils.Location'
@@ -56,17 +56,20 @@ class NameError(StaticAnalysisError, builtins.NameError):
         name: Union[concat.level0.parse.NameWordNode, str],
         location: Optional[concat.astutils.Location] = None,
     ) -> None:
-        super().__init__(name)
         if isinstance(name, concat.level0.parse.NameWordNode):
+            location = name.location
             name = name.value
-            self.location = name.location
+        super().__init__(name)
         self._name = name
         self.location = location or self.location
 
     def __str__(self) -> str:
-        return 'name "{}" not previously defined (error at {}:{})'.format(
-            self._name, *self.location
-        )
+        location_info = ''
+        if self.location:
+            location_info = ' (error at {}:{})'.format(*self.location)
+        return 'name "{}" not previously defined'.format(
+            self._name
+        ) + location_info
 
 
 class AttributeError(TypeError, builtins.AttributeError):
@@ -114,9 +117,6 @@ class Type(abc.ABC):
         pass
 
 
-
-
-
 class IndividualType(Type, abc.ABC):
     @abc.abstractmethod
     def __init__(self) -> None:
@@ -125,7 +125,7 @@ class IndividualType(Type, abc.ABC):
     def to_for_all(self) -> 'ForAll':
         return ForAll([], self)
 
-    def __and__(self, other: object) -> '_IntersectionType':
+    def __and__(self, other: object) -> 'IndividualType':
         if not isinstance(other, IndividualType):
             return NotImplemented
         elif self is PrimitiveTypes.object:
@@ -183,10 +183,10 @@ class _IntersectionType(IndividualType):
     def __hash__(self) -> int:
         return hash((self.type_1, self.type_2))
 
-    def apply_substitution(self, sub: 'Substitutions') -> '_IntersectionType':
+    def apply_substitution(self, sub: 'Substitutions') -> 'IndividualType':
         return sub(self.type_1) & sub(self.type_2)
 
-    def collapse_bounds(self) -> '_IntersectionType':
+    def collapse_bounds(self) -> 'IndividualType':
         return self.type_1.collapse_bounds() & self.type_2.collapse_bounds()
 
 
@@ -241,7 +241,9 @@ class PrimitiveInterface(IndividualType):
         if new_attributes == self._attributes:
             return self
         new_name = '{}[sub {}]'.format(self._name, id(sub))
-        new_type_arguments = sub(self._type_arguments)
+        new_type_arguments = None
+        if self._type_arguments is not None:
+            new_type_arguments = cast(Sequence[IndividualType], sub(self._type_arguments))
         new_interface = PrimitiveInterface(new_name, new_attributes)
         new_interface._type_arguments = new_type_arguments
         return new_interface
@@ -547,8 +549,8 @@ class _Function(IndividualType):
         output: Sequence['StackItemType'],
     ) -> None:
         super().__init__()
-        self.input = input
-        self.output = output
+        self.input = (*input,)
+        self.output = (*output,)
 
     def __iter__(self) -> Iterator[Sequence['StackItemType']]:
         return iter((self.input, self.output))
@@ -929,20 +931,8 @@ def _intersect_sequences(
     else:
         return (
             *_intersect_sequences(seq1[:-1], seq2[:-1]),
-            seq1[-1] & seq2[-1],
+            cast(IndividualType, seq1[-1]) & cast(IndividualType, seq2[-1]),
         )
-
-
-_InferFunction = Callable[
-    [
-        Environment,
-        'concat.astutils.WordsOrStatements',
-        bool,
-        Tuple['_InferFunction'],
-        Tuple[Substitutions, _Function],
-    ],
-    Tuple[Substitutions, _Function],
-]
 
 
 def inst(
@@ -984,7 +974,7 @@ def inst(
 def infer(
     gamma: Environment,
     e: 'concat.astutils.WordsOrStatements',
-    extensions: Optional[Tuple[_InferFunction]] = None,
+    extensions: Optional[Tuple[Callable]] = None,
     is_top_level=False,
     source_dir='.',
 ) -> Tuple[Substitutions, _Function]:
@@ -1270,7 +1260,7 @@ def infer(
 
 
 def _ftv(
-    f: Union[Type, List[StackItemType], Dict[str, Type]]
+    f: Union[Type, Sequence[StackItemType], Dict[str, Type]]
 ) -> Set[_Variable]:
     """The ftv function described by Kleffner."""
     ftv: Set[_Variable]
@@ -1280,7 +1270,7 @@ def _ftv(
         return {f}
     elif isinstance(f, _Function):
         return _ftv(list(f.input)) | _ftv(list(f.output))
-    elif isinstance(f, list):
+    elif isinstance(f, collections.abc.Sequence):
         ftv = set()
         for t in f:
             ftv |= _ftv(t)
