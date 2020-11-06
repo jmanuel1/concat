@@ -6,8 +6,8 @@ from concat.level1.typecheck import Environment, IndividualType, StackEffect, Ty
 import concat.level1.parse
 import concat.level1.operators
 import concat.level2.parse
-from typing import Tuple, Generator, Sequence, Optional, Union, cast
-from typing_extensions import Literal
+from concat.level1.typecheck.types import float_type, no_return_type
+from typing import List, Tuple, Generator, Sequence, Optional, Union, cast
 import abc
 import importlib
 import sys
@@ -145,14 +145,6 @@ class PrimitiveInterfaces:
     )
 
 
-class _NoReturnType(concat.level1.typecheck.PrimitiveType):
-    def __init__(self) -> None:
-        super().__init__('NoReturn')
-
-    def is_subtype_of(self, _: concat.level1.typecheck.Type) -> Literal[True]:
-        return True
-
-
 class PrimitiveTypes:
     ellipsis = concat.level1.typecheck.PrimitiveType('Ellipsis')
     not_implemented = concat.level1.typecheck.PrimitiveType('NotImplemented')
@@ -164,8 +156,7 @@ class PrimitiveTypes:
         }
     )
     base_exception = concat.level1.typecheck.PrimitiveType('BaseException')
-    no_return = _NoReturnType()
-
+    no_return = no_return_type
 
 _seq_var = concat.level1.typecheck.SequenceVariable()
 
