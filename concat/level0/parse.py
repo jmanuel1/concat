@@ -88,6 +88,9 @@ class PushWordNode(WordNode):
         self.location = child.location
         self.children: List[WordNode] = [child]
 
+    def __str__(self) -> str:
+        return '$' + str(self.children[0])
+
 
 class NumberWordNode(WordNode):
     def __init__(self, number: 'concat.level0.lex.Token'):
@@ -123,6 +126,9 @@ class QuoteWordNode(WordNode):
         self.location = location
         self.children: Sequence[WordNode] = children
 
+    def __str__(self) -> str:
+        return '(' + ' '.join(map(str, self.children)) + ')'
+
 
 class NameWordNode(WordNode):
     def __init__(self, name: 'concat.level0.lex.Token'):
@@ -130,6 +136,9 @@ class NameWordNode(WordNode):
         self.location = name.start
         self.children: List[Node] = []
         self.value = name.value
+
+    def __str__(self) -> str:
+        return self.value
 
 
 class AttributeWordNode(WordNode):
