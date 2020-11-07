@@ -194,6 +194,9 @@ def _intersect_sequences(
         return seq1
     elif not seq1 and not seq2:
         return ()
+    elif not seq1 or not seq2:
+        from concat.level1.typecheck.types import no_return_type
+        return (no_return_type,)
     else:
         return (
             *_intersect_sequences(seq1[:-1], seq2[:-1]),
