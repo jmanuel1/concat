@@ -653,10 +653,10 @@ class _Function(IndividualType):
         out_types = ' '.join(map(str, self.output))
         return '({} -- {})'.format(in_types, out_types)
 
-    def __and__(self, other: IndividualType) -> IndividualType:
+    def __and__(self, other: object) -> IndividualType:
         if isinstance(other, _Function):
-            input = concat.level1.typecheck._intersect_sequences(self.input, other.input)
-            output = concat.level1.typecheck._intersect_sequences(self.output, other.output)
+            input = _intersect_sequences(self.input, other.input)
+            output = _intersect_sequences(self.output, other.output)
             return _Function(input, output)
         return super().__and__(other)
 
@@ -721,6 +721,24 @@ class TypeWithAttribute(IndividualType):
 
     def collapse_bounds(self) -> 'TypeWithAttribute':
         return TypeWithAttribute(self.attribute, self.attribute_type.collapse_bounds())
+
+
+def _intersect_sequences(
+    seq1: Sequence['StackItemType'], seq2: Sequence['StackItemType']
+) -> Sequence['StackItemType']:
+    if seq1 and isinstance(seq1[-1], SequenceVariable):
+        return seq2
+    elif seq2 and isinstance(seq2[-1], SequenceVariable):
+        return seq1
+    elif not seq1 and not seq2:
+        return ()
+    elif not seq1 or not seq2:
+        return (no_return_type,)
+    else:
+        return (
+            *_intersect_sequences(seq1[:-1], seq2[:-1]),
+            cast(IndividualType, seq1[-1]) & cast(IndividualType, seq2[-1]),
+        )
 
 
 # FIXME: This should be a method on types

@@ -185,25 +185,6 @@ class Environment(Dict[str, Type]):
         return Environment({name: sub(t) for name, t in self.items()})
 
 
-def _intersect_sequences(
-    seq1: Sequence['StackItemType'], seq2: Sequence['StackItemType']
-) -> Sequence['StackItemType']:
-    if seq1 and isinstance(seq1[-1], SequenceVariable):
-        return seq2
-    elif seq2 and isinstance(seq2[-1], SequenceVariable):
-        return seq1
-    elif not seq1 and not seq2:
-        return ()
-    elif not seq1 or not seq2:
-        from concat.level1.typecheck.types import no_return_type
-        return (no_return_type,)
-    else:
-        return (
-            *_intersect_sequences(seq1[:-1], seq2[:-1]),
-            cast(IndividualType, seq1[-1]) & cast(IndividualType, seq2[-1]),
-        )
-
-
 def infer(
     gamma: Environment,
     e: 'concat.astutils.WordsOrStatements',
