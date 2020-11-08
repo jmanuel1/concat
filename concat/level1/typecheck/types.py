@@ -814,12 +814,6 @@ def _ftv(
 
 
 def init_primitives():
-    _arg_type_var = IndividualVariable()
-    _return_type_var = IndividualVariable()
-    PrimitiveTypes.py_function = PrimitiveType(
-        'py_function', (), {}, [_arg_type_var, _return_type_var]
-    )
-
     PrimitiveTypes.str.add_attribute(
         '__getitem__',
         PrimitiveTypes.py_function[PrimitiveTypes.int, PrimitiveTypes.str],
@@ -871,3 +865,10 @@ int_type = PrimitiveTypes.int
 float_type = PrimitiveType('float')
 no_return_type = _NoReturnType()
 object_type = PrimitiveTypes.object
+
+_arg_type_var = IndividualVariable()
+_return_type_var = IndividualVariable()
+PrimitiveTypes.py_function = PrimitiveType(
+    'py_function', (), {}, [_arg_type_var, _return_type_var]
+)
+py_function_type = PrimitiveTypes.py_function
