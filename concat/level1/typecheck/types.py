@@ -1,5 +1,4 @@
 import concat.level1.typecheck
-# from concat.level2.typecheck import PrimitiveTypes as Level2PrimitiveTypes
 from typing import Tuple, Optional, Dict, Sequence, Union, List, Iterator, Set, cast
 from typing_extensions import Literal
 import abc
