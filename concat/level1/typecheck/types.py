@@ -428,6 +428,7 @@ class SequenceVariable(_Variable):
         return '*t_{}'.format(id(self))
 
 
+# FIXME: Subtyping of universal types.
 class ForAll(Type):
     def __init__(
         self, quantified_variables: List[_Variable], type: 'IndividualType'
