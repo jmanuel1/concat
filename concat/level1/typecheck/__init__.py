@@ -16,10 +16,12 @@ from typing import (
     Callable,
     Sequence,
     NoReturn,
+    TypeVar,
     TYPE_CHECKING,
     overload,
     cast,
 )
+from typing_extensions import Protocol
 import concat.level0.parse
 import concat.level1.operators
 import concat.level1.parse
@@ -82,55 +84,18 @@ class AttributeError(TypeError, builtins.AttributeError):
         self._attribute = attribute
 
 
+_Result = TypeVar('_Result', covariant=True)
+
+
+class _Substitutable(Protocol[_Result]):
+    def apply_substitution(self, sub: 'Substitutions') -> _Result:
+        pass
+
+
 class Substitutions(Dict[_Variable, Union[Type, List['StackItemType']]]):
 
-    _T = Union['Substitutions', Type, Sequence['StackItemType'], 'Environment']
-
-    @overload
-    def __call__(self, arg: 'Substitutions') -> 'Substitutions':
-        ...
-
-    @overload
-    def __call__(self, arg: PrimitiveType) -> PrimitiveType:
-        ...
-
-    @overload
-    def __call__(self, arg: _Function) -> _Function:
-        ...
-
-    @overload
-    def __call__(self, arg: ForAll) -> ForAll:
-        ...
-
-    @overload
-    def __call__(self, arg: IndividualVariable) -> IndividualType:
-        ...
-
-    @overload
-    def __call__(self, arg: 'TypeWithAttribute') -> 'TypeWithAttribute':
-        ...
-
-    @overload
-    def __call__(self, arg: _IntersectionType) -> _IntersectionType:
-        ...
-
-    @overload
-    def __call__(self, arg: PrimitiveInterface) -> PrimitiveInterface:
-        ...
-
-    @overload
-    def __call__(
-        self, arg: SequenceVariable
-    ) -> Union[SequenceVariable, List['StackItemType']]:
-        ...
-
-    @overload
-    def __call__(self, arg: IndividualType) -> IndividualType:
-        ...
-
-    @overload
-    def __call__(self, arg: Type) -> NoReturn:
-        ...
+    _T = Union[_Substitutable[Union['Substitutions', Type, Sequence[StackItemType], 'Environment']], Sequence[StackItemType]]
+    _U = Union['Substitutions', Type, Sequence['StackItemType'], 'Environment']
 
     @overload
     def __call__(
@@ -139,17 +104,17 @@ class Substitutions(Dict[_Variable, Union[Type, List['StackItemType']]]):
         ...
 
     @overload
-    def __call__(self, arg: 'Environment') -> 'Environment':
+    def __call__(self, arg: _Substitutable[_Result]) -> _Result:
         ...
 
-    def __call__(self, arg: '_T') -> '_T':
+    def __call__(self, arg: '_T') -> '_U':
         if isinstance(arg, collections.abc.Sequence):
             subbed_types: List[StackItemType] = []
             for type in arg:
-                subbed_type: Union[StackItemType, List[StackItemType]] = self(
+                subbed_type: Union[StackItemType, Sequence[StackItemType]] = self(
                     type
                 )
-                if isinstance(subbed_type, list):
+                if isinstance(subbed_type, collections.abc.Sequence):
                     subbed_types += subbed_type
                 else:
                     subbed_types.append(subbed_type)
