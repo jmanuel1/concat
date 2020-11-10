@@ -40,7 +40,7 @@ class Type(abc.ABC):
         raise concat.level1.typecheck.AttributeError(self, name)
 
     @abc.abstractmethod
-    def apply_substitution(self, _: 'concat.level1.typecheck.Substitutions') -> 'Type':
+    def apply_substitution(self, _: 'concat.level1.typecheck.Substitutions') -> Union['Type', Sequence['StackItemType']]:
         pass
 
 
@@ -84,7 +84,7 @@ class PrimitiveType(IndividualType):
     def __init__(
         self,
         name: str = '<primitive_type>',
-        supertypes: Tuple[Type, ...] = (),
+        supertypes: Tuple[IndividualType, ...] = (),
         attributes: Optional[Dict[str, 'IndividualType']] = None,
         type_parameters: Sequence['IndividualVariable'] = (),
     ) -> None:
@@ -223,7 +223,7 @@ class _Variable(Type, abc.ABC):
 
     def apply_substitution(
         self, sub: 'concat.level1.typecheck.Substitutions'
-    ) -> Union[IndividualType, '_Variable', List[Type]]:
+    ) -> Union[IndividualType, '_Variable', List['StackItemType']]:
         if self in sub:
             return sub[self]  # type: ignore
         return self
