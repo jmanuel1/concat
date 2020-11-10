@@ -670,7 +670,7 @@ class _Function(IndividualType):
         return _Function(sub(self.input), sub(self.output))
 
     def collapse_bounds(self) -> '_Function':
-        counts = {}
+        counts: Dict[StackItemType, int] = {}
         for type in self.input + self.output:
             counts[type] = counts.get(type, 0) + 1
         collapsed_input, collapsed_output = [], []
