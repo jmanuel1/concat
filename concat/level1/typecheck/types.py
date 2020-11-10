@@ -11,6 +11,7 @@ class Type(abc.ABC):
     def __init__(self):
         pass
 
+    # TODO: Fully replace with <=.
     def is_subtype_of(self, supertype: 'Type') -> bool:
         if supertype is self or supertype is PrimitiveTypes.object:
             return True
