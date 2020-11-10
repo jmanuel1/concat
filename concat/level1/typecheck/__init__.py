@@ -25,7 +25,26 @@ from typing_extensions import Protocol
 import concat.level0.parse
 import concat.level1.operators
 import concat.level1.parse
-from concat.level1.typecheck.types import Type, PrimitiveType, PrimitiveTypes, IndividualVariable, _Variable, _Function, ForAll, IndividualType, _IntersectionType, PrimitiveInterface, SequenceVariable, TypeWithAttribute, StackItemType, PrimitiveInterfaces, inst, _ftv, init_primitives, StackEffect
+from concat.level1.typecheck.types import (
+    Type,
+    PrimitiveType,
+    PrimitiveTypes,
+    IndividualVariable,
+    _Variable,
+    _Function,
+    ForAll,
+    IndividualType,
+    _IntersectionType,
+    PrimitiveInterface,
+    SequenceVariable,
+    TypeWithAttribute,
+    StackItemType,
+    PrimitiveInterfaces,
+    inst,
+    _ftv,
+    init_primitives,
+    StackEffect,
+)
 
 
 if TYPE_CHECKING:
@@ -68,9 +87,10 @@ class NameError(StaticAnalysisError, builtins.NameError):
         location_info = ''
         if self.location:
             location_info = ' (error at {}:{})'.format(*self.location)
-        return 'name "{}" not previously defined'.format(
-            self._name
-        ) + location_info
+        return (
+            'name "{}" not previously defined'.format(self._name)
+            + location_info
+        )
 
 
 class AttributeError(TypeError, builtins.AttributeError):
@@ -94,7 +114,14 @@ class _Substitutable(Protocol[_Result]):
 
 class Substitutions(Dict[_Variable, Union[Type, List['StackItemType']]]):
 
-    _T = Union[_Substitutable[Union['Substitutions', Type, Sequence[StackItemType], 'Environment']], Sequence[StackItemType]]
+    _T = Union[
+        _Substitutable[
+            Union[
+                'Substitutions', Type, Sequence[StackItemType], 'Environment'
+            ]
+        ],
+        Sequence[StackItemType],
+    ]
     _U = Union['Substitutions', Type, Sequence['StackItemType'], 'Environment']
 
     @overload
@@ -111,9 +138,9 @@ class Substitutions(Dict[_Variable, Union[Type, List['StackItemType']]]):
         if isinstance(arg, collections.abc.Sequence):
             subbed_types: List[StackItemType] = []
             for type in arg:
-                subbed_type: Union[StackItemType, Sequence[StackItemType]] = self(
-                    type
-                )
+                subbed_type: Union[
+                    StackItemType, Sequence[StackItemType]
+                ] = self(type)
                 if isinstance(subbed_type, collections.abc.Sequence):
                     subbed_types += subbed_type
                 else:
@@ -390,24 +417,19 @@ def infer(
                 )
             elif isinstance(node, concat.level0.parse.AttributeWordNode):
                 out_var = SequenceVariable()
-                attr_type_var = IndividualVariable()
-                type_var = IndividualVariable(
-                    TypeWithAttribute(node.value, attr_type_var)
+                attr_function_type = _Function(
+                    [SequenceVariable()], [SequenceVariable()]
                 )
-                phi = unify(list(o), [out_var, type_var])
-                attr_type = phi(attr_type_var)
-                if not isinstance(attr_type, _Function):
-                    message = '.{} is not a Concat function (has type {})'.format(
-                        node.value, attr_type
-                    )
-                    raise TypeError(message)
-                out_types = phi(out_var)
-                if isinstance(out_types, SequenceVariable):
-                    out_types = [out_types]
-                R = unify(out_types, phi([*attr_type.input]))
+                stack_top_type = TypeWithAttribute(
+                    node.value, attr_function_type
+                )
+                phi = unify(list(o), [out_var, stack_top_type])
+                attr_function_type = phi(attr_function_type)
+                out_types = phi([out_var])
+                R = unify(out_types, phi([*attr_function_type.input]))
                 current_subs, current_effect = (
                     R(phi(S)),
-                    R(phi(_Function(i, attr_type.output))),
+                    R(phi(_Function(i, attr_function_type.output))),
                 )
             else:
                 fail = True
