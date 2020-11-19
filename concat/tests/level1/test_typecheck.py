@@ -76,13 +76,14 @@ class TestTypeChecker(unittest.TestCase):
         self.assertRaises(
             concat.level1.typecheck.TypeError,
             concat.level1.typecheck.infer,
-            concat.level1.typecheck.Environment({'ctxmgr': concat.level1.typecheck.ForAll(
-                [a_bar],
-                concat.level1.typecheck.StackEffect([a_bar], [
-                    a_bar, concat.level1.typecheck.PrimitiveTypes.object]))}),
+            concat.level1.typecheck.Environment({
+                'ctxmgr': concat.level1.typecheck.ForAll(
+                    [a_bar],
+                    concat.level1.typecheck.StackEffect([a_bar], [
+                        a_bar, concat.level1.typecheck.PrimitiveTypes.object]))
+            }),
             tree.children)
 
-    @unittest.skip('needs subtyping to succeed')
     def test_try_word(self) -> None:
         try_prog = '$() $() try\n'
         tree = parse(try_prog)

@@ -44,6 +44,7 @@ from concat.level1.typecheck.types import (
     _ftv,
     init_primitives,
     StackEffect,
+    iterable_type
 )
 
 
@@ -183,7 +184,7 @@ def infer(
     extensions: Optional[Tuple[Callable]] = None,
     is_top_level=False,
     source_dir='.',
-) -> Tuple[Substitutions, _Function]:
+) -> Tuple[Substitutions, Union[_Function, _IntersectionType]]:
     """The infer function described by Kleffner."""
     e = list(e)
     current_subs = Substitutions()
@@ -292,7 +293,7 @@ def infer(
                         _Function(i1, [*o1, S1(name_type)]),
                     )
                 else:
-                    S2, (i2, o2) = infer(
+                    S2, fun_type = infer(
                         S1(gamma),
                         node.children,
                         extensions=extensions,
@@ -300,7 +301,7 @@ def infer(
                     )
                     current_subs, current_effect = (
                         S2(S1),
-                        _Function(S2(i1), [*S2(o1), _Function(i2, o2)]),
+                        _Function(S2(i1), [*S2(o1), fun_type]),
                     )
             elif isinstance(node, concat.level0.parse.QuoteWordNode):
                 quotation = cast(concat.level0.parse.QuoteWordNode, node)
@@ -313,7 +314,7 @@ def infer(
                 phi = unify(S1(o), i1)
                 current_subs, current_effect = (
                     phi(S1(S)),
-                    phi(S1(_Function(i, o1))),
+                    phi(S1(_Function(i, o1) & iterable_type)),
                 )
             # there is no fix combinator, lambda abstraction, or a let form like
             # Kleffner's
@@ -384,12 +385,15 @@ def infer(
                 phi = S
                 collected_type = o
                 for item in node.list_children:
-                    phi1, (i1, o1) = infer(
+                    phi1, fun_type = infer(
                         phi(gamma),
                         item,
                         extensions=extensions,
                         source_dir=source_dir,
                     )
+                    i_var, o_var = SequenceVariable(), SequenceVariable()
+                    phi1 = unify_ind(fun_type, _Function([i_var], [o_var]))(phi1)
+                    i1, o1 = phi1([i_var]), phi1([o_var])
                     R1 = unify(phi1(phi(collected_type)), list(i1))
                     collected_type = R1(phi1(phi(o1)))
                     # drop the top of the stack to use as the key
@@ -587,6 +591,24 @@ def unify_ind(
     elif isinstance(t2, TypeWithAttribute):
         attr_type = t1.get_type_of_attribute(t2.attribute)
         return unify_ind(attr_type, t2.attribute_type)
+    elif isinstance(t1, _IntersectionType):
+        # FIXME: Check that substitutions don't contradict each other.
+        phi = None
+        try:
+            phi = unify_ind(t1.type_1, t2)
+        except TypeError:
+            pass
+        try:
+            if phi is not None:
+                phi = unify_ind(phi(t1.type_2), phi(t2))(phi)
+            else:
+                phi = unify_ind(t1.type_2, t2)
+        except TypeError:
+            pass
+        if phi is None:
+            # TODO: Encapsulate TypeError message
+            raise TypeError('{} cannot unify with {}'.format(t1, t2))
+        return phi
     elif t1.is_subtype_of(t2):
         return Substitutions()
     else:

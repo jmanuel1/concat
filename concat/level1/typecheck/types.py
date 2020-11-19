@@ -776,6 +776,8 @@ def inst(
             for type in sigma.output
         ]
         return _Function(input, output)
+    if isinstance(sigma, _IntersectionType):
+        return inst(sigma.type_1) & inst(sigma.type_2)
     raise builtins.TypeError(type(sigma))
 
 
@@ -936,3 +938,4 @@ PrimitiveTypes.py_function = PrimitiveType(
     'py_function', (), {}, [_arg_type_var, _return_type_var]
 )
 py_function_type = PrimitiveTypes.py_function
+iterable_type = PrimitiveInterfaces.iterable
