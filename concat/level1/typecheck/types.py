@@ -810,6 +810,8 @@ def _ftv(
         return _ftv(f.type_1) | _ftv(f.type_2)
     elif isinstance(f, TypeWithAttribute):
         return _ftv(f.attribute_type)
+    elif isinstance(f, ObjectType):
+        return _ftv(f.attributes) - {f.self_type}
     else:
         raise builtins.TypeError(f)
 
@@ -857,6 +859,67 @@ def init_primitives():
 class PrimitiveInterfaces:
     invertible = PrimitiveInterface('invertible')
     iterable = PrimitiveInterface('iterable')
+
+
+class ObjectType(IndividualType):
+    """The representation of types of objects, like in "Design and Evaluation of Gradual Typing for Python" (Vitousek et al. 2014)."""
+
+    # FIXME: Allow universal quantifiers on attributes. Depends on ForAll subtyping.
+    def __init__(self, self_type: IndividualVariable, attributes: Dict[str, IndividualType]) -> None:
+        self._self_type = self_type
+        self._attributes = attributes
+
+    def collapse_bounds(self) -> 'ObjectType':
+        return ObjectType(self._self_type, {attr: t.collapse_bounds() for attr, t in self._attributes.items()})
+
+    def apply_substitution(self, sub: 'concat.level1.typecheck.Substitutions') -> 'ObjectType':
+        self_type = sub(self._self_type)
+        assert isinstance(self_type, IndividualVariable)
+        attributes = {attr: sub(t) for attr, t in self._attributes.items()}
+        return ObjectType(self_type, attributes)
+
+    def is_subtype_of(self, supertype: 'Type') -> bool:
+        if isinstance(supertype, _Function) or isinstance(supertype, PrimitiveType) and supertype.parent is py_function_type:
+            if '__call__' not in self._attributes:
+                return False
+            return self._attributes['__call__'] <= supertype
+        if not isinstance(supertype, ObjectType):
+            return super().is_subtype_of(supertype)
+        for attr, type in supertype._attributes.items():
+            if attr not in self._attributes:
+                return False
+            sub = concat.level1.typecheck.Substitutions({self._self_type: supertype._self_type})
+            if not (sub(self._attributes[attr]) <= type):
+                return False
+        return True
+
+    def __repr__(self) -> str:
+        return 'ObjectType({!r}, {!r})'.format(self._self_type, self._attributes)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ObjectType):
+            return super().__eq__(other)
+        sub = concat.level1.typecheck.Substitutions({self._self_type: other._self_type})
+        return {attr: sub(t) for attr, t in self._attributes.items()} == other._attributes
+
+    _hash_variable = IndividualVariable()
+
+    def __hash__(self) -> int:
+        sub = concat.level1.typecheck.Substitutions({self._self_type: ObjectType._hash_variable})
+        type_to_hash = sub(self)
+        return hash(tuple(type_to_hash._attributes.items()))
+
+    @property
+    def attributes(self) -> Dict[str, IndividualType]:
+        return self._attributes
+
+    @property
+    def self_type(self) -> IndividualVariable:
+        return self._self_type
+
+
+class ClassType(ObjectType):
+    """The representation of types of classes, like in "Design and Evaluation of Gradual Typing for Python" (Vitousek et al. 2014)."""
 
 
 # expose _Function as StackEffect

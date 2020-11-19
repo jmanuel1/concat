@@ -2,16 +2,10 @@ import concat.lex
 import concat.level0.parse
 import concat.level1.parse
 import concat.level1.typecheck
+from concat.level1.typecheck.types import StackEffect, IndividualType, IndividualVariable, ObjectType, ClassType, Type, int_type, float_type, no_return_type, object_type, py_function_type
 import unittest
-from hypothesis import given, assume
-from hypothesis.strategies import (
-    composite,
-    from_type,
-    integers,
-    text,
-    one_of,
-    sampled_from,
-)
+from hypothesis import given
+from hypothesis.strategies import from_type, dictionaries, text
 from typing import cast
 
 
@@ -138,3 +132,36 @@ class TestSequenceVariableTypeInference(unittest.TestCase):
             tree.children)
         self.assertEquals(type, concat.level1.typecheck.StackEffect(
             [in_var], [in_var, concat.level1.typecheck.PrimitiveTypes.int]))
+
+
+class TestSubtyping(unittest.TestCase):
+
+    __attributes_generator = dictionaries(
+        text(max_size=25), from_type(IndividualType), max_size=5)  # type: ignore
+
+    @given(__attributes_generator, __attributes_generator)
+    def test_object_structural_subtyping(self, attributes, other_attributes):
+        x1, x2 = IndividualVariable(), IndividualVariable()
+        object1 = ObjectType(x1, {**other_attributes, **attributes})
+        object2 = ObjectType(x2, attributes)
+        self.assertLessEqual(object1, object2)
+
+    @given(__attributes_generator, __attributes_generator)
+    def test_class_structural_subtyping(self, attributes, other_attributes):
+        x1, x2 = IndividualVariable(), IndividualVariable()
+        object1 = ClassType(x1, {**other_attributes, **attributes})
+        object2 = ClassType(x2, attributes)
+        self.assertLessEqual(object1, object2)
+
+    @given(from_type(StackEffect))
+    def test_object_subtype_of_stack_effect(self, effect):
+        x = IndividualVariable()
+        object = ObjectType(x, {'__call__': effect})
+        self.assertLessEqual(object, effect)
+
+    @given(from_type(IndividualType), from_type(IndividualType))
+    def test_object_subtype_of_py_function(self, type1, type2):
+        x = IndividualVariable()
+        py_function = py_function_type[type1, type2]
+        object = ObjectType(x, {'__call__': py_function})
+        self.assertLessEqual(object, py_function)
