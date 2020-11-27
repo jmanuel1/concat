@@ -115,11 +115,10 @@ class TestDiagnosticInfo(unittest.TestCase):
 
 class TestSequenceVariableTypeInference(unittest.TestCase):
 
-    @unittest.skip('needs subtyping to pass')
     def test_with_word_inference(self):
         wth = '$(drop 0 ~) {"file": "a_file"} open with'
         tree = parse(wth)
-        type = concat.level1.typecheck.infer({
+        _, type = concat.level1.typecheck.infer(Environment({
             'drop': concat.level1.typecheck.ForAll(
                 [in_var],
                 concat.level1.typecheck.StackEffect(
@@ -129,9 +128,9 @@ class TestSequenceVariableTypeInference(unittest.TestCase):
                 [in_var],
                 concat.level1.typecheck.StackEffect(
                     [in_var, concat.level1.typecheck.PrimitiveTypes.dict],
-                    [in_var, concat.level1.typecheck.PrimitiveTypes.file]))},
+                    [in_var, concat.level1.typecheck.PrimitiveTypes.file]))}),
             tree.children)
-        self.assertEquals(type, concat.level1.typecheck.StackEffect(
+        self.assertEqual(type, concat.level1.typecheck.StackEffect(
             [in_var], [in_var, concat.level1.typecheck.PrimitiveTypes.int]))
 
 

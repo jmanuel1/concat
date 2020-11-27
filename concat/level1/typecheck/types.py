@@ -826,7 +826,7 @@ def init_primitives():
 
     PrimitiveTypes.file = PrimitiveType(
         'file',
-        (),
+        (context_manager_type,),
         {'seek': PrimitiveTypes.py_function, 'read': PrimitiveTypes.py_function},
     )
 
@@ -856,6 +856,8 @@ def init_primitives():
         PrimitiveTypes.file,
     }:
         type.add_supertype(PrimitiveInterfaces.iterable)
+
+    int_type.add_supertype(invertible_type)
 
 
 class PrimitiveInterfaces:
@@ -939,3 +941,5 @@ PrimitiveTypes.py_function = PrimitiveType(
 )
 py_function_type = PrimitiveTypes.py_function
 iterable_type = PrimitiveInterfaces.iterable
+invertible_type = PrimitiveInterfaces.invertible
+context_manager_type = PrimitiveTypes.context_manager
