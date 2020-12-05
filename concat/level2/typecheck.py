@@ -46,7 +46,7 @@ class AttributeTypeNode(IndividualTypeNode):
         return concat.level1.typecheck.TypeWithAttribute(self.name, attr_type), new_env
 
 
-class NamedTypeNode(IndividualTypeNode):
+class NamedTypeNode(TypeNode):
     def __init__(self, location: concat.astutils.Location, name: str) -> None:
         super().__init__(location)
         self.name = name
@@ -54,16 +54,8 @@ class NamedTypeNode(IndividualTypeNode):
     def __repr__(self) -> str:
         return '{}({!r}, {!r})'.format(type(self).__qualname__, self.location, self.name)
 
-    def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
-        type = getattr(PrimitiveInterfaces, self.name, None)
-        type = getattr(PrimitiveTypes, self.name, type)
-        type = getattr(
-            concat.level1.typecheck.PrimitiveInterfaces, self.name, type
-        )
-        type = getattr(
-            concat.level1.typecheck.PrimitiveTypes, self.name, type
-        )
-        type = env.get(self.name, type)
+    def to_type(self, env: Environment) -> Tuple[Type, Environment]:
+        type = env.get(self.name, None)
         if type is None:
             raise concat.level1.typecheck.NameError(self.name, self.location)
         return type, env
@@ -157,6 +149,30 @@ class PrimitiveTypes:
     )
     base_exception = concat.level1.typecheck.PrimitiveType('BaseException')
     no_return = no_return_type
+
+
+# TODO: Separate type-check-time environment from runtime environment.
+builtin_environment = Environment({
+    'Ellipsis': PrimitiveTypes.ellipsis,
+    'NotImplemented': PrimitiveTypes.not_implemented,
+    'tuple': PrimitiveTypes.tuple,
+    'BaseException': PrimitiveTypes.base_exception,
+    'NoReturn': PrimitiveTypes.no_return,
+    'subscriptable': PrimitiveInterfaces.subscriptable,
+    'subtractable': PrimitiveInterfaces.subtractable,
+    'bool': concat.level1.typecheck.PrimitiveTypes.bool,
+    'object': concat.level1.typecheck.PrimitiveTypes.object,
+    'context_manager': concat.level1.typecheck.PrimitiveTypes.context_manager,
+    'dict': concat.level1.typecheck.PrimitiveTypes.dict,
+    'module': concat.level1.typecheck.PrimitiveTypes.module,
+    'list': concat.level1.typecheck.PrimitiveTypes.list,
+    'str': concat.level1.typecheck.PrimitiveTypes.str,
+    'py_function': concat.level1.typecheck.PrimitiveTypes.py_function,
+    'None': concat.level1.typecheck.PrimitiveTypes.none,
+    'Optional': concat.level1.typecheck.PrimitiveTypes.optional,
+    'int': concat.level1.typecheck.PrimitiveTypes.int,
+    'float': float_type
+})
 
 _seq_var = concat.level1.typecheck.SequenceVariable()
 

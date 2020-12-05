@@ -10,6 +10,8 @@ import unittest
 from textwrap import dedent
 from typing import List, Dict, cast
 import parsy
+from hypothesis import given, example
+from hypothesis.strategies import from_type
 
 
 def lex_string(string: str) -> List[concat.level0.lex.Token]:
@@ -82,7 +84,7 @@ class TestTypeChecker(unittest.TestCase):
         """Test that the type checker allows pushed subscription words."""
         tree = parse('$[0] cast (int) 1 -')
         concat.level1.typecheck.infer(
-            concat.level1.typecheck.Environment(),
+            concat.level2.typecheck.builtin_environment,
             tree.children,
             (concat.level2.typecheck.infer,),
         )
@@ -136,3 +138,19 @@ class TestStackEffectParser(unittest.TestCase):
                     effect.to_type(env)[0],
                     self.examples[example],
                 )
+
+
+class TestNamedTypeNode(unittest.TestCase):
+    @given(from_type(concat.level2.typecheck.NamedTypeNode))
+    def test_name_does_not_exist(self, named_type_node):
+        self.assertRaises(concat.level1.typecheck.NameError, named_type_node.to_type, concat.level1.typecheck.Environment())
+
+    def test_builtin_name_does_not_exist_in_empty_environment(self):
+        named_type_node = concat.level2.typecheck.NamedTypeNode((0, 0), 'int')
+        self.assertRaises(concat.level1.typecheck.NameError, named_type_node.to_type, concat.level1.typecheck.Environment())
+
+    @given(from_type(concat.level2.typecheck.NamedTypeNode), from_type(concat.level1.typecheck.IndividualType))
+    @example(named_type_node=concat.level2.typecheck.NamedTypeNode((0, 0), ''), type=concat.level1.typecheck._Function((), ((concat.level1.typecheck._IntersectionType(concat.level1.typecheck._Function((), ()), concat.level1.typecheck._Function((), ()))),)))
+    def test_name_does_exist(self, named_type_node, type):
+        env = concat.level1.typecheck.Environment({named_type_node.name: type})
+        self.assertEqual(named_type_node.to_type(env)[0], type)
