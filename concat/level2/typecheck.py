@@ -2,7 +2,7 @@ import concat.astutils
 import concat.level0.lex
 import concat.level0.parse
 import concat.level1.typecheck
-from concat.level1.typecheck import Environment, IndividualType, StackEffect, Type, TypeWithAttribute
+from concat.level1.typecheck import Environment, IndividualType, StackEffect, Type, TypeWithAttribute, TypeError
 import concat.level1.parse
 import concat.level1.operators
 import concat.level2.parse
@@ -121,6 +121,23 @@ class IntersectionTypeNode(IndividualTypeNode):
         type_1, new_env = self.type_1.to_type(env)
         type_2, newer_env = self.type_2.to_type(new_env)
         return type_1 & type_2, newer_env
+
+
+class _GenericTypeNode(IndividualTypeNode):
+    def __init__(self, location: concat.astutils.Location, generic_type: IndividualTypeNode, type_arguments: Sequence[IndividualTypeNode]) -> None:
+        super().__init__(location)
+        self._generic_type = generic_type
+        self._type_arguments = type_arguments
+
+    def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
+        args = []
+        for arg in self._type_arguments:
+            arg_as_type, env = arg.to_type(env)
+            args.append(arg_as_type)
+        generic_type, env = self._generic_type.to_type(env)
+        if isinstance(generic_type, (PrimitiveType, PrimitiveInterface)):
+            return generic_type[args], env
+        raise TypeError('{} is not a generic type'.format(generic_type))
 
 
 class PrimitiveInterfaces:
@@ -429,12 +446,25 @@ def typecheck_extension(parsers: concat.level0.parse.ParserDict) -> None:
         stack_effect_type_parser, 'stack effect type'
     )
 
-    parsers['type'] = parsy.alt(
+    @parsy.generate
+    def generic_type_parser() -> Generator:
+        type = yield parsers['nonparameterized-type']
+        yield parsers.token('LSQB')
+        type_arguments = yield parsers['type'].sep_by(parsers.token('COMMA'), 1)
+        yield parsers.token('RSQB')
+        return _GenericTypeNode(type.location, type, type_arguments)
+
+    parsers['nonparameterized-type'] = parsy.alt(
         concat.parser_combinators.desc_cumulatively(
             intersection_type_parser, 'intersection type'),
         concat.parser_combinators.desc_cumulatively(
             attribute_type_parser, 'attribute type'),
         concat.parser_combinators.desc_cumulatively(
             named_type_parser, 'named type'),
-        parsers.ref_parser('stack-effect-type'),
+        parsers.ref_parser('stack-effect-type')
+    )
+
+    parsers['type'] = parsy.alt(
+        concat.parser_combinators.desc_cumulatively(generic_type_parser, 'generic type'),
+        parsers.ref_parser('nonparameterized-type')
     )
