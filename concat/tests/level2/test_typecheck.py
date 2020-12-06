@@ -3,6 +3,7 @@ import concat.level0.parse
 import concat.level1.parse
 import concat.level1.typecheck
 import concat.level2.typecheck
+from concat.level2.typecheck import builtin_environment
 import concat.level2.preamble_types
 import concat.level2.parse
 import concat.astutils
@@ -56,7 +57,10 @@ class TestTypeChecker(unittest.TestCase):
             def seek_file(file:file offset:int whence:int --):
                 swap [(), (),] [,] swap pick $.seek py_call drop drop
         """))
-        env = concat.level1.typecheck.Environment(concat.level2.preamble_types.types)
+        env = concat.level1.typecheck.Environment({
+            **concat.level2.preamble_types.types,
+            **concat.level2.typecheck.builtin_environment,
+        })
         concat.level1.typecheck.infer(env, tree.children, (concat.level2.typecheck.infer,), True)
         # If we get here, we passed
 
@@ -82,7 +86,7 @@ class TestTypeChecker(unittest.TestCase):
 
     def test_pushed_subscription(self) -> None:
         """Test that the type checker allows pushed subscription words."""
-        tree = parse('$[0] cast (int) 1 -')
+        tree = parse('$[0] cast (int)')
         concat.level1.typecheck.infer(
             concat.level2.typecheck.builtin_environment,
             tree.children,
@@ -133,7 +137,7 @@ class TestStackEffectParser(unittest.TestCase):
                     effect = build_parsers()['stack-effect-type'].parse(tokens)
                 except parsy.ParseError as e:
                     self.fail('could not parse {}\n{}'.format(example, e))
-                env = concat.level1.typecheck.Environment()
+                env = builtin_environment
                 self.assertEqual(
                     effect.to_type(env)[0],
                     self.examples[example],

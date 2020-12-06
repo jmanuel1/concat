@@ -2,6 +2,7 @@ import concat.lex
 import concat.level0.parse
 import concat.level1.parse
 import concat.level1.typecheck
+from concat.level1.typecheck import Environment
 from concat.level1.typecheck.types import StackEffect, IndividualType, IndividualVariable, ObjectType, ClassType, Type, int_type, float_type, no_return_type, object_type, py_function_type
 import unittest
 from hypothesis import given

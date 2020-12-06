@@ -164,5 +164,6 @@ types = {
     # Python builtins
     'print': PrimitiveTypes.py_function,
     'Exception': PrimitiveTypes.py_function,
-    'input': PrimitiveTypes.py_function
+    'input': PrimitiveTypes.py_function,
+    'file': PrimitiveTypes.file
 }
