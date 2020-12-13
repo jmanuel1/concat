@@ -13,7 +13,7 @@ class Type(abc.ABC):
 
     # TODO: Fully replace with <=.
     def is_subtype_of(self, supertype: 'Type') -> bool:
-        if supertype is self or supertype is PrimitiveTypes.object:
+        if supertype == self or supertype == PrimitiveTypes.object:
             return True
         if isinstance(supertype, IndividualVariable):
             return self.is_subtype_of(supertype.bound)
@@ -102,6 +102,13 @@ class PrimitiveType(IndividualType):
         return super().is_subtype_of(supertype) or any(
             map(lambda t: t.is_subtype_of(supertype), self._supertypes)
         )
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, PrimitiveType):
+            return super().__eq__(other)
+        return (self._name, self._type_arguments) == (other._name, other._type_arguments)
+
+    def __hash__(self) -> int:
+        return hash((self._name, self._type_arguments))
 
     def add_supertype(self, supertype: Type) -> None:
         self._supertypes += (supertype,)
