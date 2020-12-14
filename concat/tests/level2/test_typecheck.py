@@ -2,6 +2,7 @@ import concat.lex as lex
 import concat.level0.parse
 import concat.level1.parse
 import concat.level1.typecheck
+from concat.level1.typecheck.types import StackEffect, object_type
 import concat.level2.typecheck
 import concat.level2.preamble_types
 import concat.level2.parse
@@ -52,12 +53,20 @@ class TestTypeChecker(unittest.TestCase):
 
         The type checker should allow the annotated effect of a function to be
         stricter than what would be inferred without the annotation."""
-        tree = parse(dedent("""\
+        tree = parse(
+            dedent(
+                """\
             def seek_file(file:file offset:int whence:int --):
                 swap [(), (),] [,] swap pick $.seek py_call drop drop
-        """))
-        env = concat.level1.typecheck.Environment(concat.level2.preamble_types.types)
-        concat.level1.typecheck.infer(env, tree.children, (concat.level2.typecheck.infer,), True)
+        """
+            )
+        )
+        env = concat.level1.typecheck.Environment(
+            concat.level2.preamble_types.types
+        )
+        concat.level1.typecheck.infer(
+            env, tree.children, (concat.level2.typecheck.infer,), True
+        )
         # If we get here, we passed
 
     def test_string_subscription(self) -> None:
@@ -95,31 +104,17 @@ class TestStackEffectParser(unittest.TestCase):
     _d_bar = concat.level1.typecheck.SequenceVariable()
     _b = concat.level1.typecheck.IndividualVariable()
     _c = concat.level1.typecheck.IndividualVariable()
-    examples: Dict[str, concat.level1.typecheck.StackEffect] = {
-        'a b -- b a': concat.level1.typecheck.StackEffect(
-            [_a_bar, _b, _c], [_a_bar, _c, _b]
+    examples: Dict[str, StackEffect] = {
+        'a b -- b a': StackEffect([_a_bar, _b, _c], [_a_bar, _c, _b]),
+        'a -- a a': StackEffect([_a_bar, _b], [_a_bar, _b, _b]),
+        'a --': StackEffect([_a_bar, _b], [_a_bar]),
+        'a:object b:object -- b a': StackEffect(
+            [_a_bar, object_type, object_type,], [_a_bar, *[object_type] * 2],
         ),
-        'a -- a a': concat.level1.typecheck.StackEffect(
-            [_a_bar, _b], [_a_bar, _b, _b]
-        ),
-        'a --': concat.level1.typecheck.StackEffect([_a_bar, _b], [_a_bar]),
-        'a:object b:object -- b a': concat.level1.typecheck.StackEffect(
-            [
-                _a_bar,
-                concat.level1.typecheck.PrimitiveTypes.object,
-                concat.level1.typecheck.PrimitiveTypes.object,
-            ],
-            [_a_bar, *[concat.level1.typecheck.PrimitiveTypes.object] * 2],
-        ),
-        'a:`t -- a a': concat.level1.typecheck.StackEffect(
-            [_a_bar, _b], [_a_bar, _b, _b]
-        ),
-        '*i -- *i a': concat.level1.typecheck.StackEffect(
-            [_a_bar], [_a_bar, _b]
-        ),
-        '*i fun:(*i -- *o) -- *o': concat.level1.typecheck.StackEffect(
-            [_a_bar, concat.level1.typecheck.StackEffect([_a_bar], [_d_bar])],
-            [_d_bar],
+        'a:`t -- a a': StackEffect([_a_bar, _b], [_a_bar, _b, _b]),
+        '*i -- *i a': StackEffect([_a_bar], [_a_bar, _b]),
+        '*i fun:(*i -- *o) -- *o': StackEffect(
+            [_a_bar, StackEffect([_a_bar], [_d_bar])], [_d_bar],
         ),
     }
 
@@ -135,22 +130,45 @@ class TestStackEffectParser(unittest.TestCase):
                     self.fail('could not parse {}\n{}'.format(example, e))
                 env = concat.level1.typecheck.Environment()
                 self.assertEqual(
-                    effect.to_type(env)[0],
-                    self.examples[example],
+                    effect.to_type(env)[0], self.examples[example],
                 )
 
 
 class TestNamedTypeNode(unittest.TestCase):
     @given(from_type(concat.level2.typecheck.NamedTypeNode))
     def test_name_does_not_exist(self, named_type_node):
-        self.assertRaises(concat.level1.typecheck.NameError, named_type_node.to_type, concat.level1.typecheck.Environment())
+        self.assertRaises(
+            concat.level1.typecheck.NameError,
+            named_type_node.to_type,
+            concat.level1.typecheck.Environment(),
+        )
 
     def test_builtin_name_does_not_exist_in_empty_environment(self):
         named_type_node = concat.level2.typecheck.NamedTypeNode((0, 0), 'int')
-        self.assertRaises(concat.level1.typecheck.NameError, named_type_node.to_type, concat.level1.typecheck.Environment())
+        self.assertRaises(
+            concat.level1.typecheck.NameError,
+            named_type_node.to_type,
+            concat.level1.typecheck.Environment(),
+        )
 
-    @given(from_type(concat.level2.typecheck.NamedTypeNode), from_type(concat.level1.typecheck.IndividualType))
-    @example(named_type_node=concat.level2.typecheck.NamedTypeNode((0, 0), ''), type=concat.level1.typecheck._Function((), ((concat.level1.typecheck._IntersectionType(concat.level1.typecheck._Function((), ()), concat.level1.typecheck._Function((), ()))),)))
+    @given(
+        from_type(concat.level2.typecheck.NamedTypeNode),
+        from_type(concat.level1.typecheck.IndividualType),
+    )
+    @example(
+        named_type_node=concat.level2.typecheck.NamedTypeNode((0, 0), ''),
+        type=concat.level1.typecheck._Function(
+            (),
+            (
+                (
+                    concat.level1.typecheck._IntersectionType(
+                        concat.level1.typecheck._Function((), ()),
+                        concat.level1.typecheck._Function((), ()),
+                    )
+                ),
+            ),
+        ),
+    )
     def test_name_does_exist(self, named_type_node, type):
         env = concat.level1.typecheck.Environment({named_type_node.name: type})
         self.assertEqual(named_type_node.to_type(env)[0], type)

@@ -2,7 +2,23 @@ import concat.lex
 import concat.level0.parse
 import concat.level1.parse
 import concat.level1.typecheck
-from concat.level1.typecheck.types import StackEffect, IndividualType, IndividualVariable, ObjectType, ClassType, Type, int_type, float_type, no_return_type, object_type, py_function_type
+from concat.level1.typecheck import Environment
+from concat.level1.typecheck.types import (
+    SequenceVariable,
+    StackEffect,
+    IndividualType,
+    IndividualVariable,
+    ObjectType,
+    ClassType,
+    Type,
+    dict_type,
+    file_type,
+    int_type,
+    float_type,
+    no_return_type,
+    object_type,
+    py_function_type,
+)
 import unittest
 from hypothesis import given
 from hypothesis.strategies import from_type, dictionaries, text
@@ -23,72 +39,65 @@ def build_parsers() -> concat.level0.parse.ParserDict:
     return parsers
 
 
-in_var = concat.level1.typecheck.SequenceVariable()
-f = concat.level1.typecheck.StackEffect(
-    [
-        in_var,
-        concat.level1.typecheck.PrimitiveTypes.object,
-        concat.level1.typecheck.PrimitiveTypes.object
-    ], [
-        in_var,
-        concat.level1.typecheck.PrimitiveTypes.object,
-        concat.level1.typecheck.PrimitiveTypes.object
-    ])
+in_var = SequenceVariable()
+f = StackEffect(
+    [in_var, object_type, object_type], [in_var, object_type, object_type]
+)
 
 
 class TestStackEffectAlgebra(unittest.TestCase):
-
     def test_composition(self) -> None:
-        in_var = concat.level1.typecheck.SequenceVariable()
-        in_var2 = concat.level1.typecheck.SequenceVariable()
-        g = concat.level1.typecheck.StackEffect(
-            [in_var, concat.level1.typecheck.PrimitiveTypes.object],
-            [in_var, *[concat.level1.typecheck.PrimitiveTypes.object] * 2])
+        in_var = SequenceVariable()
+        in_var2 = SequenceVariable()
+        g = StackEffect([in_var, object_type], [in_var, *[object_type] * 2])
         f_then_g = f.compose(g)
-        self.assertEqual(f_then_g, concat.level1.typecheck.StackEffect(
-            [in_var2, *[concat.level1.typecheck.PrimitiveTypes.object] * 2],
-            [in_var2, *[concat.level1.typecheck.PrimitiveTypes.object] * 3]))
+        self.assertEqual(
+            f_then_g,
+            StackEffect(
+                [in_var2, *[object_type] * 2], [in_var2, *[object_type] * 3]
+            ),
+        )
 
     def test_composition_with_overflow(self) -> None:
-        in_var = concat.level1.typecheck.SequenceVariable()
-        in_var2 = concat.level1.typecheck.SequenceVariable()
-        g = concat.level1.typecheck.StackEffect(
-            [in_var, *[concat.level1.typecheck.PrimitiveTypes.object] * 4],
-            [in_var, concat.level1.typecheck.PrimitiveTypes.object])
+        in_var = SequenceVariable()
+        in_var2 = SequenceVariable()
+        g = StackEffect([in_var, *[object_type] * 4], [in_var, object_type])
         f_then_g = f.compose(g)
-        self.assertEqual(f_then_g, concat.level1.typecheck.StackEffect(
-            [in_var2, *[concat.level1.typecheck.PrimitiveTypes.object] * 4],
-            [in_var2, concat.level1.typecheck.PrimitiveTypes.object]))
+        self.assertEqual(
+            f_then_g,
+            StackEffect([in_var2, *[object_type] * 4], [in_var2, object_type]),
+        )
 
 
 class TestStackEffectProperties(unittest.TestCase):
-
     def test_completeness_test(self) -> None:
         self.assertFalse(f.can_be_complete_program())
 
 
 class TestTypeChecker(unittest.TestCase):
-
     def test_with_word(self) -> None:
         wth = '$() ctxmgr with\n'
         tree = parse(wth)
-        a_bar = concat.level1.typecheck.SequenceVariable()
+        a_bar = SequenceVariable()
         self.assertRaises(
             concat.level1.typecheck.TypeError,
             concat.level1.typecheck.infer,
-            concat.level1.typecheck.Environment({
-                'ctxmgr': concat.level1.typecheck.ForAll(
-                    [a_bar],
-                    concat.level1.typecheck.StackEffect([a_bar], [
-                        a_bar, concat.level1.typecheck.PrimitiveTypes.object]))
-            }),
-            tree.children)
+            concat.level1.typecheck.Environment(
+                {
+                    'ctxmgr': concat.level1.typecheck.ForAll(
+                        [a_bar], StackEffect([a_bar], [a_bar, object_type])
+                    )
+                }
+            ),
+            tree.children,
+        )
 
     def test_try_word(self) -> None:
         try_prog = '$() $() try\n'
         tree = parse(try_prog)
         concat.level1.typecheck.infer(
-            concat.level1.typecheck.Environment(), tree.children)
+            concat.level1.typecheck.Environment(), tree.children
+        )
 
     @given(from_type(concat.level0.parse.AttributeWordNode))
     def test_attribute_word(self, attr_word) -> None:
@@ -96,17 +105,20 @@ class TestTypeChecker(unittest.TestCase):
             concat.level1.typecheck.Environment(), [attr_word]
         )
         type = type.collapse_bounds()
-        attr_type = cast(concat.level1.typecheck.TypeWithAttribute, type.input[-1])
+        attr_type = cast(
+            concat.level1.typecheck.TypeWithAttribute, type.input[-1]
+        )
         self.assertEqual(attr_type.attribute, attr_word.value)
 
-class TestDiagnosticInfo(unittest.TestCase):
 
+class TestDiagnosticInfo(unittest.TestCase):
     def test_attribute_error_location(self) -> None:
         bad_code = '5 .attr'
         tree = parse(bad_code)
         try:
             concat.level1.typecheck.infer(
-                concat.level1.typecheck.Environment(), tree.children)
+                concat.level1.typecheck.Environment(), tree.children
+            )
         except concat.level1.typecheck.TypeError as e:
             self.assertEqual(e.location, tree.children[1].location)
         else:
@@ -114,30 +126,31 @@ class TestDiagnosticInfo(unittest.TestCase):
 
 
 class TestSequenceVariableTypeInference(unittest.TestCase):
-
     def test_with_word_inference(self):
         wth = '$(drop 0 ~) {"file": "a_file"} open with'
         tree = parse(wth)
-        _, type = concat.level1.typecheck.infer(Environment({
-            'drop': concat.level1.typecheck.ForAll(
-                [in_var],
-                concat.level1.typecheck.StackEffect(
-                    [in_var, concat.level1.typecheck.PrimitiveTypes.object],
-                    [in_var])),
-            'open': concat.level1.typecheck.ForAll(
-                [in_var],
-                concat.level1.typecheck.StackEffect(
-                    [in_var, concat.level1.typecheck.PrimitiveTypes.dict],
-                    [in_var, concat.level1.typecheck.PrimitiveTypes.file]))}),
-            tree.children)
-        self.assertEqual(type, concat.level1.typecheck.StackEffect(
-            [in_var], [in_var, concat.level1.typecheck.PrimitiveTypes.int]))
+        _, type = concat.level1.typecheck.infer(
+            Environment(
+                {
+                    'drop': concat.level1.typecheck.ForAll(
+                        [in_var], StackEffect([in_var, object_type], [in_var])
+                    ),
+                    'open': concat.level1.typecheck.ForAll(
+                        [in_var],
+                        StackEffect([in_var, dict_type], [in_var, file_type]),
+                    ),
+                }
+            ),
+            tree.children,
+        )
+        self.assertEqual(type, StackEffect([in_var], [in_var, int_type]))
 
 
 class TestSubtyping(unittest.TestCase):
 
     __attributes_generator = dictionaries(
-        text(max_size=25), from_type(IndividualType), max_size=5)  # type: ignore
+        text(max_size=25), from_type(IndividualType), max_size=5
+    )  # type: ignore
 
     @given(__attributes_generator, __attributes_generator)
     def test_object_structural_subtyping(self, attributes, other_attributes):
