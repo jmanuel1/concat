@@ -4,6 +4,7 @@ import sys
 import contextlib
 import concat.level1.parse
 import concat.level1.typecheck
+from concat.level1.typecheck.types import StackEffect
 import concat.level1.stdlib.types
 import concat.level1.stdlib.repl
 from typing import TextIO, Iterator
@@ -26,21 +27,29 @@ class TestREPLFunctions(unittest.TestCase):
         # Like in Factor, read_quot will search its caller's scope for objects.
         some, words, here = object(), object(), object()
         with replace_stdin(io.StringIO('some words here')):
-            concat.level1.stdlib.repl.read_quot(stack, [], extra_env=concat.level1.typecheck.Environment({
-                'some': concat.level1.typecheck.StackEffect([], []),
-                'words': concat.level1.typecheck.StackEffect([], []),
-                'here': concat.level1.typecheck.StackEffect([], [])
-            }))
+            concat.level1.stdlib.repl.read_quot(
+                stack,
+                [],
+                extra_env=concat.level1.typecheck.Environment(
+                    {
+                        'some': StackEffect([], []),
+                        'words': StackEffect([], []),
+                        'here': StackEffect([], []),
+                    }
+                ),
+            )
         self.assertEqual(
             stack,
             [concat.level1.stdlib.types.Quotation([some, words, here])],
-            msg='read_quot has incorrect stack effect')
+            msg='read_quot has incorrect stack effect',
+        )
 
     def test_repl(self):
         with replace_stdin(io.StringIO('[,] [,] $input py_call\nhi there')):
             concat.level1.stdlib.repl.repl([], [])
-            self.assertEqual(sys.stdin.read(), '',
-                             msg='repl did not consume all input')
+            self.assertEqual(
+                sys.stdin.read(), '', msg='repl did not consume all input'
+            )
 
     def test_catch_parse_errors(self):
         with replace_stdin(io.StringIO('drg nytu y,i.')):

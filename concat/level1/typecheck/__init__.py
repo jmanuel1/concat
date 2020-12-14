@@ -25,26 +25,101 @@ from typing_extensions import Protocol
 import concat.level0.parse
 import concat.level1.operators
 import concat.level1.parse
+
+_Result = TypeVar('_Result', covariant=True)
+
+
+class _Substitutable(Protocol[_Result]):
+    def apply_substitution(self, sub: 'Substitutions') -> _Result:
+        pass
+
+
+class Substitutions(Dict['_Variable', Union['Type', List['StackItemType']]]):
+
+    _T = Union[
+        _Substitutable[
+            Union[
+                'Substitutions',
+                'Type',
+                Sequence['StackItemType'],
+                'Environment',
+            ]
+        ],
+        Sequence['StackItemType'],
+    ]
+    _U = Union[
+        'Substitutions', 'Type', Sequence['StackItemType'], 'Environment'
+    ]
+
+    @overload
+    def __call__(
+        self, arg: Sequence['StackItemType']
+    ) -> List['StackItemType']:
+        ...
+
+    @overload
+    def __call__(self, arg: _Substitutable[_Result]) -> _Result:
+        ...
+
+    def __call__(self, arg: '_T') -> '_U':
+        if isinstance(arg, collections.abc.Sequence):
+            subbed_types: List[StackItemType] = []
+            for type in arg:
+                subbed_type: Union[
+                    StackItemType, Sequence[StackItemType]
+                ] = self(type)
+                if isinstance(subbed_type, collections.abc.Sequence):
+                    subbed_types += subbed_type
+                else:
+                    subbed_types.append(subbed_type)
+            return subbed_types
+        return arg.apply_substitution(self)
+
+    def _dom(self) -> Set['_Variable']:
+        return {*self}
+
+    def __str__(self) -> str:
+        return (
+            '{'
+            + ',\n'.join(
+                map(lambda i: '{}: {}'.format(i[0], i[1]), self.items())
+            )
+            + '}'
+        )
+
+    def apply_substitution(self, sub: 'Substitutions') -> 'Substitutions':
+        return Substitutions(
+            {
+                **sub,
+                **{a: sub(i) for a, i in self.items() if a not in sub._dom()},
+            }
+        )
+
+
 from concat.level1.typecheck.types import (
     Type,
-    PrimitiveType,
-    PrimitiveTypes,
     IndividualVariable,
     _Variable,
     _Function,
     ForAll,
     IndividualType,
     _IntersectionType,
+    ObjectType,
     PrimitiveInterface,
     SequenceVariable,
     TypeWithAttribute,
     StackItemType,
     PrimitiveInterfaces,
+    bool_type,
+    context_manager_type,
     inst,
+    int_type,
     _ftv,
     init_primitives,
-    StackEffect,
-    iterable_type
+    iterable_type,
+    list_type,
+    str_type,
+    object_type,
 )
 
 
@@ -105,71 +180,6 @@ class AttributeError(TypeError, builtins.AttributeError):
         self._attribute = attribute
 
 
-_Result = TypeVar('_Result', covariant=True)
-
-
-class _Substitutable(Protocol[_Result]):
-    def apply_substitution(self, sub: 'Substitutions') -> _Result:
-        pass
-
-
-class Substitutions(Dict[_Variable, Union[Type, List['StackItemType']]]):
-
-    _T = Union[
-        _Substitutable[
-            Union[
-                'Substitutions', Type, Sequence[StackItemType], 'Environment'
-            ]
-        ],
-        Sequence[StackItemType],
-    ]
-    _U = Union['Substitutions', Type, Sequence['StackItemType'], 'Environment']
-
-    @overload
-    def __call__(
-        self, arg: Sequence['StackItemType']
-    ) -> List['StackItemType']:
-        ...
-
-    @overload
-    def __call__(self, arg: _Substitutable[_Result]) -> _Result:
-        ...
-
-    def __call__(self, arg: '_T') -> '_U':
-        if isinstance(arg, collections.abc.Sequence):
-            subbed_types: List[StackItemType] = []
-            for type in arg:
-                subbed_type: Union[
-                    StackItemType, Sequence[StackItemType]
-                ] = self(type)
-                if isinstance(subbed_type, collections.abc.Sequence):
-                    subbed_types += subbed_type
-                else:
-                    subbed_types.append(subbed_type)
-            return subbed_types
-        return arg.apply_substitution(self)
-
-    def _dom(self) -> Set[_Variable]:
-        return {*self}
-
-    def __str__(self) -> str:
-        return (
-            '{'
-            + ',\n'.join(
-                map(lambda i: '{}: {}'.format(i[0], i[1]), self.items())
-            )
-            + '}'
-        )
-
-    def apply_substitution(self, sub: 'Substitutions') -> 'Substitutions':
-        return Substitutions(
-            {
-                **sub,
-                **{a: sub(i) for a, i in self.items() if a not in sub._dom()},
-            }
-        )
-
-
 class Environment(Dict[str, Type]):
     def copy(self) -> 'Environment':
         return Environment(super().copy())
@@ -199,40 +209,34 @@ def infer(
 
             if isinstance(node, concat.level0.parse.NumberWordNode):
                 if isinstance(node.value, int):
-                    current_effect = _Function(i, [*o, PrimitiveTypes.int])
+                    current_effect = _Function(i, [*o, int_type])
                 else:
                     raise NotImplementedError
             # there's no False word at the moment
             elif isinstance(node, concat.level1.parse.TrueWordNode):
-                current_effect = _Function(i, [*o, PrimitiveTypes.bool])
+                current_effect = _Function(i, [*o, bool_type])
             elif isinstance(node, concat.level1.operators.AddWordNode):
                 # for now, only works with ints and strings
                 a_bar = SequenceVariable()
                 try:
-                    phi = unify(
-                        list(o),
-                        [a_bar, PrimitiveTypes.int, PrimitiveTypes.int],
-                    )
+                    phi = unify(list(o), [a_bar, int_type, int_type],)
                 except TypeError:
-                    phi = unify(
-                        list(o),
-                        [a_bar, PrimitiveTypes.str, PrimitiveTypes.str],
-                    )
+                    phi = unify(list(o), [a_bar, str_type, str_type],)
                     current_subs, current_effect = (
                         phi(S),
-                        phi(_Function(i, [a_bar, PrimitiveTypes.str])),
+                        phi(_Function(i, [a_bar, str_type])),
                     )
                 else:
                     current_subs, current_effect = (
                         phi(S),
-                        phi(_Function(i, [a_bar, PrimitiveTypes.int])),
+                        phi(_Function(i, [a_bar, int_type])),
                     )
             elif isinstance(node, concat.level0.parse.NameWordNode):
                 # the type of if_then is built-in
                 if node.value == 'if_then':
                     a_bar = SequenceVariable()
                     b = _Function([a_bar], [a_bar])
-                    phi = unify(list(o), [a_bar, PrimitiveTypes.bool, b])
+                    phi = unify(list(o), [a_bar, bool_type, b])
                     current_subs, current_effect = (
                         phi(S),
                         phi(_Function(i, [a_bar])),
@@ -321,10 +325,8 @@ def infer(
             # now for our extensions
             elif isinstance(node, concat.level1.parse.WithWordNode):
                 a_bar, b_bar = SequenceVariable(), SequenceVariable()
-                body_type = _Function([a_bar, PrimitiveTypes.object], [b_bar])
-                phi = unify(
-                    list(o), [a_bar, body_type, PrimitiveTypes.context_manager]
-                )
+                body_type = _Function([a_bar, object_type], [b_bar])
+                phi = unify(list(o), [a_bar, body_type, context_manager_type])
                 current_subs, current_effect = (
                     phi(S),
                     phi(_Function(i, [b_bar])),
@@ -379,7 +381,7 @@ def infer(
                     phi = collected_type_sub(phi)
                 current_subs, current_effect = (
                     phi,
-                    phi(_Function(i, [*collected_type, PrimitiveTypes.dict])),
+                    phi(_Function(i, [*collected_type, dict_type])),
                 )
             elif isinstance(node, concat.level1.parse.ListWordNode):
                 phi = S
@@ -392,7 +394,9 @@ def infer(
                         source_dir=source_dir,
                     )
                     i_var, o_var = SequenceVariable(), SequenceVariable()
-                    phi1 = unify_ind(fun_type, _Function([i_var], [o_var]))(phi1)
+                    phi1 = unify_ind(fun_type, _Function([i_var], [o_var]))(
+                        phi1
+                    )
                     i1, o1 = phi1([i_var]), phi1([o_var])
                     R1 = unify(phi1(phi(collected_type)), list(i1))
                     collected_type = R1(phi1(phi(o1)))
@@ -404,7 +408,7 @@ def infer(
                     phi = collected_type_sub(R1(phi1(phi)))
                 current_subs, current_effect = (
                     phi,
-                    phi(_Function(i, [*collected_type, PrimitiveTypes.list])),
+                    phi(_Function(i, [*collected_type, list_type])),
                 )
             elif isinstance(node, concat.level1.operators.InvertWordNode):
                 out_var = SequenceVariable()
@@ -417,7 +421,7 @@ def infer(
             elif isinstance(node, concat.level0.parse.StringWordNode):
                 current_subs, current_effect = (
                     S,
-                    _Function(i, [*o, PrimitiveTypes.str]),
+                    _Function(i, [*o, str_type]),
                 )
             elif isinstance(node, concat.level0.parse.AttributeWordNode):
                 out_var = SequenceVariable()
@@ -513,7 +517,7 @@ def unify_ind(
     direction."""
     t1 = inst(t1.to_for_all())
     t2 = inst(t2.to_for_all())
-    Primitive = (PrimitiveType, PrimitiveInterface)
+    Primitive = (ObjectType, PrimitiveInterface)
     if isinstance(t1, PrimitiveInterface) and isinstance(
         t2, PrimitiveInterface
     ):
@@ -530,7 +534,7 @@ def unify_ind(
                 '{} has no type arguments, but {} does'.format(t1, t2)
             )
         return unify([*t1.type_arguments], [*t2.type_arguments])
-    elif isinstance(t1, PrimitiveType) and isinstance(t2, PrimitiveInterface):
+    elif isinstance(t1, ObjectType) and isinstance(t2, PrimitiveInterface):
         phi = Substitutions()
         fail = True
         for type in t1.supertypes:
@@ -542,7 +546,7 @@ def unify_ind(
         if fail:
             raise TypeError('{} does not implement {}'.format(t1, t2))
         return phi
-    elif isinstance(t1, Primitive) and isinstance(t2, PrimitiveType):
+    elif isinstance(t1, Primitive) and isinstance(t2, ObjectType):
         # TODO: Unify type arguments
         if not t1.is_subtype_of(t2):
             raise TypeError(
