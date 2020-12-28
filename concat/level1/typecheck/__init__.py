@@ -26,6 +26,64 @@ import concat.level0.parse
 import concat.level1.operators
 import concat.level1.parse
 
+
+if TYPE_CHECKING:
+    import concat.astutils
+
+
+class StaticAnalysisError(Exception):
+    def __init__(self, message: str) -> None:
+        self._message = message
+        self.location: Optional['concat.astutils.Location'] = None
+
+    def set_location_if_missing(
+        self, location: 'concat.astutils.Location'
+    ) -> None:
+        if not self.location:
+            self.location = location
+
+    def __str__(self) -> str:
+        return '{} at {}'.format(self._message, self.location)
+
+
+class TypeError(StaticAnalysisError, builtins.TypeError):
+    pass
+
+
+class NameError(StaticAnalysisError, builtins.NameError):
+    def __init__(
+        self,
+        name: Union[concat.level0.parse.NameWordNode, str],
+        location: Optional[concat.astutils.Location] = None,
+    ) -> None:
+        if isinstance(name, concat.level0.parse.NameWordNode):
+            location = name.location
+            name = name.value
+        super().__init__(name)
+        self._name = name
+        self.location = location or self.location
+
+    def __str__(self) -> str:
+        location_info = ''
+        if self.location:
+            location_info = ' (error at {}:{})'.format(*self.location)
+        return (
+            'name "{}" not previously defined'.format(self._name)
+            + location_info
+        )
+
+
+class AttributeError(TypeError, builtins.AttributeError):
+    def __init__(self, type: 'Type', attribute: str) -> None:
+        super().__init__(
+            'object of type {} does not have attribute {}'.format(
+                type, attribute
+            )
+        )
+        self._type = type
+        self._attribute = attribute
+
+
 _Result = TypeVar('_Result', covariant=True)
 
 
@@ -121,63 +179,6 @@ from concat.level1.typecheck.types import (
     str_type,
     object_type,
 )
-
-
-if TYPE_CHECKING:
-    import concat.astutils
-
-
-class StaticAnalysisError(Exception):
-    def __init__(self, message: str) -> None:
-        self._message = message
-        self.location: Optional['concat.astutils.Location'] = None
-
-    def set_location_if_missing(
-        self, location: 'concat.astutils.Location'
-    ) -> None:
-        if not self.location:
-            self.location = location
-
-    def __str__(self) -> str:
-        return '{} at {}'.format(self._message, self.location)
-
-
-class TypeError(StaticAnalysisError, builtins.TypeError):
-    pass
-
-
-class NameError(StaticAnalysisError, builtins.NameError):
-    def __init__(
-        self,
-        name: Union[concat.level0.parse.NameWordNode, str],
-        location: Optional[concat.astutils.Location] = None,
-    ) -> None:
-        if isinstance(name, concat.level0.parse.NameWordNode):
-            location = name.location
-            name = name.value
-        super().__init__(name)
-        self._name = name
-        self.location = location or self.location
-
-    def __str__(self) -> str:
-        location_info = ''
-        if self.location:
-            location_info = ' (error at {}:{})'.format(*self.location)
-        return (
-            'name "{}" not previously defined'.format(self._name)
-            + location_info
-        )
-
-
-class AttributeError(TypeError, builtins.AttributeError):
-    def __init__(self, type: 'Type', attribute: str) -> None:
-        super().__init__(
-            'object of type {} does not have attribute {}'.format(
-                type, attribute
-            )
-        )
-        self._type = type
-        self._attribute = attribute
 
 
 class Environment(Dict[str, Type]):
