@@ -1,4 +1,5 @@
 import concat.level1.typecheck
+from concat.level1.typecheck import AttributeError
 from typing import (
     Optional,
     Dict,
@@ -841,6 +842,12 @@ class ObjectType(IndividualType):
             if not (sub(self._attributes[attr]) <= type):
                 return False
         return True
+
+    def get_type_of_attribute(self, attribute: str) -> IndividualType:
+        if attribute not in self._attributes:
+            raise AttributeError(self, attribute)
+
+        return self._attributes[attribute]
 
     def __repr__(self) -> str:
         return 'ObjectType({!r}, {!r})'.format(
