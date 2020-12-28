@@ -158,7 +158,7 @@ class IndividualVariable(_Variable, IndividualType):
             bound = None
         else:
             bound = cast(IndividualType, sub(self._never_object_type_bound))
-        if bound == self.bound:
+        if bound == self._never_object_type_bound:
             return self
         # NOTE: This returns a new, distinct type variable!
         return IndividualVariable(bound)
