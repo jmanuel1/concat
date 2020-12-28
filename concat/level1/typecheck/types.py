@@ -788,7 +788,7 @@ class ObjectType(IndividualType):
         self._attributes = attributes
         self._type_parameters = type_parameters
         self._nominal_supertypes = nominal_supertypes
-        self._type_arguments = None
+        self._type_arguments = ()
         self._head = self
 
     def collapse_bounds(self) -> 'ObjectType':
@@ -815,7 +815,8 @@ class ObjectType(IndividualType):
             Dict[str, IndividualType],
             {attr: sub(t) for attr, t in self._attributes.items()},
         )
-        return ObjectType(self_type, attributes, self._type_parameters)
+        nominal_supertypes = sub(self._nominal_supertypes)
+        return ObjectType(self_type, attributes, self._type_parameters, nominal_supertypes)
 
     def is_subtype_of(self, supertype: 'Type') -> bool:
         if supertype in self._nominal_supertypes:
@@ -823,8 +824,21 @@ class ObjectType(IndividualType):
         if (
             isinstance(supertype, _Function)
             or isinstance(supertype, ObjectType)
-            and supertype.head == py_function_type
+            and supertype._head == py_function_type
         ):
+            # TODO: I don't like making this special case. Maybe make
+            # py_function_type a special subclass of ObjectType?
+            if self.head == py_function_type:
+                # TODO: Multiple argument types
+                # NOTE: make sure types are of same kind (arity)
+                if len(self._type_parameters) != len(supertype._type_parameters):
+                    return False
+                if len(self._type_parameters) == 0:
+                    return True
+                elif len(self._type_parameters) == 2:
+                    # both are py_function_type
+                    return True
+                return supertype._type_arguments[0] <= self._type_arguments[0] and self._type_arguments[1] <= supertype._type_arguments[1]
             if '__call__' not in self._attributes:
                 return False
             return self._attributes['__call__'] <= supertype
@@ -847,19 +861,46 @@ class ObjectType(IndividualType):
         return self._attributes[attribute]
 
     def __repr__(self) -> str:
-        return 'ObjectType({!r}, {!r})'.format(
-            self._self_type, self._attributes
+        return 'ObjectType({!r}, {!r}, {!r}, {!r})'.format(
+            self._self_type, self._attributes, self._type_parameters, self._nominal_supertypes
         )
 
+    # QUESTION: Define in terms of <= (a <= b and b <= a)? For all kinds of types?
     def __eq__(self, other: object) -> bool:
         from concat.level1.typecheck import Substitutions
 
         if not isinstance(other, ObjectType):
             return super().__eq__(other)
         sub = Substitutions({self._self_type: other._self_type})
-        return {
+        subbed_attributes = {
             attr: sub(t) for attr, t in self._attributes.items()
-        } == other._attributes
+        }
+        if subbed_attributes != other._attributes:
+            return False
+
+        if len(self._type_parameters) != len(other._type_parameters) or len(self._type_arguments) != len(other._type_arguments):
+            return False
+        # We can't use plain unification here because variables can only map to
+        # variables of the same type.
+        subs = concat.level1.typecheck.Substitutions()
+        type_pairs = zip(
+            [*self._type_parameters, *self._type_arguments], [*other._type_parameters, *other._type_arguments]
+        )
+        for type1, type2 in type_pairs:
+            if isinstance(type1, IndividualVariable) and isinstance(
+                type2, IndividualVariable
+            ):
+                # FIXME: This equality check should include alpha equivalence.
+                if type1.bound == type2.bound:
+                    subs[type2] = type1
+            elif isinstance(type1, SequenceVariable) and isinstance(
+                type2, SequenceVariable
+            ):
+                subs[type2] = type1
+            type2 = subs(type2)  # type: ignore
+            if type1 != type2:
+                return False
+        return True
 
     _hash_variable = None
 
@@ -868,8 +909,6 @@ class ObjectType(IndividualType):
 
         if ObjectType._hash_variable is None:
             ObjectType._hash_variable = IndividualVariable()
-        print(self._self_type, type(self._self_type))
-        # XXX
         sub = Substitutions({self._self_type: ObjectType._hash_variable})
         type_to_hash = sub(self)
         return hash(tuple(type_to_hash._attributes.items()))
@@ -897,7 +936,7 @@ class ObjectType(IndividualType):
     @property
     def type_arguments(
         self,
-    ) -> Optional[Sequence[Union[StackItemType, Sequence[StackItemType]]]]:
+    ) -> Sequence[Union[StackItemType, Sequence[StackItemType]]]:
         return self._type_arguments
 
     @property
@@ -907,6 +946,10 @@ class ObjectType(IndividualType):
     @property
     def type_parameters(self) -> Sequence[_Variable]:
         return self._type_parameters
+
+    @property
+    def nominal_supertypes(self) -> Sequence[IndividualType]:
+        return self._nominal_supertypes
 
 
 class ClassType(ObjectType):

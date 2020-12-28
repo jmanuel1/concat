@@ -538,7 +538,8 @@ def unify_ind(
     elif isinstance(t1, ObjectType) and isinstance(t2, PrimitiveInterface):
         phi = Substitutions()
         fail = True
-        for type in t1.supertypes:
+        # FIXME: Should be structural.
+        for type in t1.nominal_supertypes:
             try:
                 phi = unify_ind(type, t2)(phi)
                 fail = False

@@ -107,5 +107,4 @@ types = {
     'print': py_function_type,
     'Exception': py_function_type,
     'input': py_function_type,
-    'file': PrimitiveTypes.file
 }

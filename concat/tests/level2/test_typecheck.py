@@ -57,13 +57,15 @@ class TestTypeChecker(unittest.TestCase):
         tree = parse(
             dedent(
                 """\
-            def seek_file(file:file offset:int whence:int --):
-                swap [(), (),] [,] swap pick $.seek py_call drop drop
-        """))
-        env = concat.level1.typecheck.Environment({
-            **concat.level2.preamble_types.types,
-            **concat.level2.typecheck.builtin_environment,
-        })
+                    def seek_file(file:file offset:int whence:int --):
+                        swap [(), (),] [,] swap pick $.seek py_call drop drop
+                """
+            )
+        )
+        env = concat.level1.typecheck.Environment(
+            # FIXME: These ought to be combined.
+            {**concat.level2.preamble_types.types, **concat.level2.typecheck.builtin_environment}
+        )
         concat.level1.typecheck.infer(
             env, tree.children, (concat.level2.typecheck.infer,), True
         )
