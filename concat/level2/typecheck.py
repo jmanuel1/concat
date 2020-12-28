@@ -21,6 +21,7 @@ from concat.level1.typecheck.types import (
     context_manager_type,
     dict_type,
     ellipsis_type,
+    file_type,
     float_type,
     int_type,
     list_type,
@@ -235,6 +236,7 @@ builtin_environment = Environment(
         'Optional': optional_type,
         'int': int_type,
         'float': float_type,
+        'file': file_type,
     }
 )
 
@@ -446,8 +448,8 @@ def _ensure_type(
     typename: Union[Optional[NamedTypeNode], StackEffectTypeNode],
     env: concat.level1.typecheck.Environment,
     obj_name: str,
-) -> Tuple[StackItemType, concat.level1.typecheck.Environment]:
-    type: StackItemType
+) -> Tuple[Type, concat.level1.typecheck.Environment]:
+    type: Type
     if obj_name in env:
         type = cast(StackItemType, env[obj_name])
     elif typename is None:
@@ -455,7 +457,7 @@ def _ensure_type(
         # are unconstrained. In other words, it would basically become an Any
         # type.
         type = IndividualVariable()
-    elif isinstance(typename, StackEffectTypeNode):
+    elif isinstance(typename, (NamedTypeNode, StackEffectTypeNode)):
         type, env = typename.to_type(env)
     else:
         raise NotImplementedError(

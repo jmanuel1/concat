@@ -62,7 +62,8 @@ class TestTypeChecker(unittest.TestCase):
             )
         )
         env = concat.level1.typecheck.Environment(
-            concat.level2.preamble_types.types
+            # FIXME: These ought to be combined.
+            {**concat.level2.preamble_types.types, **concat.level2.typecheck.builtin_environment}
         )
         concat.level1.typecheck.infer(
             env, tree.children, (concat.level2.typecheck.infer,), True
