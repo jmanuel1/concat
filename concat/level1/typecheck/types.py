@@ -133,10 +133,7 @@ class IndividualVariable(_Variable, IndividualType):
             supertype
         )
 
-    def __hash__(self) -> int:
-        return hash(
-            (id(self), None if self._bound == object_type else self._bound)
-        )
+    # Default __eq__ and __hash__ (equality by object identity) are used.
 
     def __str__(self) -> str:
         bound = ''
