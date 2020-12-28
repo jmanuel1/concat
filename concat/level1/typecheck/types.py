@@ -828,7 +828,8 @@ class ObjectType(IndividualType):
         ):
             # TODO: I don't like making this special case. Maybe make
             # py_function_type a special subclass of ObjectType?
-            if self.head == py_function_type:
+            # FIXME: Clean up this logic.
+            if self.head == py_function_type and isinstance(supertype, ObjectType):
                 # TODO: Multiple argument types
                 # NOTE: make sure types are of same kind (arity)
                 if len(self._type_parameters) != len(supertype._type_parameters):
