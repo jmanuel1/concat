@@ -772,7 +772,8 @@ class PrimitiveInterfaces:
 class ObjectType(IndividualType):
     """The representation of types of objects, like in "Design and Evaluation of Gradual Typing for Python" (Vitousek et al. 2014)."""
 
-    # FIXME: Allow universal quantifiers on attributes. Depends on ForAll subtyping.
+    # FIXME: Allow universal quantifiers on attributes. Depends on ForAll
+    # subtyping.
     def __init__(
         self,
         self_type: IndividualVariable,
@@ -780,13 +781,11 @@ class ObjectType(IndividualType):
         type_parameters: Sequence[_Variable] = (),
         nominal_supertypes: Sequence[IndividualType] = (),
     ) -> None:
-        assert isinstance(self_type, IndividualVariable)
-
         self._self_type = self_type
         self._attributes = attributes
         self._type_parameters = type_parameters
         self._nominal_supertypes = nominal_supertypes
-        self._type_arguments = ()
+        self._type_arguments: Sequence[Union[StackItemType, Sequence[StackItemType]]] = ()
         self._head = self
 
     def collapse_bounds(self) -> 'ObjectType':
@@ -813,8 +812,13 @@ class ObjectType(IndividualType):
             Dict[str, IndividualType],
             {attr: sub(t) for attr, t in self._attributes.items()},
         )
-        nominal_supertypes = sub(self._nominal_supertypes)
-        return ObjectType(self_type, attributes, self._type_parameters, nominal_supertypes)
+        nominal_supertypes = cast(
+            Sequence[IndividualType],
+            sub(self._nominal_supertypes)
+        )
+        return ObjectType(
+            self_type, attributes, self._type_parameters, nominal_supertypes
+        )
 
     def is_subtype_of(self, supertype: 'Type') -> bool:
         if supertype in self._nominal_supertypes:
@@ -827,17 +831,26 @@ class ObjectType(IndividualType):
             # TODO: I don't like making this special case. Maybe make
             # py_function_type a special subclass of ObjectType?
             # FIXME: Clean up this logic.
-            if self.head == py_function_type and isinstance(supertype, ObjectType):
+            if self.head == py_function_type and isinstance(
+                supertype, ObjectType
+            ):
                 # TODO: Multiple argument types
                 # NOTE: make sure types are of same kind (arity)
-                if len(self._type_parameters) != len(supertype._type_parameters):
+                if len(self._type_parameters) != len(
+                    supertype._type_parameters
+                ):
                     return False
                 if len(self._type_parameters) == 0:
                     return True
                 elif len(self._type_parameters) == 2:
                     # both are py_function_type
                     return True
-                return supertype._type_arguments[0] <= self._type_arguments[0] and self._type_arguments[1] <= supertype._type_arguments[1]
+                assert isinstance(supertype._type_arguments[0], IndividualType)
+                assert isinstance(self._type_arguments[1], IndividualType)
+                return (
+                    supertype._type_arguments[0] <= self._type_arguments[0]
+                    and self._type_arguments[1] <= supertype._type_arguments[1]
+                )
             if '__call__' not in self._attributes:
                 return False
             return self._attributes['__call__'] <= supertype
@@ -849,7 +862,7 @@ class ObjectType(IndividualType):
             sub = concat.level1.typecheck.Substitutions(
                 {self._self_type: supertype._self_type}
             )
-            if not (sub(self._attributes[attr]) <= type):
+            if not (cast(IndividualType, sub(self._attributes[attr])) <= type):
                 return False
         return True
 
@@ -861,7 +874,10 @@ class ObjectType(IndividualType):
 
     def __repr__(self) -> str:
         return 'ObjectType({!r}, {!r}, {!r}, {!r})'.format(
-            self._self_type, self._attributes, self._type_parameters, self._nominal_supertypes
+            self._self_type,
+            self._attributes,
+            self._type_parameters,
+            self._nominal_supertypes,
         )
 
     # QUESTION: Define in terms of <= (a <= b and b <= a)? For all kinds of types?
@@ -877,13 +893,16 @@ class ObjectType(IndividualType):
         if subbed_attributes != other._attributes:
             return False
 
-        if len(self._type_parameters) != len(other._type_parameters) or len(self._type_arguments) != len(other._type_arguments):
+        if len(self._type_parameters) != len(other._type_parameters) or len(
+            self._type_arguments
+        ) != len(other._type_arguments):
             return False
         # We can't use plain unification here because variables can only map to
         # variables of the same type.
         subs = concat.level1.typecheck.Substitutions()
         type_pairs = zip(
-            [*self._type_parameters, *self._type_arguments], [*other._type_parameters, *other._type_arguments]
+            [*self._type_parameters, *self._type_arguments],
+            [*other._type_parameters, *other._type_arguments],
         )
         for type1, type2 in type_pairs:
             if isinstance(type1, IndividualVariable) and isinstance(
@@ -918,9 +937,10 @@ class ObjectType(IndividualType):
         from concat.level1.typecheck import Substitutions
 
         sub = Substitutions(zip(self._type_parameters, type_arguments))
+        attribute_items = self._attributes.items()
         return ObjectType(
             self._self_type,
-            {n: sub(t) for n, t in self._attributes.items()},
+            {n: cast(IndividualType, sub(t)) for n, t in attribute_items},
             (),
         )
 
