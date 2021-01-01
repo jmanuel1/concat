@@ -770,7 +770,10 @@ class PrimitiveInterfaces:
 
 
 class ObjectType(IndividualType):
-    """The representation of types of objects, like in "Design and Evaluation of Gradual Typing for Python" (Vitousek et al. 2014)."""
+    """The representation of types of objects, based on a gradual typing paper.
+
+    That paper is "Design and Evaluation of Gradual Typing for Python"
+    (Vitousek et al. 2014)."""
 
     # FIXME: Allow universal quantifiers on attributes. Depends on ForAll
     # subtyping.
