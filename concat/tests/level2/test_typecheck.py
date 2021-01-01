@@ -92,7 +92,7 @@ class TestTypeChecker(unittest.TestCase):
 
     def test_pushed_subscription(self) -> None:
         """Test that the type checker allows pushed subscription words."""
-        tree = parse('$[0] cast (int) 1 -')
+        tree = parse('$[0] cast (int) 1 +')
         concat.level1.typecheck.infer(
             concat.level2.typecheck.builtin_environment,
             tree.children,
