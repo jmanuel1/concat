@@ -994,14 +994,24 @@ _return_type_var = IndividualVariable()
 py_function_type = ObjectType(_x, {}, [_arg_type_var, _return_type_var])
 
 iterable_type = PrimitiveInterfaces.iterable
-context_manager_type = ObjectType(_x, {})
+context_manager_type = ObjectType(_x, {
+    # TODO: Add argument and return types. I think I'll need a special
+    # py_function representation for that.
+    '__enter__': py_function_type,
+    '__exit__': py_function_type
+})
 optional_type = _OptionalType()
 none_type = ObjectType(_x, {})
 dict_type = ObjectType(_x, {}, [], [iterable_type])
 bool_type = ObjectType(_x, {})
 file_type = ObjectType(
     _x,
-    {'seek': py_function_type, 'read': py_function_type},
+    {
+        'seek': py_function_type,
+        'read': py_function_type,
+        '__enter__': py_function_type,
+        '__exit__': py_function_type
+    },
     [],
     # context_manager_type is a structural supertype
     [iterable_type],
