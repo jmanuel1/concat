@@ -981,8 +981,9 @@ _x = IndividualVariable()
 invertible_type = PrimitiveInterfaces.invertible
 subtractable_type = PrimitiveInterface('subtractable')
 
-# invertible_type, subtractable_type are structural supertypes
-int_type = ObjectType(_x, {}, [])
+# FIXME: invertible_type, subtractable_type are structural supertypes
+# but for now they are both explicit
+int_type = ObjectType(_x, {}, [], [invertible_type, subtractable_type])
 
 float_type = ObjectType(_x, {})
 no_return_type = _NoReturnType()
