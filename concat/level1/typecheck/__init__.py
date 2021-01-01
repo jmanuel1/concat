@@ -170,6 +170,7 @@ from concat.level1.typecheck.types import (
     PrimitiveInterfaces,
     bool_type,
     context_manager_type,
+    dict_type,
     inst,
     int_type,
     _ftv,
