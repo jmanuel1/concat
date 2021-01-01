@@ -129,7 +129,7 @@ class TestStackEffectParser(unittest.TestCase):
                     effect = build_parsers()['stack-effect-type'].parse(tokens)
                 except parsy.ParseError as e:
                     self.fail('could not parse {}\n{}'.format(example, e))
-                env = concat.level1.typecheck.Environment()
+                env = concat.level2.typecheck.builtin_environment
                 self.assertEqual(
                     effect.to_type(env)[0], self.examples[example],
                 )
