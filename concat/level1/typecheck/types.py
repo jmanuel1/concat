@@ -769,17 +769,20 @@ class PrimitiveInterfaces:
     iterable = PrimitiveInterface('iterable')
 
 
+TypeArguments = Sequence[Union[StackItemType, Sequence[StackItemType]]]
+
+
 class ObjectType(IndividualType):
     """The representation of types of objects, based on a gradual typing paper.
 
     That paper is "Design and Evaluation of Gradual Typing for Python"
     (Vitousek et al. 2014)."""
 
-    # FIXME: Allow universal quantifiers on attributes. Depends on ForAll
-    # subtyping.
     def __init__(
         self,
         self_type: IndividualVariable,
+        # Attributes can be universally quantified since ObjectType and
+        # PrimitiveInterface allow it.
         attributes: Dict[str, IndividualType],
         type_parameters: Sequence[_Variable] = (),
         nominal_supertypes: Sequence[IndividualType] = (),
@@ -788,7 +791,7 @@ class ObjectType(IndividualType):
         self._attributes = attributes
         self._type_parameters = type_parameters
         self._nominal_supertypes = nominal_supertypes
-        self._type_arguments: Sequence[Union[StackItemType, Sequence[StackItemType]]] = ()
+        self._type_arguments: TypeArguments = ()
         self._head = self
 
     def collapse_bounds(self) -> 'ObjectType':
@@ -816,8 +819,7 @@ class ObjectType(IndividualType):
             {attr: sub(t) for attr, t in self._attributes.items()},
         )
         nominal_supertypes = cast(
-            Sequence[IndividualType],
-            sub(self._nominal_supertypes)
+            Sequence[IndividualType], sub(self._nominal_supertypes)
         )
         return ObjectType(
             self_type, attributes, self._type_parameters, nominal_supertypes
@@ -956,9 +958,7 @@ class ObjectType(IndividualType):
         return self._self_type
 
     @property
-    def type_arguments(
-        self,
-    ) -> Sequence[Union[StackItemType, Sequence[StackItemType]]]:
+    def type_arguments(self) -> TypeArguments:
         return self._type_arguments
 
     @property
@@ -1015,12 +1015,15 @@ _return_type_var = IndividualVariable()
 py_function_type = ObjectType(_x, {}, [_arg_type_var, _return_type_var])
 
 iterable_type = PrimitiveInterfaces.iterable
-context_manager_type = ObjectType(_x, {
-    # TODO: Add argument and return types. I think I'll need a special
-    # py_function representation for that.
-    '__enter__': py_function_type,
-    '__exit__': py_function_type
-})
+context_manager_type = ObjectType(
+    _x,
+    {
+        # TODO: Add argument and return types. I think I'll need a special
+        # py_function representation for that.
+        '__enter__': py_function_type,
+        '__exit__': py_function_type,
+    },
+)
 optional_type = _OptionalType()
 none_type = ObjectType(_x, {})
 dict_type = ObjectType(_x, {}, [], [iterable_type])
@@ -1031,7 +1034,7 @@ file_type = ObjectType(
         'seek': py_function_type,
         'read': py_function_type,
         '__enter__': py_function_type,
-        '__exit__': py_function_type
+        '__exit__': py_function_type,
     },
     [],
     # context_manager_type is a structural supertype
