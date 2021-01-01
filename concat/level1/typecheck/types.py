@@ -748,14 +748,12 @@ def _ftv(
     elif isinstance(f, TypeWithAttribute):
         return _ftv(f.attribute_type)
     elif isinstance(f, ObjectType):
-        return (
-            _ftv(f.attributes)
-            | (
-                {_ftv(arg) for arg in f.type_arguments}
-                if f.type_arguments is not None
-                else set()
-            )
-        ) - {f.self_type, *f.type_parameters}
+        ftv = _ftv(f.attributes)
+        for arg in f.type_arguments:
+            ftv |= _ftv(arg)
+        # QUESTION: Include supertypes?
+        ftv -= {f.self_type, *f.type_parameters}
+        return ftv
     else:
         raise builtins.TypeError(f)
 
