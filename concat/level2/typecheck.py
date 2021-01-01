@@ -11,6 +11,7 @@ from concat.level1.typecheck.types import (
     IndividualType,
     IndividualVariable,
     ObjectType,
+    PrimitiveInterface,
     SequenceVariable,
     StackEffect,
     StackItemType,
