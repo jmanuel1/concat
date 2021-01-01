@@ -2,7 +2,11 @@ import concat.lex as lex
 import concat.level0.parse
 import concat.level1.parse
 import concat.level1.typecheck
-from concat.level1.typecheck.types import StackEffect, object_type
+from concat.level1.typecheck.types import (
+    IndividualVariable,
+    StackEffect,
+    object_type,
+)
 import concat.level2.typecheck
 from concat.level2.typecheck import builtin_environment
 import concat.level2.preamble_types
@@ -12,7 +16,7 @@ import unittest
 from textwrap import dedent
 from typing import List, Dict, cast
 import parsy
-from hypothesis import given, example
+from hypothesis import given, example, note
 from hypothesis.strategies import from_type
 
 
@@ -64,7 +68,10 @@ class TestTypeChecker(unittest.TestCase):
         )
         env = concat.level1.typecheck.Environment(
             # FIXME: These ought to be combined.
-            {**concat.level2.preamble_types.types, **concat.level2.typecheck.builtin_environment}
+            {
+                **concat.level2.preamble_types.types,
+                **concat.level2.typecheck.builtin_environment,
+            }
         )
         concat.level1.typecheck.infer(
             env, tree.children, (concat.level2.typecheck.infer,), True
@@ -171,6 +178,11 @@ class TestNamedTypeNode(unittest.TestCase):
             ),
         ),
     )
+    @example(
+        named_type_node=concat.level2.typecheck.NamedTypeNode((0, 0), ''),
+        type=IndividualVariable(),
+    )
     def test_name_does_exist(self, named_type_node, type):
         env = concat.level1.typecheck.Environment({named_type_node.name: type})
+        note((named_type_node.to_type(env)[0], type))
         self.assertEqual(named_type_node.to_type(env)[0], type)
