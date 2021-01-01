@@ -9,13 +9,11 @@ from concat.level1.typecheck.types import (
     IndividualType,
     IndividualVariable,
     ObjectType,
+    TypeWithAttribute,
     ClassType,
-    Type,
     dict_type,
     file_type,
     int_type,
-    float_type,
-    no_return_type,
     object_type,
     py_function_type,
 )
@@ -104,10 +102,9 @@ class TestTypeChecker(unittest.TestCase):
         _, type = concat.level1.typecheck.infer(
             concat.level1.typecheck.Environment(), [attr_word]
         )
-        type = type.collapse_bounds()
-        attr_type = cast(
-            concat.level1.typecheck.TypeWithAttribute, type.input[-1]
-        )
+        self.assertIsInstance(type, StackEffect)
+        type = type.collapse_bounds()  # type: ignore
+        attr_type = cast(TypeWithAttribute, type.input[-1])  # type: ignore
         self.assertEqual(attr_type.attribute, attr_word.value)
 
 
@@ -149,8 +146,8 @@ class TestSequenceVariableTypeInference(unittest.TestCase):
 class TestSubtyping(unittest.TestCase):
 
     __attributes_generator = dictionaries(
-        text(max_size=25), from_type(IndividualType), max_size=5
-    )  # type: ignore
+        text(max_size=25), from_type(IndividualType), max_size=5  # type: ignore
+    )
 
     @given(__attributes_generator, __attributes_generator)
     def test_object_structural_subtyping(self, attributes, other_attributes):

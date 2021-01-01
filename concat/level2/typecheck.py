@@ -264,7 +264,7 @@ def _generate_type_of_innermost_module(
 def _generate_module_type(
     components: Sequence[str], _full_name: Optional[str] = None, source_dir='.'
 ) -> ForAll:
-    module_t: concat.level1.typecheck.Type = module_type
+    module_t: IndividualType = module_type
     if _full_name is None:
         _full_name = '.'.join(components)
     if len(components) > 1:
