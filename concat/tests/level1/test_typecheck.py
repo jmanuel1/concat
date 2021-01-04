@@ -172,6 +172,24 @@ class TestSubtyping(unittest.TestCase):
     @given(from_type(IndividualType), from_type(IndividualType))
     def test_object_subtype_of_py_function(self, type1, type2):
         x = IndividualVariable()
-        py_function = py_function_type[type1, type2]
+        py_function = py_function_type[(type1,), type2]
         object = ObjectType(x, {'__call__': py_function})
         self.assertLessEqual(object, py_function)
+
+    @given(from_type(StackEffect))
+    def test_class_subtype_of_stack_effect(self, effect):
+        x = IndividualVariable()
+        # NOTE: self-last convention is modelled after Factor.
+        unbound_effect = StackEffect([*effect.input, x], effect.output)
+        cls = ClassType(x, {'__init__': unbound_effect})
+        self.assertLessEqual(cls, effect)
+
+    @given(from_type(IndividualType), from_type(IndividualType))
+    def test_class_subtype_of_py_function(self, type1, type2):
+        x = IndividualVariable()
+        # XXX
+        py_function = py_function_type[(type1,), type2]
+        unbound_py_function = py_function_type[(x, type1), type2]
+        print(id(py_function), id(unbound_py_function))
+        cls = ClassType(x, {'__init__': unbound_py_function})
+        self.assertLessEqual(cls, py_function)

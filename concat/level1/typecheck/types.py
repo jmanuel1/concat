@@ -141,6 +141,9 @@ class IndividualVariable(_Variable, IndividualType):
             bound = ' (bound: {})'.format(self.bound)
         return '`t_{}'.format(id(self)) + bound
 
+    def __repr__(self) -> str:
+        return '<individual variable {}>'.format(id(self))
+
     def get_type_of_attribute(self, name: str) -> 'IndividualType':
         return self.bound.get_type_of_attribute(name)
 
@@ -611,6 +614,9 @@ class _Function(IndividualType):
                 collapsed_output.append(type.collapse_bounds())
         return _Function(collapsed_input, collapsed_output)
 
+    def bind(self) -> '_Function':
+        return _Function(self.input[:-1], self.output)
+
 
 class TypeWithAttribute(IndividualType):
     def __init__(
@@ -878,7 +884,8 @@ class ObjectType(IndividualType):
         return self._attributes[attribute]
 
     def __repr__(self) -> str:
-        return 'ObjectType({!r}, {!r}, {!r}, {!r})'.format(
+        return '{}({!r}, {!r}, {!r}, {!r})'.format(
+            type(self).__qualname__,
             self._self_type,
             self._attributes,
             self._type_parameters,
@@ -976,6 +983,11 @@ class ObjectType(IndividualType):
 
 class ClassType(ObjectType):
     """The representation of types of classes, like in "Design and Evaluation of Gradual Typing for Python" (Vitousek et al. 2014)."""
+
+    def is_subtype_of(self, supertype: Type) -> bool:
+        if not isinstance(supertype, _Function) or '__init__' not in self._attributes:
+            return super().is_subtype_of(supertype)
+        return self._attributes['__init__'].bind() <= supertype
 
 
 class _NoReturnType(ObjectType):
