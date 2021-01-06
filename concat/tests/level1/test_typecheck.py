@@ -15,6 +15,7 @@ from concat.level1.typecheck.types import (
     file_type,
     float_type,
     int_type,
+    no_return_type,
     object_type,
     py_function_type,
 )
@@ -149,6 +150,12 @@ class TestSubtyping(unittest.TestCase):
     def test_int_not_subtype_of_float(self):
         """Differ from Reticulated Python: !(int <= float)."""
         self.assertFalse(int_type <= float_type)
+
+    @given(from_type(IndividualType), from_type(IndividualType))
+    def test_stack_effect_subtyping(self, type1, type2):
+        fun1 = StackEffect([type1], [type2])
+        fun2 = StackEffect([no_return_type], [object_type])
+        self.assertLessEqual(fun1, fun2)
 
     __attributes_generator = dictionaries(
         text(max_size=25), from_type(IndividualType), max_size=5  # type: ignore

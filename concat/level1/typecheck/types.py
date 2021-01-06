@@ -239,6 +239,13 @@ class PrimitiveInterface(IndividualType):
             type_arguments_str = '[' + joined_argument_strs + ']'
         return 'interface {}{}'.format(self._name, type_arguments_str)
 
+    def __repr__(self) -> str:
+        return '{}({!r}, {!r})'.format(
+            type(self).__qualname__,
+            self._name,
+            self._attributes
+        )
+
     def __getitem__(
         self, types: Union[IndividualType, Sequence[IndividualType]]
     ) -> 'PrimitiveInterface':
@@ -1002,6 +1009,15 @@ class _NoReturnType(ObjectType):
 
     def is_subtype_of(self, _: Type) -> Literal[True]:
         return True
+
+    def apply_substitution(
+        self,
+        sub: 'concat.level1.typecheck.Substitutions'
+    ) -> '_NoReturnType':
+        return self
+
+    def __repr__(self) -> str:
+        return '{}()'.format(type(self).__qualname__)
 
 
 class _OptionalType(ObjectType):
