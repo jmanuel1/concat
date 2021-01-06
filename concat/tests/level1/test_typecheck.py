@@ -13,6 +13,7 @@ from concat.level1.typecheck.types import (
     ClassType,
     dict_type,
     file_type,
+    float_type,
     int_type,
     object_type,
     py_function_type,
@@ -144,6 +145,10 @@ class TestSequenceVariableTypeInference(unittest.TestCase):
 
 
 class TestSubtyping(unittest.TestCase):
+
+    def test_int_not_subtype_of_float(self):
+        """Differ from Reticulated Python: !(int <= float)."""
+        self.assertFalse(int_type <= float_type)
 
     __attributes_generator = dictionaries(
         text(max_size=25), from_type(IndividualType), max_size=5  # type: ignore

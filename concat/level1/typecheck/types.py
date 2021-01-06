@@ -792,11 +792,13 @@ class ObjectType(IndividualType):
         attributes: Dict[str, IndividualType],
         type_parameters: Sequence[_Variable] = (),
         nominal_supertypes: Sequence[IndividualType] = (),
+        nominal: bool = False
     ) -> None:
         self._self_type = self_type
         self._attributes = attributes
         self._type_parameters = type_parameters
         self._nominal_supertypes = nominal_supertypes
+        self._nominal = nominal
         self._type_arguments: TypeArguments = ()
         self._head = self
 
@@ -834,6 +836,9 @@ class ObjectType(IndividualType):
     def is_subtype_of(self, supertype: 'Type') -> bool:
         if supertype in self._nominal_supertypes:
             return True
+        if isinstance(supertype, ObjectType) and supertype._nominal:
+            return False
+
         if (
             isinstance(supertype, _Function)
             or isinstance(supertype, ObjectType)
@@ -1016,9 +1021,15 @@ subtractable_type = PrimitiveInterface('subtractable')
 
 # FIXME: invertible_type, subtractable_type are structural supertypes
 # but for now they are both explicit
-int_type = ObjectType(_x, {}, [], [invertible_type, subtractable_type])
+int_type = ObjectType(
+    _x,
+    {},
+    [],
+    [invertible_type, subtractable_type],
+    nominal=True
+)
 
-float_type = ObjectType(_x, {})
+float_type = ObjectType(_x, {}, nominal=True)
 no_return_type = _NoReturnType()
 object_type = ObjectType(_x, {})
 
