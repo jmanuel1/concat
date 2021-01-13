@@ -210,7 +210,7 @@ class PrimitiveInterfaces:
         [__index_type_var, __result_type_var],
         TypeWithAttribute(
             '__getitem__',
-            py_function_type[__index_type_var, __result_type_var],
+            py_function_type[(__index_type_var, ), __result_type_var],
         ),
     )
 
