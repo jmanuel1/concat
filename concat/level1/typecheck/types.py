@@ -1049,7 +1049,7 @@ float_type = ObjectType(_x, {}, nominal=True)
 no_return_type = _NoReturnType()
 object_type = ObjectType(_x, {})
 
-_arg_type_var = IndividualVariable()
+_arg_type_var = SequenceVariable()
 _return_type_var = IndividualVariable()
 py_function_type = ObjectType(_x, {}, [_arg_type_var, _return_type_var])
 
@@ -1083,12 +1083,12 @@ file_type = ObjectType(
 _element_type_var = IndividualVariable()
 list_type = ObjectType(
     _x,
-    {'__getitem__': py_function_type[int_type, _element_type_var]},
+    {'__getitem__': py_function_type[(int_type, ), _element_type_var]},
     [_element_type_var],
     [iterable_type],
 )
 
-str_type = ObjectType(_x, {'__getitem__': py_function_type[int_type, _x]})
+str_type = ObjectType(_x, {'__getitem__': py_function_type[(int_type, ), _x]})
 
 ellipsis_type = ObjectType(_x, {})
 not_implemented_type = ObjectType(_x, {})
