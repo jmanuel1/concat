@@ -241,9 +241,7 @@ class PrimitiveInterface(IndividualType):
 
     def __repr__(self) -> str:
         return '{}({!r}, {!r})'.format(
-            type(self).__qualname__,
-            self._name,
-            self._attributes
+            type(self).__qualname__, self._name, self._attributes
         )
 
     def __getitem__(
@@ -435,6 +433,7 @@ class ForAll(Type):
         )
 
 
+# TODO: Rename to StackEffect at all use sites.
 class _Function(IndividualType):
     def __init__(
         self,
@@ -799,7 +798,7 @@ class ObjectType(IndividualType):
         attributes: Dict[str, IndividualType],
         type_parameters: Sequence[_Variable] = (),
         nominal_supertypes: Sequence[IndividualType] = (),
-        nominal: bool = False
+        nominal: bool = False,
     ) -> None:
         self._self_type = self_type
         self._attributes = attributes
@@ -997,7 +996,10 @@ class ClassType(ObjectType):
     """The representation of types of classes, like in "Design and Evaluation of Gradual Typing for Python" (Vitousek et al. 2014)."""
 
     def is_subtype_of(self, supertype: Type) -> bool:
-        if not isinstance(supertype, _Function) or '__init__' not in self._attributes:
+        if (
+            not isinstance(supertype, _Function)
+            or '__init__' not in self._attributes
+        ):
             return super().is_subtype_of(supertype)
         return self._attributes['__init__'].bind() <= supertype
 
@@ -1011,8 +1013,7 @@ class _NoReturnType(ObjectType):
         return True
 
     def apply_substitution(
-        self,
-        sub: 'concat.level1.typecheck.Substitutions'
+        self, sub: 'concat.level1.typecheck.Substitutions'
     ) -> '_NoReturnType':
         return self
 
@@ -1038,11 +1039,7 @@ subtractable_type = PrimitiveInterface('subtractable')
 # FIXME: invertible_type, subtractable_type are structural supertypes
 # but for now they are both explicit
 int_type = ObjectType(
-    _x,
-    {},
-    [],
-    [invertible_type, subtractable_type],
-    nominal=True
+    _x, {}, [], [invertible_type, subtractable_type], nominal=True
 )
 
 float_type = ObjectType(_x, {}, nominal=True)
@@ -1083,12 +1080,12 @@ file_type = ObjectType(
 _element_type_var = IndividualVariable()
 list_type = ObjectType(
     _x,
-    {'__getitem__': py_function_type[(int_type, ), _element_type_var]},
+    {'__getitem__': py_function_type[(int_type,), _element_type_var]},
     [_element_type_var],
     [iterable_type],
 )
 
-str_type = ObjectType(_x, {'__getitem__': py_function_type[(int_type, ), _x]})
+str_type = ObjectType(_x, {'__getitem__': py_function_type[(int_type,), _x]})
 
 ellipsis_type = ObjectType(_x, {})
 not_implemented_type = ObjectType(_x, {})

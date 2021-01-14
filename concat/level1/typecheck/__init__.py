@@ -158,7 +158,7 @@ from concat.level1.typecheck.types import (
     Type,
     IndividualVariable,
     _Variable,
-    _Function,
+    StackEffect,
     ForAll,
     IndividualType,
     _IntersectionType,
@@ -196,13 +196,13 @@ def infer(
     extensions: Optional[Tuple[Callable]] = None,
     is_top_level=False,
     source_dir='.',
-) -> Tuple[Substitutions, Union[_Function, _IntersectionType]]:
+) -> Tuple[Substitutions, Union[StackEffect, _IntersectionType]]:
     """The infer function described by Kleffner."""
     e = list(e)
     current_subs = Substitutions()
     a_bar = SequenceVariable()
     current_effect = (
-        _Function([], []) if is_top_level else _Function([a_bar], [a_bar])
+        StackEffect([], []) if is_top_level else StackEffect([a_bar], [a_bar])
     )
 
     for node in e:
@@ -211,12 +211,12 @@ def infer(
 
             if isinstance(node, concat.level0.parse.NumberWordNode):
                 if isinstance(node.value, int):
-                    current_effect = _Function(i, [*o, int_type])
+                    current_effect = StackEffect(i, [*o, int_type])
                 else:
                     raise NotImplementedError
             # there's no False word at the moment
             elif isinstance(node, concat.level1.parse.TrueWordNode):
-                current_effect = _Function(i, [*o, bool_type])
+                current_effect = StackEffect(i, [*o, bool_type])
             elif isinstance(node, concat.level1.operators.AddWordNode):
                 # for now, only works with ints and strings
                 a_bar = SequenceVariable()
@@ -226,37 +226,37 @@ def infer(
                     phi = unify(list(o), [a_bar, str_type, str_type],)
                     current_subs, current_effect = (
                         phi(S),
-                        phi(_Function(i, [a_bar, str_type])),
+                        phi(StackEffect(i, [a_bar, str_type])),
                     )
                 else:
                     current_subs, current_effect = (
                         phi(S),
-                        phi(_Function(i, [a_bar, int_type])),
+                        phi(StackEffect(i, [a_bar, int_type])),
                     )
             elif isinstance(node, concat.level0.parse.NameWordNode):
                 # the type of if_then is built-in
                 if node.value == 'if_then':
                     a_bar = SequenceVariable()
-                    b = _Function([a_bar], [a_bar])
+                    b = StackEffect([a_bar], [a_bar])
                     phi = unify(list(o), [a_bar, bool_type, b])
                     current_subs, current_effect = (
                         phi(S),
-                        phi(_Function(i, [a_bar])),
+                        phi(StackEffect(i, [a_bar])),
                     )
                 # the type of call is built-in
                 elif node.value == 'call':
                     a_bar, b_bar = SequenceVariable(), SequenceVariable()
-                    phi = unify(list(o), [a_bar, _Function([a_bar], [b_bar])])
+                    phi = unify(list(o), [a_bar, StackEffect([a_bar], [b_bar])])
                     current_subs, current_effect = (
                         phi(S),
-                        phi(_Function(i, [b_bar])),
+                        phi(StackEffect(i, [b_bar])),
                     )
                 else:
                     (i1, o1) = i, o
                     if node.value not in S(gamma):
                         raise NameError(node)
                     type_of_name = inst(S(gamma)[node.value].to_for_all())
-                    if not isinstance(type_of_name, _Function):
+                    if not isinstance(type_of_name, StackEffect):
                         raise NotImplementedError(
                             'name {} of type {} (repr {!r})'.format(
                                 node.value, type_of_name, type_of_name
@@ -266,7 +266,7 @@ def infer(
                     phi = unify(list(o1), S(i2))
                     current_subs, current_effect = (
                         phi(S),
-                        phi(_Function(i1, S(o2))),
+                        phi(StackEffect(i1, S(o2))),
                     )
             elif isinstance(
                 node, concat.level0.parse.PushWordNode
@@ -287,7 +287,7 @@ def infer(
                     rest_types = S2([rest])
                     current_subs, current_effect = (
                         S2(S1),
-                        _Function(S2(i1), [*rest_types, attr_type]),
+                        StackEffect(S2(i1), [*rest_types, attr_type]),
                     )
                 # special case for name words
                 elif isinstance(child, concat.level0.parse.NameWordNode):
@@ -296,7 +296,7 @@ def infer(
                     name_type = inst(gamma[child.value].to_for_all())
                     current_subs, current_effect = (
                         S1,
-                        _Function(i1, [*o1, S1(name_type)]),
+                        StackEffect(i1, [*o1, S1(name_type)]),
                     )
                 else:
                     S2, fun_type = infer(
@@ -307,7 +307,7 @@ def infer(
                     )
                     current_subs, current_effect = (
                         S2(S1),
-                        _Function(S2(i1), [*S2(o1), fun_type]),
+                        StackEffect(S2(i1), [*S2(o1), fun_type]),
                     )
             elif isinstance(node, concat.level0.parse.QuoteWordNode):
                 quotation = cast(concat.level0.parse.QuoteWordNode, node)
@@ -320,18 +320,18 @@ def infer(
                 phi = unify(S1(o), i1)
                 current_subs, current_effect = (
                     phi(S1(S)),
-                    phi(S1(_Function(i, o1) & iterable_type)),
+                    phi(S1(StackEffect(i, o1) & iterable_type)),
                 )
             # there is no fix combinator, lambda abstraction, or a let form like
             # Kleffner's
             # now for our extensions
             elif isinstance(node, concat.level1.parse.WithWordNode):
                 a_bar, b_bar = SequenceVariable(), SequenceVariable()
-                body_type = _Function([a_bar, object_type], [b_bar])
+                body_type = StackEffect([a_bar, object_type], [b_bar])
                 phi = unify(list(o), [a_bar, body_type, context_manager_type])
                 current_subs, current_effect = (
                     phi(S),
-                    phi(_Function(i, [b_bar])),
+                    phi(StackEffect(i, [b_bar])),
                 )
             elif isinstance(node, concat.level1.parse.TryWordNode):
                 a_bar, b_bar = SequenceVariable(), SequenceVariable()
@@ -340,12 +340,12 @@ def infer(
                     [
                         a_bar,
                         PrimitiveInterfaces.iterable,
-                        _Function([a_bar], [b_bar]),
+                        StackEffect([a_bar], [b_bar]),
                     ],
                 )
                 current_subs, current_effect = (
                     phi(S),
-                    phi(_Function(i, [b_bar])),
+                    phi(StackEffect(i, [b_bar])),
                 )
             elif isinstance(node, concat.level1.parse.DictWordNode):
                 phi = S
@@ -383,7 +383,7 @@ def infer(
                     phi = collected_type_sub(phi)
                 current_subs, current_effect = (
                     phi,
-                    phi(_Function(i, [*collected_type, dict_type])),
+                    phi(StackEffect(i, [*collected_type, dict_type])),
                 )
             elif isinstance(node, concat.level1.parse.ListWordNode):
                 phi = S
@@ -396,7 +396,7 @@ def infer(
                         source_dir=source_dir,
                     )
                     i_var, o_var = SequenceVariable(), SequenceVariable()
-                    phi1 = unify_ind(fun_type, _Function([i_var], [o_var]))(
+                    phi1 = unify_ind(fun_type, StackEffect([i_var], [o_var]))(
                         phi1
                     )
                     i1, o1 = phi1([i_var]), phi1([o_var])
@@ -410,7 +410,7 @@ def infer(
                     phi = collected_type_sub(R1(phi1(phi)))
                 current_subs, current_effect = (
                     phi,
-                    phi(_Function(i, [*collected_type, list_type])),
+                    phi(StackEffect(i, [*collected_type, list_type])),
                 )
             elif isinstance(node, concat.level1.operators.InvertWordNode):
                 out_var = SequenceVariable()
@@ -418,16 +418,16 @@ def infer(
                 phi = unify(list(o), [out_var, type_var])
                 current_subs, current_effect = (
                     phi(S),
-                    phi(_Function(i, [out_var, type_var])),
+                    phi(StackEffect(i, [out_var, type_var])),
                 )
             elif isinstance(node, concat.level0.parse.StringWordNode):
                 current_subs, current_effect = (
                     S,
-                    _Function(i, [*o, str_type]),
+                    StackEffect(i, [*o, str_type]),
                 )
             elif isinstance(node, concat.level0.parse.AttributeWordNode):
                 out_var = SequenceVariable()
-                attr_function_type = _Function(
+                attr_function_type = StackEffect(
                     [SequenceVariable()], [SequenceVariable()]
                 )
                 stack_top_type = TypeWithAttribute(
@@ -439,7 +439,7 @@ def infer(
                 R = unify(out_types, phi([*attr_function_type.input]))
                 current_subs, current_effect = (
                     R(phi(S)),
-                    R(phi(_Function(i, attr_function_type.output))),
+                    R(phi(StackEffect(i, attr_function_type.output))),
                 )
             else:
                 fail = True
@@ -448,7 +448,7 @@ def infer(
                     try:
                         kwargs = dict(
                             extensions=extensions,
-                            previous=(S, _Function(i, o)),
+                            previous=(S, StackEffect(i, o)),
                             source_dir=source_dir,
                         )
                         # NOTE: Extension compose their results with the
@@ -583,7 +583,7 @@ def unify_ind(
             phi = (unify_ind(phi(t1), phi(t2.bound)))(phi)
             return phi
         raise TypeError('{} cannot unify with {}'.format(t1, t2))
-    elif isinstance(t1, _Function) and isinstance(t2, _Function):
+    elif isinstance(t1, StackEffect) and isinstance(t2, StackEffect):
         phi1 = unify(list(t2.input), list(t1.input))
         phi2 = unify(list(phi1(t1.output)), list(phi1(t2.output)))
         return phi2(phi1)
