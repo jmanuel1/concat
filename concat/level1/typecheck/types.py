@@ -50,6 +50,13 @@ class Type(abc.ABC):
     def get_type_of_attribute(self, name: str) -> 'IndividualType':
         raise concat.level1.typecheck.AttributeError(self, name)
 
+    def has_attribute(self, name: str) -> bool:
+        try:
+            self.get_type_of_attribute(name)
+            return True
+        except concat.level1.typecheck.AttributeError:
+            return False
+
     @abc.abstractmethod
     def apply_substitution(
         self, _: 'concat.level1.typecheck.Substitutions'
@@ -799,14 +806,26 @@ class ObjectType(IndividualType):
         type_parameters: Sequence[_Variable] = (),
         nominal_supertypes: Sequence[IndividualType] = (),
         nominal: bool = False,
+        _type_arguments: TypeArguments = (),
+        _head: Optional['ObjectType'] = None,
     ) -> None:
-        self._self_type = self_type
-        self._attributes = attributes
+        from concat.level1.typecheck import Substitutions
+
+        # make the variable unique
+        self._self_type = IndividualVariable()
+        self_sub = Substitutions({self_type: self._self_type})
+
+        self._attributes = {
+            name: self_sub(t) for name, t in attributes.items()
+        }
         self._type_parameters = type_parameters
-        self._nominal_supertypes = nominal_supertypes
+        self._nominal_supertypes = self_sub(nominal_supertypes)
         self._nominal = nominal
-        self._type_arguments: TypeArguments = ()
-        self._head = self
+        assert isinstance(_type_arguments, collections.abc.Sequence)
+        self._type_arguments: TypeArguments = [
+            self_sub(t) for t in _type_arguments
+        ]
+        self._head = _head or self
 
     def collapse_bounds(self) -> 'ObjectType':
         return ObjectType(
@@ -824,10 +843,12 @@ class ObjectType(IndividualType):
         from concat.level1.typecheck import Substitutions
 
         sub = Substitutions(
-            {a: i for a, i in sub.items() if a not in self._type_parameters}
+            {
+                a: i
+                for a, i in sub.items()
+                if a not in self._type_parameters and a is not self._self_type
+            }
         )
-        self_type = sub(self._self_type)
-        assert isinstance(self_type, IndividualVariable)
         attributes = cast(
             Dict[str, IndividualType],
             {attr: sub(t) for attr, t in self._attributes.items()},
@@ -835,8 +856,20 @@ class ObjectType(IndividualType):
         nominal_supertypes = cast(
             Sequence[IndividualType], sub(self._nominal_supertypes)
         )
-        return ObjectType(
-            self_type, attributes, self._type_parameters, nominal_supertypes
+        type_arguments = [
+            sub(type_argument) for type_argument in self._type_arguments
+        ]
+        if self._head is self:
+            head = None
+        else:
+            head = sub(self._head)
+        return type(self)(
+            self._self_type,
+            attributes,
+            self._type_parameters,
+            nominal_supertypes,
+            _type_arguments=type_arguments,
+            _head=head,
         )
 
     def is_subtype_of(self, supertype: 'Type') -> bool:
@@ -892,7 +925,11 @@ class ObjectType(IndividualType):
         if attribute not in self._attributes:
             raise AttributeError(self, attribute)
 
-        return self._attributes[attribute]
+        self_sub = concat.level1.typecheck.Substitutions(
+            {self._self_type: self}
+        )
+
+        return self_sub(self._attributes[attribute])
 
     def __repr__(self) -> str:
         return '{}({!r}, {!r}, {!r}, {!r})'.format(
@@ -961,10 +998,12 @@ class ObjectType(IndividualType):
 
         sub = Substitutions(zip(self._type_parameters, type_arguments))
         attribute_items = self._attributes.items()
-        return ObjectType(
+        return type(self)(
             self._self_type,
             {n: cast(IndividualType, sub(t)) for n, t in attribute_items},
             (),
+            _type_arguments=type_arguments,
+            _head=self,
         )
 
     @property
@@ -991,17 +1030,43 @@ class ObjectType(IndividualType):
     def nominal_supertypes(self) -> Sequence[IndividualType]:
         return self._nominal_supertypes
 
+    @property
+    def _arity(self) -> int:
+        return len(self._type_parameters)
+
 
 class ClassType(ObjectType):
     """The representation of types of classes, like in "Design and Evaluation of Gradual Typing for Python" (Vitousek et al. 2014)."""
 
     def is_subtype_of(self, supertype: Type) -> bool:
         if (
-            not isinstance(supertype, _Function)
+            not supertype.has_attribute('__call__')
             or '__init__' not in self._attributes
         ):
             return super().is_subtype_of(supertype)
         return self._attributes['__init__'].bind() <= supertype
+
+
+class PythonFunctionType(ObjectType):
+    def __str__(self) -> str:
+        if not self._type_arguments:
+            return 'py_function_type'
+        return 'py_function_type[{}, {}]'.format(*self._type_arguments)
+
+    def get_type_of_attribute(self, attribute: str) -> IndividualType:
+        from concat.level1.typecheck import Substitutions
+
+        sub = Substitutions({self._self_type: self})
+        if attribute == '__call__':
+            return sub(self)
+        else:
+            return super().get_type_of_attribute(attribute)
+
+    def bind(self) -> 'PythonFunctionType':
+        assert self._arity == 0
+        inputs = self._type_arguments[0][1:]
+        output = self._type_arguments[1]
+        return self._head[inputs, output]
 
 
 class _NoReturnType(ObjectType):
@@ -1022,10 +1087,15 @@ class _NoReturnType(ObjectType):
 
 
 class _OptionalType(ObjectType):
-    def __init__(self) -> None:
+    def __init__(self, _type_arguments=[]) -> None:
         x = IndividualVariable()
         type_var = IndividualVariable()
-        super().__init__(x, {}, [type_var])
+        super().__init__(x, {}, [type_var], _type_arguments=_type_arguments)
+
+    def apply_substitution(
+        self, sub: 'concat.level1.typecheck.Substitutions'
+    ) -> '_OptionalType':
+        return _OptionalType(sub(self._type_arguments))
 
 
 # expose _Function as StackEffect
@@ -1036,19 +1106,25 @@ _x = IndividualVariable()
 invertible_type = PrimitiveInterfaces.invertible
 subtractable_type = PrimitiveInterface('subtractable')
 
-# FIXME: invertible_type, subtractable_type are structural supertypes
-# but for now they are both explicit
-int_type = ObjectType(
-    _x, {}, [], [invertible_type, subtractable_type], nominal=True
-)
-
 float_type = ObjectType(_x, {}, nominal=True)
 no_return_type = _NoReturnType()
 object_type = ObjectType(_x, {})
 
 _arg_type_var = SequenceVariable()
 _return_type_var = IndividualVariable()
-py_function_type = ObjectType(_x, {}, [_arg_type_var, _return_type_var])
+py_function_type = PythonFunctionType(
+    _x, {}, [_arg_type_var, _return_type_var]
+)
+
+# FIXME: invertible_type, subtractable_type are structural supertypes
+# but for now they are both explicit
+int_type = ObjectType(
+    _x,  # FIXME: Make unique for each type.
+    {'__add__': py_function_type[(object_type,), _x]},
+    [],
+    [invertible_type, subtractable_type],
+    nominal=True,
+)
 
 iterable_type = PrimitiveInterfaces.iterable
 context_manager_type = ObjectType(

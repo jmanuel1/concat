@@ -179,6 +179,7 @@ from concat.level1.typecheck.types import (
     list_type,
     str_type,
     object_type,
+    py_function_type,
 )
 
 
@@ -218,20 +219,64 @@ def infer(
             elif isinstance(node, concat.level1.parse.TrueWordNode):
                 current_effect = StackEffect(i, [*o, bool_type])
             elif isinstance(node, concat.level1.operators.AddWordNode):
-                # for now, only works with ints and strings
-                a_bar = SequenceVariable()
+                # rules:
+                # require object_type because the methods should return
+                # NotImplemented for most types
+                # FIXME: Make the rules safer... somehow
+
+                # ... a b => (... {__add__(object) -> s} t)
+                # ---
+                # a b + => (... s)
+
+                # ... a b => (... t {__radd__(object) -> s})
+                # ---
+                # a b + => (... s)
+                *rest, type1, type2 = current_effect.output
+                try_radd = False
                 try:
-                    phi = unify(list(o), [a_bar, int_type, int_type],)
-                except TypeError:
-                    phi = unify(list(o), [a_bar, str_type, str_type],)
-                    current_subs, current_effect = (
-                        phi(S),
-                        phi(StackEffect(i, [a_bar, str_type])),
-                    )
+                    add_type = type1.get_type_of_attribute('__add__')
+                except AttributeError:
+                    try_radd = True
                 else:
-                    current_subs, current_effect = (
-                        phi(S),
-                        phi(StackEffect(i, [a_bar, int_type])),
+                    if not isinstance(add_type, ObjectType):
+                        raise TypeError(
+                            '__add__ method of type {} is not of an object type, instead has type {}'.format(
+                                type1, add_type
+                            )
+                        )
+                    if add_type.head != py_function_type:
+                        print('py_function_type', py_function_type)
+                        print('add_type.head', add_type.head)
+                        raise TypeError(
+                            '__add__ method of type {} is not a Python function, instead it has type {}'.format(
+                                type1, add_type
+                            )
+                        )
+                    if [*add_type.type_arguments[0]] != [object_type]:
+                        raise TypeError(
+                            '__add__ method of type {} does not have type (object) -> `t, instead it has type {}'.format(
+                                type1, add_type
+                            )
+                        )
+                    current_effect = StackEffect(
+                        current_effect.input,
+                        [*rest, add_type.type_arguments[1]],
+                    )
+                if try_radd:
+                    radd_type = type2.get_type_of_attribute('__radd__')
+                    if (
+                        not isinstance(radd_type, ObjectType)
+                        or radd_type.head != py_function_type
+                        or [*radd_type.type_arguments[0]] != [object_type]
+                    ):
+                        raise TypeError(
+                            '__radd__ method of type {} does not have type (object) -> `t, instead it has type {}'.format(
+                                type2, radd_type
+                            )
+                        )
+                    current_effect = StackEffect(
+                        current_effect.input,
+                        [*rest, radd_type.type_arguments[1]],
                     )
             elif isinstance(node, concat.level0.parse.NameWordNode):
                 # the type of if_then is built-in
@@ -246,7 +291,9 @@ def infer(
                 # the type of call is built-in
                 elif node.value == 'call':
                     a_bar, b_bar = SequenceVariable(), SequenceVariable()
-                    phi = unify(list(o), [a_bar, StackEffect([a_bar], [b_bar])])
+                    phi = unify(
+                        list(o), [a_bar, StackEffect([a_bar], [b_bar])]
+                    )
                     current_subs, current_effect = (
                         phi(S),
                         phi(StackEffect(i, [b_bar])),
