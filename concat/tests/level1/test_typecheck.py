@@ -21,7 +21,7 @@ from concat.level1.typecheck.types import (
 )
 import unittest
 from hypothesis import given
-from hypothesis.strategies import from_type, dictionaries, text
+from hypothesis.strategies import from_type, dictionaries, text, integers
 from typing import cast
 
 
@@ -109,6 +109,17 @@ class TestTypeChecker(unittest.TestCase):
         attr_type = cast(TypeWithAttribute, type.input[-1])  # type: ignore
         self.assertEqual(attr_type.attribute, attr_word.value)
 
+    @given(integers(min_value=0), integers(min_value=0))
+    def test_add_operator_inference(self, a: int, b: int) -> None:
+        try_prog = '{!r} {!r} +\n'.format(a, b)
+        tree = parse(try_prog)
+        _, type = concat.level1.typecheck.infer(
+            concat.level1.typecheck.Environment(),
+            tree.children,
+            is_top_level=True,
+        )
+        self.assertEqual(type, StackEffect([], [int_type]))
+
 
 class TestDiagnosticInfo(unittest.TestCase):
     def test_attribute_error_location(self) -> None:
@@ -146,7 +157,6 @@ class TestSequenceVariableTypeInference(unittest.TestCase):
 
 
 class TestSubtyping(unittest.TestCase):
-
     def test_int_not_subtype_of_float(self):
         """Differ from Reticulated Python: !(int <= float)."""
         self.assertFalse(int_type <= float_type)
@@ -199,9 +209,7 @@ class TestSubtyping(unittest.TestCase):
     @given(from_type(IndividualType), from_type(IndividualType))
     def test_class_subtype_of_py_function(self, type1, type2):
         x = IndividualVariable()
-        # XXX
         py_function = py_function_type[(type1,), type2]
         unbound_py_function = py_function_type[(x, type1), type2]
-        print(id(py_function), id(unbound_py_function))
         cls = ClassType(x, {'__init__': unbound_py_function})
         self.assertLessEqual(cls, py_function)
