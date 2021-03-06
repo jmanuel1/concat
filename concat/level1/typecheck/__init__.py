@@ -84,6 +84,10 @@ class AttributeError(TypeError, builtins.AttributeError):
         self._attribute = attribute
 
 
+class UnhandledNodeTypeError(builtins.NotImplementedError):
+    pass
+
+
 _Result = TypeVar('_Result', covariant=True)
 
 
@@ -220,7 +224,7 @@ def infer(
                 if isinstance(node.value, int):
                     current_effect = StackEffect(i, [*o, int_type])
                 else:
-                    raise NotImplementedError
+                    raise UnhandledNodeTypeError
             # there's no False word at the moment
             elif isinstance(node, concat.level1.parse.TrueWordNode):
                 current_effect = StackEffect(i, [*o, bool_type])
@@ -291,7 +295,7 @@ def infer(
                     raise NameError(node)
                 type_of_name = inst(S(gamma)[node.value].to_for_all())
                 if not isinstance(type_of_name, StackEffect):
-                    raise NotImplementedError(
+                    raise UnhandledNodeTypeError(
                         'name {} of type {} (repr {!r})'.format(
                             node.value, type_of_name, type_of_name
                         )
@@ -492,10 +496,10 @@ def infer(
                         )
                         fail = False
                         break
-                    except NotImplementedError as e:
+                    except UnhandledNodeTypeError as e:
                         original_error = e
                 if fail:
-                    raise NotImplementedError(
+                    raise UnhandledNodeTypeError(
                         "don't know how to handle '{}'".format(node)
                     ) from original_error
         except TypeError as e:
