@@ -19,6 +19,7 @@ from concat.level1.typecheck.types import (
     object_type,
     py_function_type,
 )
+from concat.level1.preamble_types import types
 import unittest
 from hypothesis import given
 from hypothesis.strategies import from_type, dictionaries, text, integers
@@ -119,6 +120,16 @@ class TestTypeChecker(unittest.TestCase):
             is_top_level=True,
         )
         self.assertEqual(type, StackEffect([], [int_type]))
+
+    def test_if_then_inference(self) -> None:
+        try_prog = 'True $() if_then\n'
+        tree = parse(try_prog)
+        _, type = concat.level1.typecheck.infer(
+            concat.level1.typecheck.Environment(types),
+            tree.children,
+            is_top_level=True,
+        )
+        self.assertEqual(type, StackEffect([], []))
 
 
 class TestDiagnosticInfo(unittest.TestCase):
