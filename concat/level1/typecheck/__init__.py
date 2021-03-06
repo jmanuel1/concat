@@ -15,7 +15,6 @@ from typing import (
     Optional,
     Callable,
     Sequence,
-    NoReturn,
     TypeVar,
     TYPE_CHECKING,
     overload,
@@ -25,6 +24,7 @@ from typing_extensions import Protocol
 import concat.level0.parse
 import concat.level1.operators
 import concat.level1.parse
+from concat.level1.typecheck.constraints import Constraints
 
 
 if TYPE_CHECKING:
@@ -157,7 +157,6 @@ class Substitutions(Dict['_Variable', Union['Type', List['StackItemType']]]):
 from concat.level1.typecheck.types import (
     Type,
     IndividualVariable,
-    _Variable,
     StackEffect,
     ForAll,
     IndividualType,
@@ -166,6 +165,7 @@ from concat.level1.typecheck.types import (
     PrimitiveInterface,
     SequenceVariable,
     TypeWithAttribute,
+    TypeSequence,
     StackItemType,
     PrimitiveInterfaces,
     bool_type,
@@ -183,7 +183,7 @@ from concat.level1.typecheck.types import (
 )
 
 
-class Environment(Dict[str, Type]):
+class Environment(Dict[str, IndividualType]):
     def copy(self) -> 'Environment':
         return Environment(super().copy())
 
@@ -191,6 +191,12 @@ class Environment(Dict[str, Type]):
         return Environment({name: sub(t) for name, t in self.items()})
 
 
+# FIXME: This should be reset after each type checking each program/unit.
+_global_constraints = Constraints()
+
+
+# FIXME: I'm really passing around a bunch of state here. I could create an
+# object to store it, or turn this algorithm into an object.
 def infer(
     gamma: Environment,
     e: 'concat.astutils.WordsOrStatements',
@@ -279,42 +285,23 @@ def infer(
                         [*rest, radd_type.type_arguments[1]],
                     )
             elif isinstance(node, concat.level0.parse.NameWordNode):
-                # the type of if_then is built-in
-                if node.value == 'if_then':
-                    a_bar = SequenceVariable()
-                    b = StackEffect([a_bar], [a_bar])
-                    phi = unify(list(o), [a_bar, bool_type, b])
-                    current_subs, current_effect = (
-                        phi(S),
-                        phi(StackEffect(i, [a_bar])),
-                    )
-                # the type of call is built-in
-                elif node.value == 'call':
-                    a_bar, b_bar = SequenceVariable(), SequenceVariable()
-                    phi = unify(
-                        list(o), [a_bar, StackEffect([a_bar], [b_bar])]
-                    )
-                    current_subs, current_effect = (
-                        phi(S),
-                        phi(StackEffect(i, [b_bar])),
-                    )
-                else:
-                    (i1, o1) = i, o
-                    if node.value not in S(gamma):
-                        raise NameError(node)
-                    type_of_name = inst(S(gamma)[node.value].to_for_all())
-                    if not isinstance(type_of_name, StackEffect):
-                        raise NotImplementedError(
-                            'name {} of type {} (repr {!r})'.format(
-                                node.value, type_of_name, type_of_name
-                            )
+                # FIXME: if_then, call
+                (i1, o1) = current_effect
+                if node.value not in S(gamma):
+                    raise NameError(node)
+                type_of_name = inst(S(gamma)[node.value].to_for_all())
+                if not isinstance(type_of_name, StackEffect):
+                    raise NotImplementedError(
+                        'name {} of type {} (repr {!r})'.format(
+                            node.value, type_of_name, type_of_name
                         )
-                    i2, o2 = type_of_name
-                    phi = unify(list(o1), S(i2))
-                    current_subs, current_effect = (
-                        phi(S),
-                        phi(StackEffect(i1, S(o2))),
                     )
+                _global_constraints.add(
+                    TypeSequence(o1), TypeSequence(type_of_name.input)
+                )
+                current_effect = StackEffect(
+                    o1[: len(type_of_name.input)], type_of_name.output
+                )
             elif isinstance(
                 node, concat.level0.parse.PushWordNode
             ) and not isinstance(

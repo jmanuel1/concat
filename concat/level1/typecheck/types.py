@@ -1,5 +1,6 @@
 import concat.level1.typecheck
-from concat.level1.typecheck import AttributeError
+from concat.level1.typecheck import AttributeError, TypeError
+from concat.level1.typecheck.constraints import Constraints
 from typing import (
     Optional,
     Dict,
@@ -61,6 +62,10 @@ class Type(abc.ABC):
     def apply_substitution(
         self, _: 'concat.level1.typecheck.Substitutions'
     ) -> Union['Type', Sequence['StackItemType']]:
+        pass
+
+    @abc.abstractmethod
+    def constrain(self, supertype: 'Type', constraints: 'Constraints') -> None:
         pass
 
 
@@ -140,6 +145,9 @@ class IndividualVariable(_Variable, IndividualType):
             supertype
         )
 
+    def constrain(self, supertype: Type, constraints: Constraints) -> None:
+        constraints.add(self, supertype)
+
     # Default __eq__ and __hash__ (equality by object identity) are used.
 
     def __str__(self) -> str:
@@ -196,6 +204,9 @@ class _IntersectionType(IndividualType):
             or self.type_1.is_subtype_of(other)
             or self.type_2.is_subtype_of(other)
         )
+
+    def constrain(self, supertype: Type, constraints: Constraints) -> None:
+        raise NotImplementedError('time to get rid of _IntersectionType?')
 
     def get_type_of_attribute(self, name: str) -> 'IndividualType':
         try:
@@ -333,6 +344,9 @@ class PrimitiveInterface(IndividualType):
             return True
         return False
 
+    def constrain(self, supertype: Type, constraints: Constraints) -> None:
+        raise NotImplementedError('time to get rid of PrimitiveInterface')
+
     def is_related_to(self, other: 'PrimitiveInterface') -> bool:
         return self._get_earliest_ancestor() is other._get_earliest_ancestor()
 
@@ -352,6 +366,67 @@ class SequenceVariable(_Variable):
 
     def __str__(self) -> str:
         return '*t_{}'.format(id(self))
+
+    def constrain(self, supertype: Type, constraints: Constraints) -> None:
+        if not isinstance(supertype, (SequenceVariable, TypeSequence)):
+            raise TypeError('{} must be a sequence type, not {}'.format(self, supertype))
+        constraints.add(self, supertype)
+        constraints.add(supertype, self)
+
+
+class TypeSequence(Type):
+    def __init__(self, sequence: Sequence['StackItemType']) -> None:
+        if sequence and isinstance(sequence[0], SequenceVariable):
+            self._rest = sequence[0]
+            self._individual_types = sequence[1:]
+        else:
+            self._rest = None
+            self._individual_types = sequence
+
+    def apply_substitution(self, _) -> 'TypeSequence':
+        raise NotImplementedError('time to get of Substitutions')
+
+    def constrain(self, supertype: Type, constraints: Constraints) -> None:
+        if isinstance(supertype, SequenceVariable):
+            supertype.constrain(self, constraints)
+        elif isinstance(supertype, TypeSequence):
+            # This is basically the old unify function.
+            if self._is_empty() and supertype._is_empty():
+                return
+            elif not self._individual_types:
+                if self._rest and self == supertype:
+                    return
+                elif self._rest and self._rest not in _ftv(supertype):
+                    self._rest.constrain(supertype, constraints)
+            elif (
+                not supertype._individual_types
+                and supertype._rest
+                and supertype._rest not in _ftv(self)
+            ):
+                supertype._rest.constrain(self, constraints)
+            elif (
+                self._individual_types
+                and supertype._individual_types
+            ):
+                self._individual_types[-1].constrain(supertype._individual_types[-1], constraints)
+                self[:-1].constrain(supertype[:-1], constraints)
+            else:
+                raise TypeError(
+                    'cannot unify {} with {}'.format(
+                        self, supertype
+                    )
+                )
+        else:
+            raise TypeError('{} must be a sequence type, not {}'.format(self, supertype))
+
+    def _is_empty(self) -> bool:
+        return self._rest is None and not self._individual_types
+
+    def __getitem__(self, key: slice) -> 'TypeSequence':
+        return TypeSequence([self._rest, *self._individual_types[key]])
+
+    def __str__(self) -> str:
+        return ' '.join(str(t) for t in [self._rest or '', *self._individual_types])
 
 
 # FIXME: Subtyping of universal types.
@@ -438,6 +513,9 @@ class ForAll(Type):
                 )(self.type),
             ),
         )
+
+    def constrain(self, supertype: Type, constraints: Constraints) -> None:
+        raise NotImplementedError('time to get rid of ForAll')
 
 
 # TODO: Rename to StackEffect at all use sites.
@@ -566,6 +644,13 @@ class _Function(IndividualType):
             return True
         return False
 
+    def constrain(self, supertype: Type, constraints: Constraints) -> None:
+        fun_type = supertype.get_type_of_attribute('__call__')
+        if not isinstance(fun_type, _Function):
+            raise TypeError('{} is not a subtype of {}'.format(self, supertype))
+        constraints.add(TypeSequence(self.input), TypeSequence(fun_type.input))
+        constraints.add(TypeSequence(self.output), TypeSequence(fun_type.output))
+
     @staticmethod
     def _rename_sequence_variable(
         supertype_list: Sequence['StackItemType'],
@@ -672,6 +757,9 @@ class TypeWithAttribute(IndividualType):
         return TypeWithAttribute(
             self.attribute, cast(IndividualType, sub(self.attribute_type))
         )
+
+    def constrain(self, supertype: Type, constraints: Constraints) -> None:
+        raise NotImplementedError('time to get rid of TypeWithAttribute')
 
     def collapse_bounds(self) -> 'TypeWithAttribute':
         return TypeWithAttribute(
@@ -920,6 +1008,22 @@ class ObjectType(IndividualType):
             if not (cast(IndividualType, sub(self._attributes[attr])) <= type):
                 return False
         return True
+
+    def constrain(self, supertype: Type, constraints: Constraints) -> None:
+        if not isinstance(supertype, ObjectType):
+            raise NotImplementedError(supertype)
+        if self._arity != supertype._arity:
+            raise TypeError(
+                '{} and {} do not have the same arity'.format(self, supertype)
+            )
+        for name in supertype._attributes:
+            type = self.get_type_of_attribute(name)
+            type.constrain(supertype.get_type_of_attribute(name), constraints)
+        for self_param, super_param in zip(
+            self._type_parameters, supertype._type_parameters
+        ):
+            # FIXME: Contravariance? Invariance?
+            constraints.add(self_param, super_param)
 
     def get_type_of_attribute(self, attribute: str) -> IndividualType:
         if attribute not in self._attributes:
