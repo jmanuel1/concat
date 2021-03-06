@@ -18,10 +18,12 @@ filename = '<stdin>'
 
 def file_type(mode: str) -> Callable[[str], IO[AnyStr]]:
     """Capture the filename and create a file object."""
+
     def func(name: str) -> IO[AnyStr]:
         global filename
         filename = name
         return open(name, mode=mode)
+
     return func
 
 
@@ -37,9 +39,14 @@ arg_parser.add_argument(
     nargs='?',
     type=file_type('r'),
     default=sys.stdin,
-    help='file to run')
-arg_parser.add_argument('--debug', action='store_true',
-                        default=False, help='turn stack debugging on')
+    help='file to run',
+)
+arg_parser.add_argument(
+    '--debug',
+    action='store_true',
+    default=False,
+    help='turn stack debugging on',
+)
 
 # We should pass any unknown args onto the program we're about to run. There
 # might be a better way to go about this, but I think this is fine for now.
@@ -54,11 +61,14 @@ else:
     try:
         python_ast = transpile(args.file.read(), os.path.dirname(filename))
     except concat.level1.typecheck.StaticAnalysisError as e:
-        print('Error:\n')
+        print('Static Analysis Error:\n')
         print(e, 'in line:')
         if e.location:
             print(get_line_at(args.file, e.location), end='')
-            print(' '*e.location[1] + '^')
+            print(' ' * e.location[1] + '^')
+    except concat.level1.parse.ParseError as e:
+        print('Parse Error:')
+        print(e)
     except Exception:
         print('An internal error has occurred.')
         print('This is a bug in Concat.')
