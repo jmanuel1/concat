@@ -124,14 +124,15 @@ class Substitutions(Dict['_Variable', Union['Type', List['StackItemType']]]):
         ...
 
     def __call__(self, arg: '_T') -> '_U':
+        from concat.level1.typecheck.types import TypeSequence
         if isinstance(arg, collections.abc.Sequence):
             subbed_types: List[StackItemType] = []
             for type in arg:
                 subbed_type: Union[
                     StackItemType, Sequence[StackItemType]
                 ] = self(type)
-                if isinstance(subbed_type, collections.abc.Sequence):
-                    subbed_types += subbed_type
+                if isinstance(subbed_type, (collections.abc.Sequence, TypeSequence)):
+                    subbed_types += [*subbed_type]
                 else:
                     subbed_types.append(subbed_type)
             return subbed_types
