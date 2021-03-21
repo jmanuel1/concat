@@ -208,13 +208,15 @@ def infer(
     extensions: Optional[Tuple[Callable]] = None,
     is_top_level=False,
     source_dir='.',
+    initial_stack: Optional[TypeSequence] = None
 ) -> Tuple[Substitutions, StackEffect]:
     """The infer function described by Kleffner."""
     e = list(e)
     current_subs = Substitutions()
-    a_bar = SequenceVariable()
+    if initial_stack is None:
+        initial_stack = TypeSequence([] if is_top_level else [SequenceVariable()])
     current_effect = (
-        StackEffect([], []) if is_top_level else StackEffect([a_bar], [a_bar])
+        StackEffect(initial_stack, initial_stack)
     )
 
     for node in e:
