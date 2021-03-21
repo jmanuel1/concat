@@ -682,6 +682,8 @@ class _Function(IndividualType):
         return False
 
     def constrain(self, supertype: Type, constraints: Constraints) -> None:
+        if not supertype.has_attribute('__call__'):
+            raise TypeError('{} is not a subtype of {}'.format(self, supertype))
         fun_type = supertype.get_type_of_attribute('__call__')
         if not isinstance(fun_type, _Function):
             raise TypeError('{} is not a subtype of {}'.format(self, supertype))
@@ -751,6 +753,30 @@ class _Function(IndividualType):
 
     def bind(self) -> '_Function':
         return _Function(self.input[:-1], self.output)
+
+
+class QuotationType(_Function):
+    def __init__(self, fun_type: _Function) -> None:
+        super().__init__(fun_type.input, fun_type.output)
+
+    def is_subtype_of(
+        self,
+        supertype: Type,
+        _sub: Optional['concat.level1.typecheck.Substitutions'] = None,
+    ) -> bool:
+        if super().is_subtype_of(supertype, _sub):
+            return True
+        if supertype == PrimitiveInterfaces.iterable:
+            return True
+        return False
+
+    def constrain(self, supertype: Type, constraints: Constraints) -> None:
+        if supertype == PrimitiveInterfaces.iterable:
+            return
+        super().constrain(supertype, constraints)
+
+    def apply_substitution(self, sub: 'concat.level1.typecheck.Substitutions') -> 'QuotationType':
+        return QuotationType(super().apply_substitution(sub))
 
 
 class TypeWithAttribute(IndividualType):

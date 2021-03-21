@@ -173,6 +173,7 @@ from concat.level1.typecheck.types import (
     TypeSequence,
     StackItemType,
     PrimitiveInterfaces,
+    QuotationType,
     bool_type,
     context_manager_type,
     dict_type,
@@ -208,7 +209,7 @@ def infer(
     extensions: Optional[Tuple[Callable]] = None,
     is_top_level=False,
     source_dir='.',
-) -> Tuple[Substitutions, Union[StackEffect, _IntersectionType]]:
+) -> Tuple[Substitutions, StackEffect]:
     """The infer function described by Kleffner."""
     e = list(e)
     current_subs = Substitutions()
@@ -346,7 +347,7 @@ def infer(
                     )
                     current_subs, current_effect = (
                         S2(S1),
-                        StackEffect(S2(i1), [*S2(o1), fun_type]),
+                        StackEffect(S2(i1), [*S2(o1), QuotationType(fun_type)]),
                     )
             elif isinstance(node, concat.level0.parse.QuoteWordNode):
                 quotation = cast(concat.level0.parse.QuoteWordNode, node)
@@ -355,11 +356,11 @@ def infer(
                     [*quotation.children],
                     extensions=extensions,
                     source_dir=source_dir,
+                    initial_stack=TypeSequence(o)
                 )
-                phi = unify(S1(o), i1)
                 current_subs, current_effect = (
-                    phi(S1(S)),
-                    phi(S1(StackEffect(i, o1) & iterable_type)),
+                    S1(S),
+                    S1(StackEffect(i, o1)),
                 )
             # there is no fix combinator, lambda abstraction, or a let form like
             # Kleffner's
