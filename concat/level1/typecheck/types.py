@@ -187,6 +187,7 @@ class IndividualVariable(_Variable, IndividualType):
         return self.bound.collapse_bounds()
 
 
+# TODO: Reevaluate: do I really need this?
 class _IntersectionType(IndividualType):
     def __init__(
         self, type_1: 'IndividualType', type_2: 'IndividualType'
