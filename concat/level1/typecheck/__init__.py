@@ -165,7 +165,6 @@ from concat.level1.typecheck.types import (
     StackEffect,
     ForAll,
     IndividualType,
-    _IntersectionType,
     ObjectType,
     PrimitiveInterface,
     SequenceVariable,
@@ -638,24 +637,6 @@ def unify_ind(
     elif isinstance(t2, TypeWithAttribute):
         attr_type = t1.get_type_of_attribute(t2.attribute)
         return unify_ind(attr_type, t2.attribute_type)
-    elif isinstance(t1, _IntersectionType):
-        # FIXME: Check that substitutions don't contradict each other.
-        phi = None
-        try:
-            phi = unify_ind(t1.type_1, t2)
-        except TypeError:
-            pass
-        try:
-            if phi is not None:
-                phi = unify_ind(phi(t1.type_2), phi(t2))(phi)
-            else:
-                phi = unify_ind(t1.type_2, t2)
-        except TypeError:
-            pass
-        if phi is None:
-            # TODO: Encapsulate TypeError message
-            raise TypeError('{} cannot unify with {}'.format(t1, t2))
-        return phi
     elif t1.is_subtype_of(t2):
         return Substitutions()
     else:
