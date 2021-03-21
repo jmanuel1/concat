@@ -4,6 +4,8 @@ from concat.level1.typecheck.constraints import Constraints
 from typing import (
     Optional,
     Dict,
+    Iterable,
+    Iterator,
     Sequence,
     Union,
     List,
@@ -374,25 +376,43 @@ class SequenceVariable(_Variable):
         constraints.add(supertype, self)
 
 
-class TypeSequence(Type):
+class TypeSequence(Type, Iterable['StackItemType']):
     def __init__(self, sequence: Sequence['StackItemType']) -> None:
+        self._rest: Optional[SequenceVariable]
+        assert all(not isinstance(i, TypeSequence) for i in sequence)
         if sequence and isinstance(sequence[0], SequenceVariable):
             self._rest = sequence[0]
             self._individual_types = sequence[1:]
         else:
+            assert all(not isinstance(i, SequenceVariable) for i in sequence)
             self._rest = None
             self._individual_types = sequence
 
-    def apply_substitution(self, _) -> 'TypeSequence':
-        raise NotImplementedError('time to get of Substitutions')
+    def as_sequence(self) -> Sequence['StackItemType']:
+        if self._rest is not None:
+            return [self._rest, *self._individual_types]
+        return self._individual_types
 
-    def constrain(self, supertype: Type, constraints: Constraints) -> None:
+    def apply_substitution(self, sub) -> 'TypeSequence':
+        return TypeSequence(sub(self.as_sequence()))
+
+    def constrain(self, supertype: Type, constraints: Constraints, polymorphic=False) -> None:
+        """Constrain self to be a subtype of supertype.
+
+        The `polymorphic` flag is used to enable special handling of type
+        variables so that type information can be propagated into calls of
+        named functions.
+        """
         if isinstance(supertype, SequenceVariable):
             supertype.constrain(self, constraints)
         elif isinstance(supertype, TypeSequence):
             # This is basically the old unify function.
             if self._is_empty() and supertype._is_empty():
                 return
+            elif self._is_empty() and supertype._rest and not supertype._individual_types:
+                supertype._rest.constrain(self, constraints)
+            elif supertype._is_empty() and self._rest and not self._individual_types:
+                self._rest.constrain(supertype, constraints)
             elif not self._individual_types:
                 if self._rest and self == supertype:
                     return
@@ -409,10 +429,21 @@ class TypeSequence(Type):
                 and supertype._individual_types
             ):
                 self._individual_types[-1].constrain(supertype._individual_types[-1], constraints)
-                self[:-1].constrain(supertype[:-1], constraints)
+                # NOTE: Simplifying assumption: If polymorphic is True,
+                # constrain individual variables in the second sequence type to
+                # be *equal* to the corresponding type in the first sequence
+                # type.
+                is_variable = isinstance(
+                    supertype._individual_types[-1], IndividualVariable
+                )
+                if polymorphic and is_variable:
+                    supertype._individual_types[-1].constrain(
+                        self._individual_types[-1], constraints
+                    )
+                self[:-1].constrain(supertype[:-1], constraints, polymorphic)
             else:
                 raise TypeError(
-                    'cannot unify {} with {}'.format(
+                    ' {} is not a subtype of {}'.format(
                         self, supertype
                     )
                 )
@@ -423,10 +454,16 @@ class TypeSequence(Type):
         return self._rest is None and not self._individual_types
 
     def __getitem__(self, key: slice) -> 'TypeSequence':
-        return TypeSequence([self._rest, *self._individual_types[key]])
+        return TypeSequence(self.as_sequence()[key])
 
     def __str__(self) -> str:
-        return ' '.join(str(t) for t in [self._rest or '', *self._individual_types])
+        return '[' + ', '.join(str(t) for t in self) + ']'
+
+    def __repr__(self) -> str:
+        return 'TypeSequence([' + ', '.join(repr(t) for t in self) + '])'
+
+    def __iter__(self) -> Iterator['StackItemType']:
+        return iter(self.as_sequence())
 
 
 # FIXME: Subtyping of universal types.
