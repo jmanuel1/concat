@@ -3,7 +3,6 @@ from concat.level1.typecheck.types import (
     SequenceVariable,
     ForAll,
     StackEffect,
-    PrimitiveInterfaces,
     bool_type,
     dict_type,
     file_type,

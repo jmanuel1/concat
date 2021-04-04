@@ -166,12 +166,10 @@ from concat.level1.typecheck.types import (
     ForAll,
     IndividualType,
     ObjectType,
-    PrimitiveInterface,
     SequenceVariable,
     TypeWithAttribute,
     TypeSequence,
     StackItemType,
-    PrimitiveInterfaces,
     QuotationType,
     bool_type,
     context_manager_type,
@@ -180,6 +178,7 @@ from concat.level1.typecheck.types import (
     int_type,
     _ftv,
     init_primitives,
+    invertible_type,
     iterable_type,
     list_type,
     str_type,
@@ -380,7 +379,7 @@ def infer(
                     list(o),
                     [
                         a_bar,
-                        PrimitiveInterfaces.iterable,
+                        iterable_type[StackEffect([a_bar], [b_bar]),],
                         StackEffect([a_bar], [b_bar]),
                     ],
                 )
@@ -455,7 +454,7 @@ def infer(
                 )
             elif isinstance(node, concat.level1.operators.InvertWordNode):
                 out_var = SequenceVariable()
-                type_var = IndividualVariable(PrimitiveInterfaces.invertible)
+                type_var = IndividualVariable(invertible_type)
                 phi = unify(list(o), [out_var, type_var])
                 current_subs, current_effect = (
                     phi(S),
@@ -560,37 +559,8 @@ def unify_ind(
     direction."""
     t1 = inst(t1.to_for_all())
     t2 = inst(t2.to_for_all())
-    Primitive = (ObjectType, PrimitiveInterface)
-    if isinstance(t1, PrimitiveInterface) and isinstance(
-        t2, PrimitiveInterface
-    ):
-        if not t1.is_related_to(t2):
-            raise TypeError(
-                '{} and {} are not derived from the same interface'.format(
-                    t1, t2
-                )
-            )
-        if t2.type_arguments is None:
-            return Substitutions()
-        if t1.type_arguments is None:
-            raise TypeError(
-                '{} has no type arguments, but {} does'.format(t1, t2)
-            )
-        return unify([*t1.type_arguments], [*t2.type_arguments])
-    elif isinstance(t1, ObjectType) and isinstance(t2, PrimitiveInterface):
-        phi = Substitutions()
-        fail = True
-        # FIXME: Should be structural.
-        for type in t1.nominal_supertypes:
-            try:
-                phi = unify_ind(type, t2)(phi)
-                fail = False
-            except TypeError:
-                pass
-        if fail:
-            raise TypeError('{} does not implement {}'.format(t1, t2))
-        return phi
-    elif isinstance(t1, Primitive) and isinstance(t2, ObjectType):
+    Primitive = (ObjectType,)
+    if isinstance(t1, Primitive) and isinstance(t2, ObjectType):
         # TODO: Unify type arguments
         if not t1.is_subtype_of(t2):
             raise TypeError(
