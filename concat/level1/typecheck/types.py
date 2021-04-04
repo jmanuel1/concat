@@ -239,130 +239,6 @@ class _IntersectionType(IndividualType):
         return self.type_1.collapse_bounds() & self.type_2.collapse_bounds()
 
 
-class PrimitiveInterface(IndividualType):
-    def __init__(
-        self,
-        name: str = '<primitive_interface>',
-        attributes: Optional[Dict[str, 'IndividualType']] = None,
-    ) -> None:
-        self._name = name
-        self._attributes = {} if attributes is None else attributes
-        self._type_arguments: Optional[Sequence[IndividualType]] = None
-        self._type_argument_cache: Dict[
-            Sequence[IndividualType], 'PrimitiveInterface'
-        ] = {}
-        self._parent: Optional[PrimitiveInterface] = None
-
-    def __str__(self) -> str:
-        type_arguments_str = ''
-        if self._type_arguments is not None:
-            joined_argument_strs = ', '.join(map(str, self._type_arguments))
-            type_arguments_str = '[' + joined_argument_strs + ']'
-        return 'interface {}{}'.format(self._name, type_arguments_str)
-
-    def __repr__(self) -> str:
-        return '{}({!r}, {!r})'.format(
-            type(self).__qualname__, self._name, self._attributes
-        )
-
-    def __getitem__(
-        self, types: Union[IndividualType, Sequence[IndividualType]]
-    ) -> 'PrimitiveInterface':
-        if not isinstance(types, collections.abc.Sequence):
-            types = (types,)
-        if types in self._type_argument_cache:
-            return self._type_argument_cache[types]
-        new_interface = PrimitiveInterface(self._name, self._attributes)
-        new_interface._type_arguments = types
-        new_interface._type_argument_cache = self._type_argument_cache
-        new_interface._parent = self
-        self._type_argument_cache[types] = new_interface
-        return new_interface
-
-    def get_type_of_attribute(self, attribute: str) -> 'IndividualType':
-        try:
-            return self._attributes[attribute]
-        except KeyError:
-            raise concat.level1.typecheck.AttributeError(self, attribute)
-
-    def add_attribute(self, attribute: str, type: 'IndividualType') -> None:
-        self._attributes[attribute] = type
-
-    def apply_substitution(
-        self, sub: 'concat.level1.typecheck.Substitutions'
-    ) -> 'PrimitiveInterface':
-        new_attributes = {
-            name: cast(IndividualType, sub(type))
-            for name, type in self._attributes.items()
-        }
-        if new_attributes == self._attributes:
-            return self
-        new_name = '{}[sub {}]'.format(self._name, id(sub))
-        new_type_arguments = None
-        if self._type_arguments is not None:
-            new_type_arguments = cast(
-                Sequence[IndividualType], sub(self._type_arguments)
-            )
-        new_interface = PrimitiveInterface(new_name, new_attributes)
-        new_interface._type_arguments = new_type_arguments
-        return new_interface
-
-    def collapse_bounds(self) -> 'PrimitiveInterface':
-        new_attributes = {
-            name: type.collapse_bounds()
-            for name, type in self._attributes.items()
-        }
-        if new_attributes == self._attributes:
-            return self
-        new_interface = PrimitiveInterface(self.name, new_attributes)
-        new_interface._type_arguments = self._type_arguments
-        return new_interface
-
-    @property
-    def attributes(self) -> Mapping[str, 'IndividualType']:
-        return self._attributes
-
-    @property
-    def name(self) -> str:
-        return self._name
-
-    def is_subtype_of(self, supertype: Type) -> bool:
-        if super().is_subtype_of(supertype):
-            return True
-        if isinstance(supertype, PrimitiveInterface):
-            if not self.is_related_to(supertype):
-                return False
-            if supertype._type_arguments is None:
-                return True
-            if self._type_arguments is None:
-                return False
-            # since the type arguments are just sequences of individual types,
-            # we can use the unifier
-            try:
-                concat.level1.typecheck.unify(
-                    [*self._type_arguments], [*supertype._type_arguments]
-                )
-            except concat.level1.typecheck.TypeError:
-                return False
-            return True
-        return False
-
-    def constrain(self, supertype: Type, constraints: Constraints) -> None:
-        raise NotImplementedError('time to get rid of PrimitiveInterface')
-
-    def is_related_to(self, other: 'PrimitiveInterface') -> bool:
-        return self._get_earliest_ancestor() is other._get_earliest_ancestor()
-
-    def _get_earliest_ancestor(self) -> 'PrimitiveInterface':
-        if self._parent is None:
-            return self
-        return self._parent._get_earliest_ancestor()
-
-    @property
-    def type_arguments(self) -> Optional[Sequence[IndividualType]]:
-        return self._type_arguments
-
-
 class SequenceVariable(_Variable):
     def __init__(self) -> None:
         super().__init__()
@@ -767,12 +643,20 @@ class QuotationType(_Function):
     ) -> bool:
         if super().is_subtype_of(supertype, _sub):
             return True
-        if supertype == PrimitiveInterfaces.iterable:
+        if supertype == iterable_type:
             return True
         return False
 
     def constrain(self, supertype: Type, constraints: Constraints) -> None:
-        if supertype == PrimitiveInterfaces.iterable:
+        if isinstance(supertype, ObjectType) and supertype.head == iterable_type:
+            # FIXME: Don't present new variables every time.
+            # FIXME: Account for the types of the elements of the quotation.
+            in_var = IndividualVariable()
+            out_var = IndividualVariable()
+            quotation_iterable_type = iterable_type[
+                _Function([in_var], [out_var]),
+            ]
+            quotation_iterable_type.constrain(supertype, constraints)
             return
         super().constrain(supertype, constraints)
 
@@ -851,7 +735,7 @@ def _intersect_sequences(
 
 # FIXME: This should be a method on types
 def inst(
-    sigma: Union[ForAll, PrimitiveInterface, _Function]
+    sigma: Union[ForAll, _Function]
 ) -> IndividualType:
     """This is based on the inst function described by Kleffner."""
     if isinstance(sigma, ForAll):
@@ -859,25 +743,16 @@ def inst(
             {a: type(a)() for a in sigma.quantified_variables}
         )
         return cast(IndividualType, subs(sigma.type))
-    if isinstance(sigma, PrimitiveInterface):
-        attributes = {}
-        for name in sigma.attributes:
-            attribute_type = sigma.attributes[name]
-            if isinstance(attribute_type, (PrimitiveInterface, _Function)):
-                attributes[name] = inst(attribute_type)
-            else:
-                attributes[name] = attribute_type
-        return PrimitiveInterface(sigma.name + '[inst]', attributes)
     if isinstance(sigma, _Function):
         input = [
             inst(type)
-            if isinstance(type, (ForAll, PrimitiveInterface, _Function))
+            if isinstance(type, (ForAll, _Function))
             else type
             for type in sigma.input
         ]
         output = [
             inst(type)
-            if isinstance(type, (ForAll, PrimitiveInterface, _Function))
+            if isinstance(type, (ForAll, _Function))
             else type
             for type in sigma.output
         ]
@@ -896,9 +771,7 @@ def _ftv(
 ) -> Set[_Variable]:
     """The ftv function described by Kleffner."""
     ftv: Set[_Variable]
-    if isinstance(f, (PrimitiveInterface)):
-        return set()
-    elif isinstance(f, _Variable):
+    if isinstance(f, _Variable):
         return {f}
     elif isinstance(f, _Function):
         return _ftv(list(f.input)) | _ftv(list(f.output))
@@ -930,14 +803,7 @@ def _ftv(
 
 
 def init_primitives():
-    PrimitiveInterfaces.invertible.add_attribute(
-        '__invert__', py_function_type
-    )
-
-
-class PrimitiveInterfaces:
-    invertible = PrimitiveInterface('invertible')
-    iterable = PrimitiveInterface('iterable')
+    pass
 
 
 TypeArguments = Sequence[Union[StackItemType, Sequence[StackItemType]]]
@@ -952,8 +818,7 @@ class ObjectType(IndividualType):
     def __init__(
         self,
         self_type: IndividualVariable,
-        # Attributes can be universally quantified since ObjectType and
-        # PrimitiveInterface allow it.
+        # Attributes can be universally quantified since ObjectType allows it.
         attributes: Dict[str, IndividualType],
         type_parameters: Sequence[_Variable] = (),
         nominal_supertypes: Sequence[IndividualType] = (),
@@ -1271,8 +1136,6 @@ StackEffect = _Function
 
 _x = IndividualVariable()
 
-invertible_type = PrimitiveInterfaces.invertible
-subtractable_type = PrimitiveInterface('subtractable')
 
 float_type = ObjectType(_x, {}, nominal=True)
 no_return_type = _NoReturnType()
@@ -1284,6 +1147,14 @@ py_function_type = PythonFunctionType(
     _x, {}, [_arg_type_var, _return_type_var]
 )
 
+_invert_result_var = IndividualVariable()
+invertible_type = ObjectType(_x, {'__invert__': py_function_type[(), _invert_result_var]}, [_invert_result_var])
+
+_sub_operand_type = IndividualVariable()
+_sub_result_type = IndividualVariable()
+# FIXME: Add reverse_substractable_type for __rsub__
+subtractable_type = ObjectType(_x, {'__sub__': py_function_type[(_sub_operand_type,), _sub_result_type]}, [_sub_operand_type, _sub_result_type])
+
 # FIXME: invertible_type, subtractable_type are structural supertypes
 # but for now they are both explicit
 int_type = ObjectType(
@@ -1294,7 +1165,10 @@ int_type = ObjectType(
     nominal=True,
 )
 
-iterable_type = PrimitiveInterfaces.iterable
+# FIXME: Use an iterator interface instead of _x
+_result_type = IndividualVariable()
+iterable_type = ObjectType(_x, {'__iter__': py_function_type[(), _x]}, [_result_type])
+
 context_manager_type = ObjectType(
     _x,
     {
@@ -1324,9 +1198,12 @@ file_type = ObjectType(
 _element_type_var = IndividualVariable()
 list_type = ObjectType(
     _x,
-    {'__getitem__': py_function_type[(int_type,), _element_type_var]},
+    {
+        '__getitem__': py_function_type[(int_type,), _element_type_var],
+        # FIXME: __iter__ should return an iterator.
+        '__iter__': py_function_type[(), object_type]
+    },
     [_element_type_var],
-    [iterable_type],
 )
 
 str_type = ObjectType(_x, {'__getitem__': py_function_type[(int_type,), _x]})

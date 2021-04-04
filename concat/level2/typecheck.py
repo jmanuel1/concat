@@ -11,7 +11,6 @@ from concat.level1.typecheck.types import (
     IndividualType,
     IndividualVariable,
     ObjectType,
-    PrimitiveInterface,
     SequenceVariable,
     StackEffect,
     StackItemType,
@@ -198,22 +197,20 @@ class _GenericTypeNode(IndividualTypeNode):
             arg_as_type, env = arg.to_type(env)
             args.append(arg_as_type)
         generic_type, env = self._generic_type.to_type(env)
-        if isinstance(generic_type, (ObjectType, PrimitiveInterface)):
+        if isinstance(generic_type, ObjectType):
             return generic_type[args], env
         raise TypeError('{} is not a generic type'.format(generic_type))
 
 
-class PrimitiveInterfaces:
-    __index_type_var = concat.level1.typecheck.IndividualVariable()
-    __result_type_var = concat.level1.typecheck.IndividualVariable()
-    subscriptable = ForAll(
-        [__index_type_var, __result_type_var],
-        TypeWithAttribute(
-            '__getitem__',
-            py_function_type[(__index_type_var, ), __result_type_var],
-        ),
-    )
-
+_index_type_var = concat.level1.typecheck.IndividualVariable()
+_result_type_var = concat.level1.typecheck.IndividualVariable()
+subscriptable_type = ForAll(
+    [_index_type_var, _result_type_var],
+    TypeWithAttribute(
+        '__getitem__',
+        py_function_type[(_index_type_var, ), _result_type_var],
+    ),
+)
 
 # TODO: Separate type-check-time environment from runtime environment.
 builtin_environment = Environment(
@@ -223,7 +220,7 @@ builtin_environment = Environment(
         'tuple': tuple_type,
         'BaseException': base_exception_type,
         'NoReturn': no_return_type,
-        'subscriptable': PrimitiveInterfaces.subscriptable,
+        'subscriptable': subscriptable_type,
         'subtractable': subtractable_type,
         'bool': bool_type,
         'object': object_type,
@@ -345,7 +342,7 @@ def infer(
         seq_var = SequenceVariable()
         index_type_var = IndividualVariable()
         result_type_var = IndividualVariable()
-        subscriptable_interface = PrimitiveInterfaces.subscriptable[
+        subscriptable_interface = subscriptable_type[
             index_type_var, result_type_var
         ]
         subs_2 = concat.level1.typecheck.unify(
@@ -426,7 +423,7 @@ def infer(
             )
             phi1 = concat.level1.typecheck.unify(S2(output), subs(i2))
             # FIXME: Should be generic
-            subscriptable_interface = PrimitiveInterfaces.subscriptable[
+            subscriptable_interface = subscriptable_type[
                 int_type, str_type,
             ]
             expected_o2 = [

@@ -3,11 +3,11 @@ from concat.level1.typecheck.types import (
     SequenceVariable,
     ForAll,
     StackEffect,
-    PrimitiveInterfaces,
     bool_type,
     dict_type,
     file_type,
     init_primitives,
+    iterable_type,
     list_type,
     object_type,
     py_function_type,
@@ -29,8 +29,8 @@ types = {
         StackEffect(
             [
                 _rest_var,
-                PrimitiveInterfaces.iterable,
-                PrimitiveInterfaces.iterable,
+                iterable_type[object_type,],
+                iterable_type[object_type,],
                 py_function_type,
             ],
             [_rest_var, object_type],
@@ -71,7 +71,7 @@ types = {
     'to_list': ForAll(
         [_rest_var],
         StackEffect(
-            [_rest_var, PrimitiveInterfaces.iterable], [_rest_var, list_type]
+            [_rest_var, iterable_type], [_rest_var, list_type]
         ),
     ),
     'False': ForAll(
