@@ -24,6 +24,12 @@ _b_var = IndividualVariable()
 _c_var = IndividualVariable()
 
 types = {
-    'if_then': StackEffect([_rest_var, bool_type, StackEffect([_rest_var], [_rest_var])], [_rest_var]),
-    'call': StackEffect([_rest_var, StackEffect([_rest_var], [_seq_var])], [_seq_var])
+    # FIXME: Types should be universally quantified.
+    'if_then': StackEffect(
+        [_rest_var, bool_type, StackEffect([_rest_var], [_rest_var])],
+        [_rest_var],
+    ),
+    'call': StackEffect(
+        [_rest_var, StackEffect([_rest_var], [_seq_var])], [_seq_var],
+    ),
 }
