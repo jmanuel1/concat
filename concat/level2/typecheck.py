@@ -2,7 +2,7 @@ import concat.astutils
 import concat.level0.lex
 import concat.level0.parse
 import concat.level1.typecheck
-from concat.level1.typecheck import Environment, TypeError
+from concat.level1.typecheck import Environment, TypeError, _global_constraints
 import concat.level1.parse
 import concat.level1.operators
 import concat.level2.parse
@@ -394,9 +394,8 @@ def infer(
             # declared inputs, and that the inferred outputs are subtypes of
             # the declared outputs. Thus, inferred_type should be a subtype
             # declared_type.
-            phi2 = concat.level1.typecheck.unify_ind(
-                inferred_type_inst, declared_type_inst
-            )
+            _global_constraints.add(inferred_type_inst, declared_type_inst)
+            phi2 = _global_constraints.equalities_as_substitutions()
             if not phi2(inferred_type_inst).is_subtype_of(
                 phi2(declared_type_inst)
             ):

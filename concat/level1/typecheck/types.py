@@ -178,9 +178,10 @@ class IndividualVariable(_Variable, IndividualType):
         if super().apply_substitution(sub) is not self:
             return cast(IndividualType, super().apply_substitution(sub))
         # If our bound won't change, return the same variable. Without
-        # handling this case, parts of unify_ind don't work since it starts
+        # handling this case, other code might not work since it starts
         # returning substitutions from type variables it wasn't originally
         # given.
+        # TODO: I should probably just separate bounds from type variables.
         if self._never_object_type_bound is None:
             # This might not be correct, but I need to avoid infinite recursion.
             bound = None
@@ -469,11 +470,14 @@ class _Function(IndividualType):
         return ForAll(list(_ftv(self) - _ftv(gamma)), self)
 
     def can_be_complete_program(self) -> bool:
-        """Returns true iff the function type unifies with ( -- *out)."""
+        """Returns true iff the function type is a subtype of ( -- *out)."""
+        from concat.level1.typecheck import _global_constraints
+
         out_var = SequenceVariable()
         try:
-            concat.level1.typecheck.unify_ind(self, _Function([], [out_var]))
+            _global_constraints.add(self, _Function([], [out_var]))
         except concat.level1.typecheck.TypeError:
+            # FIXME: Undo failed constraints.
             return False
         return True
 
@@ -1193,9 +1197,12 @@ subtractable_type = ObjectType(
 # but for now they are both explicit
 int_type = ObjectType(
     _x,  # FIXME: Make unique for each type.
-    {'__add__': py_function_type[(object_type,), _x]},
+    {
+        '__add__': py_function_type[(object_type,), _x],
+        '__invert__': py_function_type[(), _x]
+    },
     [],
-    [invertible_type, subtractable_type],
+    [subtractable_type],
     nominal=True,
 )
 
