@@ -369,13 +369,14 @@ def infer(
                     S1(S),
                     S1(StackEffect(i, o1)),
                 )
-            # there is no fix combinator, lambda abstraction, or a let form like
-            # Kleffner's
+            # there is no fix combinator, lambda abstraction, or a let form
+            # like Kleffner's
             # now for our extensions
             elif isinstance(node, concat.level1.parse.WithWordNode):
                 a_bar, b_bar = SequenceVariable(), SequenceVariable()
                 body_type = StackEffect([a_bar, object_type], [b_bar])
-                phi = unify(list(o), [a_bar, body_type, context_manager_type])
+                _global_constraints.add(TypeSequence(o), TypeSequence([a_bar, body_type, context_manager_type]))
+                phi = _global_constraints.equalities_as_substitutions()
                 current_subs, current_effect = (
                     phi(S),
                     phi(StackEffect(i, [b_bar])),
