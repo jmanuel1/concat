@@ -169,6 +169,7 @@ from concat.level1.typecheck.types import (
     ForAll,
     IndividualType,
     ObjectType,
+    PythonFunctionType,
     SequenceVariable,
     TypeWithAttribute,
     TypeSequence,
@@ -461,12 +462,14 @@ def infer(
                     phi(StackEffect(i, [*collected_type, list_type])),
                 )
             elif isinstance(node, concat.level1.operators.InvertWordNode):
-                out_var = SequenceVariable()
-                type_var = IndividualVariable(invertible_type)
-                phi = unify(list(o), [out_var, type_var])
+                out_types = o[:-1]
+                invert_attr_type = o[-1].get_type_of_attribute('__invert__')
+                if not isinstance(invert_attr_type, PythonFunctionType):
+                    raise TypeError('__invert__ of type {} must be a Python function'.format(o[-1]))
+                result_type = invert_attr_type.type_arguments[1]
                 current_subs, current_effect = (
-                    phi(S),
-                    phi(StackEffect(i, [out_var, type_var])),
+                    S,
+                    StackEffect(i, [*out_types, result_type]),
                 )
             elif isinstance(node, concat.level0.parse.StringWordNode):
                 current_subs, current_effect = (
@@ -545,7 +548,8 @@ def unify(i1: List[StackItemType], i2: List[StackItemType]) -> Substitutions:
         and isinstance(i1[-1], IndividualType)
         and isinstance(i2[-1], IndividualType)
     ):
-        phi1 = unify_ind(i1[-1], i2[-1])
+        _global_constraints.add(i1[-1], i2[-1])
+        phi1 = _global_constraints.equalities_as_substitutions()
         phi2 = unify(phi1(i1[:-1]), phi1(i2[:-1]))
         return phi2(phi1)
     raise TypeError(
@@ -553,74 +557,6 @@ def unify(i1: List[StackItemType], i2: List[StackItemType]) -> Substitutions:
             ', '.join(str(t) for t in i1), ', '.join(str(t) for t in i2)
         )
     )
-
-
-def unify_ind(
-    t1: Union[IndividualType, ForAll], t2: Union[IndividualType, ForAll]
-) -> Substitutions:
-    """A modified version of the unifyInd function described by Kleffner.
-
-    Since subtyping is a directional relation, we say t1 is the input type, and
-    t2 is the output type. The subsitutions returned will make t1 a subtype of
-    t2. This is inspired by Polymorphism, Subtyping, and Type Inference in
-    MLsub (Dolan and Mycroft 2016). Variables can be subsituted in either
-    direction."""
-    t1 = inst(t1.to_for_all())
-    t2 = inst(t2.to_for_all())
-    Primitive = (ObjectType,)
-    if isinstance(t1, Primitive) and isinstance(t2, ObjectType):
-        # TODO: Unify type arguments
-        if not t1.is_subtype_of(t2):
-            raise TypeError(
-                'Primitive type {} cannot unify with primitive type {}'.format(
-                    t1, t2
-                )
-            )
-        return Substitutions()
-    elif isinstance(t1, IndividualVariable) and t1 not in _ftv(t2):
-        phi = None
-        if t1.is_subtype_of(t2):
-            if isinstance(t2, IndividualVariable):
-                phi = unify_ind(t1.bound, t2.bound)
-            else:
-                phi = unify_ind(t1.bound, t2)
-        if t2.is_subtype_of(t1):
-            phi = Substitutions({t1: IndividualVariable(t2)})(
-                phi or Substitutions()
-            )
-        if phi is None:
-            if isinstance(t2, IndividualVariable):
-                new_var = IndividualVariable(t1.bound & t2.bound)
-                phi = Substitutions({t1: new_var, t2: new_var})
-            else:
-                raise TypeError('{} cannot unify with {}'.format(t1, t2))
-
-        return phi
-    elif isinstance(t2, IndividualVariable) and t2 not in _ftv(t1):
-        if t1.is_subtype_of(t2):
-            phi = Substitutions({t2: t1})
-            phi = (unify_ind(phi(t1), phi(t2.bound)))(phi)
-            return phi
-        raise TypeError('{} cannot unify with {}'.format(t1, t2))
-    elif isinstance(t1, StackEffect) and isinstance(t2, StackEffect):
-        phi1 = unify(list(t2.input), list(t1.input))
-        phi2 = unify(list(phi1(t1.output)), list(phi1(t2.output)))
-        return phi2(phi1)
-    elif isinstance(t1, TypeWithAttribute):
-        if t1.is_subtype_of(t2):
-            try:
-                attr_type = t2.get_type_of_attribute(t1.attribute)
-            except TypeError:
-                return Substitutions()
-            return unify_ind(t1.attribute_type, attr_type)
-        raise TypeError('{} cannot unify with {}'.format(t1, t2))
-    elif isinstance(t2, TypeWithAttribute):
-        attr_type = t1.get_type_of_attribute(t2.attribute)
-        return unify_ind(attr_type, t2.attribute_type)
-    elif t1.is_subtype_of(t2):
-        return Substitutions()
-    else:
-        raise TypeError('{} cannot unify with {}'.format(t1, t2))
 
 
 def drop_last_from_type_seq(
