@@ -326,18 +326,13 @@ def infer(
                 S1, (i1, o1) = S, (i, o)
                 # special case for push an attribute accessor
                 child = node.children[0]
-                rest = SequenceVariable()
                 if isinstance(child, concat.level0.parse.AttributeWordNode):
-                    attr_type_var = IndividualVariable()
-                    top = IndividualVariable(
-                        TypeWithAttribute(child.value, attr_type_var)
-                    )
-                    S2 = unify(list(o1), [rest, top])
-                    attr_type = inst(S2(attr_type_var).to_for_all())
-                    rest_types = S2([rest])
+                    top = o1[-1]
+                    attr_type = top.get_type_of_attribute(child.value)
+                    rest_types = o1[:-1]
                     current_subs, current_effect = (
-                        S2(S1),
-                        StackEffect(S2(i1), [*rest_types, attr_type]),
+                        S1,
+                        StackEffect(i1, [*rest_types, attr_type]),
                     )
                 # special case for name words
                 elif isinstance(child, concat.level0.parse.NameWordNode):
