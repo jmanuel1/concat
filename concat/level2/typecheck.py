@@ -463,8 +463,8 @@ def infer(
         )
         if declared_type is not None:
             declared_type = S(declared_type)
-            declared_type_inst = concat.level1.typecheck.inst(declared_type)
-            inferred_type_inst = concat.level1.typecheck.inst(S(inferred_type))
+            declared_type_inst = declared_type.instantiate()
+            inferred_type_inst = S(inferred_type).instantiate()
             # We want to check that the inferred inputs are supertypes of the
             # declared inputs, and that the inferred outputs are subtypes of
             # the declared outputs. Thus, inferred_type should be a subtype

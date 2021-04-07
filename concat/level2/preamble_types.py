@@ -25,15 +25,15 @@ _c_var = IndividualVariable()
 
 types = {
     'py_call': ForAll(
-        [_rest_var],
+        [_rest_var, _seq_var, _a_var],
         StackEffect(
             [
                 _rest_var,
                 iterable_type[object_type,],
                 iterable_type[object_type,],
-                py_function_type,
+                py_function_type[_seq_var, _a_var],
             ],
-            [_rest_var, object_type],
+            [_rest_var, _a_var],
         ),
     ),
     'swap': ForAll(

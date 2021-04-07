@@ -178,7 +178,6 @@ from concat.level1.typecheck.types import (
     bool_type,
     context_manager_type,
     dict_type,
-    inst,
     int_type,
     _ftv,
     init_primitives,
@@ -298,7 +297,7 @@ def infer(
                 (i1, o1) = current_effect
                 if node.value not in S(gamma):
                     raise NameError(node)
-                type_of_name = inst(S(gamma)[node.value].to_for_all())
+                type_of_name = S(gamma)[node.value].instantiate()
                 type_of_name = type_of_name.get_type_of_attribute('__call__')
                 if not isinstance(type_of_name, StackEffect):
                     raise UnhandledNodeTypeError(
@@ -339,7 +338,7 @@ def infer(
                 elif isinstance(child, concat.level0.parse.NameWordNode):
                     if child.value not in gamma:
                         raise NameError(child)
-                    name_type = inst(gamma[child.value].to_for_all())
+                    name_type = gamma[child.value].instantiate()
                     current_subs, current_effect = (
                         S1,
                         StackEffect(i1, [*o1, S1(name_type)]),
