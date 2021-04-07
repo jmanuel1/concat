@@ -456,23 +456,16 @@ def infer(
                         item,
                         extensions=extensions,
                         source_dir=source_dir,
+                        initial_stack=TypeSequence(collected_type)
                     )
-                    i_var, o_var = SequenceVariable(), SequenceVariable()
-                    phi1 = unify_ind(fun_type, StackEffect([i_var], [o_var]))(
-                        phi1
-                    )
-                    i1, o1 = phi1([i_var]), phi1([o_var])
-                    R1 = unify(phi1(phi(collected_type)), list(i1))
-                    collected_type = R1(phi1(phi(o1)))
-                    # drop the top of the stack to use as the key
-                    (
-                        collected_type,
-                        collected_type_sub,
-                    ) = drop_last_from_type_seq(list(collected_type))
-                    phi = collected_type_sub(R1(phi1(phi)))
+                    collected_type = fun_type.output
+                    # drop the top of the stack to use as the item
+                    collected_type = collected_type[:-1]
+                    phi = phi1(phi)
                 current_subs, current_effect = (
                     phi,
-                    phi(StackEffect(i, [*collected_type, list_type])),
+                    # FIXME: Infer the type of elements in the list.
+                    phi(StackEffect(i, [*collected_type, list_type[object_type,]])),
                 )
             elif isinstance(node, concat.level1.operators.InvertWordNode):
                 out_types = o[:-1]
