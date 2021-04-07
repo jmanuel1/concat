@@ -419,36 +419,31 @@ def infer(
                 phi = S
                 collected_type = o
                 for key, value in node.dict_children:
+                    print('collected_type', collected_type)
                     phi1, (i1, o1) = infer(
                         phi(gamma),
                         key,
                         extensions=extensions,
                         source_dir=source_dir,
+                        initial_stack=TypeSequence(collected_type)
                     )
-                    R1 = unify(phi1(collected_type), list(i1))
-                    phi = R1(phi1(phi))
+                    _global_constraints.add(TypeSequence(phi1(collected_type)), TypeSequence(i1))
+                    phi = _global_constraints.equalities_as_substitutions()(phi1(phi))
                     collected_type = phi(o1)
                     # drop the top of the stack to use as the key
-                    (
-                        collected_type,
-                        collected_type_sub,
-                    ) = drop_last_from_type_seq(collected_type)
-                    phi = collected_type_sub(phi)
+                    collected_type, key_type = collected_type[:-1], collected_type[-1]
                     phi2, (i2, o2) = infer(
                         phi(gamma),
                         value,
                         extensions=extensions,
                         source_dir=source_dir,
+                        initial_stack=TypeSequence(collected_type),
                     )
-                    R2 = unify(phi2(collected_type), list(i2))
-                    phi = R2(phi2(phi))
+                    _global_constraints.add(TypeSequence(phi2(collected_type)), TypeSequence(i2))
+                    phi = _global_constraints.equalities_as_substitutions()(phi2(phi))
                     collected_type = phi(o2)
                     # drop the top of the stack to use as the value
-                    (
-                        collected_type,
-                        collected_type_sub,
-                    ) = drop_last_from_type_seq(collected_type)
-                    phi = collected_type_sub(phi)
+                    collected_type, value_type = collected_type[:-1], collected_type[-1]
                 current_subs, current_effect = (
                     phi,
                     phi(StackEffect(i, [*collected_type, dict_type])),
