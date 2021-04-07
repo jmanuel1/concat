@@ -386,14 +386,15 @@ def infer(
                 )
             elif isinstance(node, concat.level1.parse.TryWordNode):
                 a_bar, b_bar = SequenceVariable(), SequenceVariable()
-                phi = unify(
-                    list(o),
-                    [
+                _global_constraints.add(
+                    TypeSequence(o),
+                    TypeSequence([
                         a_bar,
                         iterable_type[StackEffect([a_bar], [b_bar]),],
                         StackEffect([a_bar], [b_bar]),
-                    ],
+                    ]),
                 )
+                phi = _global_constraints.equalities_as_substitutions()
                 current_subs, current_effect = (
                     phi(S),
                     phi(StackEffect(i, [b_bar])),
