@@ -295,11 +295,12 @@ def infer(
                         [*rest, radd_type.type_arguments[1]],
                     )
             elif isinstance(node, concat.level0.parse.NameWordNode):
-                # FIXME: if_then, call
+                # FIXME: call
                 (i1, o1) = current_effect
                 if node.value not in S(gamma):
                     raise NameError(node)
                 type_of_name = inst(S(gamma)[node.value].to_for_all())
+                type_of_name = type_of_name.get_type_of_attribute('__call__')
                 if not isinstance(type_of_name, StackEffect):
                     raise UnhandledNodeTypeError(
                         'name {} of type {} (repr {!r})'.format(
