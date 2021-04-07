@@ -36,9 +36,7 @@ class Type(abc.ABC):
                 attr_type = self.get_type_of_attribute(supertype.attribute)
             except concat.level1.typecheck.AttributeError:
                 return False
-            return inst(attr_type.to_for_all()).is_subtype_of(
-                inst(supertype.attribute_type.to_for_all())
-            )
+            return attr_type <= supertype.attribute_type
         if isinstance(supertype, _IntersectionType):
             return self.is_subtype_of(supertype.type_1) and self.is_subtype_of(
                 supertype.type_2
@@ -69,6 +67,9 @@ class Type(abc.ABC):
     @abc.abstractmethod
     def constrain(self, supertype: 'Type', constraints: 'Constraints') -> None:
         pass
+
+    def instantiate(self) -> 'Type':
+        return self
 
 
 class IndividualType(Type, abc.ABC):
@@ -454,6 +455,12 @@ class ForAll(Type):
 
     def constrain(self, supertype: Type, constraints: Constraints) -> None:
         raise NotImplementedError('time to get rid of ForAll')
+
+    def instantiate(self) -> 'IndividualType':
+        subs = concat.level1.typecheck.Substitutions(
+            {a: type(a)() for a in self.quantified_variables}
+        )
+        return cast(IndividualType, subs(self.type))
 
 
 # TODO: Rename to StackEffect at all use sites.
@@ -1069,9 +1076,14 @@ class ObjectType(IndividualType):
             self._self_type,
             {n: cast(IndividualType, sub(t)) for n, t in attribute_items},
             (),
+            [sub(supertype) for supertype in self._nominal_supertypes],
             _type_arguments=type_arguments,
             _head=self,
         )
+
+    def instantiate(self) -> 'ObjectType':
+        fresh_variables = [type(a)() for a in self._type_parameters]
+        return self[fresh_variables]
 
     @property
     def attributes(self) -> Dict[str, IndividualType]:
@@ -1232,7 +1244,7 @@ bool_type = ObjectType(_x, {})
 file_type = ObjectType(
     _x,
     {
-        'seek': py_function_type,
+        'seek': py_function_type[(int_type,), int_type],
         'read': py_function_type,
         '__enter__': py_function_type,
         '__exit__': py_function_type,
