@@ -131,6 +131,16 @@ class TestTypeChecker(unittest.TestCase):
         )
         self.assertEqual(type, StackEffect([], []))
 
+    def test_call_inference(self) -> None:
+        try_prog = '$(42) call\n'
+        tree = parse(try_prog)
+        _, type = concat.level1.typecheck.infer(
+            concat.level1.typecheck.Environment(types),
+            tree.children,
+            is_top_level=True,
+        )
+        self.assertEqual(type, StackEffect([], [int_type]))
+
 
 class TestDiagnosticInfo(unittest.TestCase):
     def test_attribute_error_location(self) -> None:

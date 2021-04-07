@@ -295,7 +295,6 @@ def infer(
                         [*rest, radd_type.type_arguments[1]],
                     )
             elif isinstance(node, concat.level0.parse.NameWordNode):
-                # FIXME: call
                 (i1, o1) = current_effect
                 if node.value not in S(gamma):
                     raise NameError(node)
@@ -351,6 +350,8 @@ def infer(
                         node.children,
                         extensions=extensions,
                         source_dir=source_dir,
+                        # FIXME: Require an annotation for input stack here.
+                        initial_stack=TypeSequence([]),
                     )
                     current_subs, current_effect = (
                         S2(S1),
