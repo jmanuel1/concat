@@ -584,7 +584,7 @@ def unify(i1: List[StackItemType], i2: List[StackItemType]) -> Substitutions:
         return phi2(phi1)
     raise TypeError(
         'cannot unify {} with {}'.format(
-            ', '.join(str(t) for t in i1), ', '.join(str(t) for t in i2)
+            '(' + ', '.join(str(t) for t in i1) + ')', '(' + ', '.join(str(t) for t in i2) + ')'
         )
     )
 
