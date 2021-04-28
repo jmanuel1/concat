@@ -15,7 +15,6 @@ from concat.level1.typecheck.types import (
     StackEffect,
     StackItemType,
     Type,
-    TypeWithAttribute,
     TypeSequence,
     base_exception_type,
     bool_type,
@@ -74,24 +73,6 @@ class IndividualTypeNode(TypeNode, abc.ABC):
 
 # A dataclass is not used here because making this a subclass of an abstract
 # class does not work without overriding __init__ even when it's a dataclass.
-class AttributeTypeNode(IndividualTypeNode):
-    def __init__(
-        self,
-        location: concat.astutils.Location,
-        name: str,
-        type: IndividualTypeNode,
-    ) -> None:
-        super().__init__(location)
-        self.name = name
-        self.type = type
-
-    def to_type(
-        self, env: Environment
-    ) -> Tuple[TypeWithAttribute, Environment]:
-        attr_type, new_env = self.type.to_type(env)
-        return TypeWithAttribute(self.name, attr_type), new_env
-
-
 class NamedTypeNode(TypeNode):
     def __init__(self, location: concat.astutils.Location, name: str) -> None:
         super().__init__(location)
@@ -280,11 +261,10 @@ class StackEffectTypeNode(IndividualTypeNode):
 
 _index_type_var = concat.level1.typecheck.IndividualVariable()
 _result_type_var = concat.level1.typecheck.IndividualVariable()
-subscriptable_type = ForAll(
+subscriptable_type = ObjectType(
+    IndividualVariable(),
+    {'__getitem__': py_function_type[(_index_type_var,), _result_type_var],},
     [_index_type_var, _result_type_var],
-    TypeWithAttribute(
-        '__getitem__', py_function_type[(_index_type_var,), _result_type_var],
-    ),
 )
 
 # TODO: Separate type-check-time environment from runtime environment.
@@ -330,7 +310,9 @@ def _generate_type_of_innermost_module(
             attribute_type = int_type
         elif callable(getattr(module, name)):
             attribute_type = py_function_type
-        module_t = module_t & TypeWithAttribute(name, attribute_type)
+        module_t = module_t & ObjectType(
+            IndividualVariable(), {name: attribute_type}
+        )
     return StackEffect([_seq_var], [_seq_var, module_type])
 
 
@@ -341,9 +323,13 @@ def _generate_module_type(
     if _full_name is None:
         _full_name = '.'.join(components)
     if len(components) > 1:
-        module_t = module_t & TypeWithAttribute(
-            components[1],
-            _generate_module_type(components[1:], _full_name, source_dir).type,
+        module_t = module_t & ObjectType(
+            IndividualVariable(),
+            {
+                components[1]: _generate_module_type(
+                    components[1:], _full_name, source_dir
+                ).type,
+            },
         )
         effect = StackEffect([_seq_var], [_seq_var, module_type])
         return ForAll([_seq_var], effect)
@@ -551,7 +537,7 @@ def typecheck_extension(parsers: concat.level0.parse.ParserDict) -> None:
         name = (yield parsers.token('NAME')).value
         yield parsers.token('COLON')
         type = yield parsers['type']
-        return AttributeTypeNode(location, name, type)
+        raise NotImplementedError('better think about the syntax of this')
 
     @parsy.generate
     def named_type_parser() -> Generator:

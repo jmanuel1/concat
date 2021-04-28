@@ -171,7 +171,6 @@ from concat.level1.typecheck.types import (
     ObjectType,
     PythonFunctionType,
     SequenceVariable,
-    TypeWithAttribute,
     TypeSequence,
     StackItemType,
     QuotationType,
@@ -509,8 +508,8 @@ def infer(
                 attr_function_type = StackEffect(
                     [SequenceVariable()], [SequenceVariable()]
                 )
-                stack_top_type = TypeWithAttribute(
-                    node.value, attr_function_type
+                stack_top_type = ObjectType(
+                    IndividualVariable(), {node.value: attr_function_type}
                 )
                 phi = unify(list(o), [out_var, stack_top_type])
                 attr_function_type = phi(attr_function_type)

@@ -9,7 +9,6 @@ from concat.level1.typecheck.types import (
     IndividualType,
     IndividualVariable,
     ObjectType,
-    TypeWithAttribute,
     ClassType,
     dict_type,
     file_type,
@@ -106,9 +105,9 @@ class TestTypeChecker(unittest.TestCase):
             concat.level1.typecheck.Environment(), [attr_word]
         )
         self.assertIsInstance(type, StackEffect)
-        type = type.collapse_bounds()  # type: ignore
-        attr_type = cast(TypeWithAttribute, type.input[-1])  # type: ignore
-        self.assertEqual(attr_type.attribute, attr_word.value)
+        type = type.collapse_bounds()
+        attr_type = type.input[-1]
+        self.assertTrue(attr_type.has_attribute(attr_word.value))
 
     @given(integers(min_value=0), integers(min_value=0))
     def test_add_operator_inference(self, a: int, b: int) -> None:
