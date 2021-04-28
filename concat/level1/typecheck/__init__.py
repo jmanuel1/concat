@@ -125,13 +125,16 @@ class Substitutions(Dict['_Variable', Union['Type', List['StackItemType']]]):
 
     def __call__(self, arg: '_T') -> '_U':
         from concat.level1.typecheck.types import TypeSequence
+
         if isinstance(arg, collections.abc.Sequence):
             subbed_types: List[StackItemType] = []
             for type in arg:
                 subbed_type: Union[
                     StackItemType, Sequence[StackItemType]
                 ] = self(type)
-                if isinstance(subbed_type, (collections.abc.Sequence, TypeSequence)):
+                if isinstance(
+                    subbed_type, (collections.abc.Sequence, TypeSequence)
+                ):
                     subbed_types += [*subbed_type]
                 else:
                     subbed_types.append(subbed_type)
@@ -207,16 +210,16 @@ def infer(
     extensions: Optional[Tuple[Callable]] = None,
     is_top_level=False,
     source_dir='.',
-    initial_stack: Optional[TypeSequence] = None
+    initial_stack: Optional[TypeSequence] = None,
 ) -> Tuple[Substitutions, StackEffect]:
     """The infer function described by Kleffner."""
     e = list(e)
     current_subs = Substitutions()
     if initial_stack is None:
-        initial_stack = TypeSequence([] if is_top_level else [SequenceVariable()])
-    current_effect = (
-        StackEffect(initial_stack, initial_stack)
-    )
+        initial_stack = TypeSequence(
+            [] if is_top_level else [SequenceVariable()]
+        )
+    current_effect = StackEffect(initial_stack, initial_stack)
 
     for node in e:
         try:
@@ -302,11 +305,18 @@ def infer(
                             node.value, type_of_name, type_of_name
                         )
                     )
-                _global_constraints.add(
-                    TypeSequence(o1), TypeSequence(type_of_name.input)
+                TypeSequence(o1).constrain(
+                    TypeSequence(type_of_name.input),
+                    _global_constraints,
+                    polymorphic=True,
                 )
-                current_effect = StackEffect(
-                    o1[: len(type_of_name.input)], type_of_name.output
+                # For now, piggyback on substitutions
+                constraint_subs = (
+                    _global_constraints.equalities_as_substitutions()
+                )
+                current_subs = constraint_subs(current_subs)
+                current_effect = current_subs(
+                    StackEffect(i1, type_of_name.output)
                 )
             elif isinstance(
                 node, concat.level0.parse.PushWordNode
@@ -347,7 +357,9 @@ def infer(
                     )
                     current_subs, current_effect = (
                         S2(S1),
-                        StackEffect(S2(i1), [*S2(o1), QuotationType(fun_type)]),
+                        StackEffect(
+                            S2(i1), [*S2(o1), QuotationType(fun_type)]
+                        ),
                     )
             elif isinstance(node, concat.level0.parse.QuoteWordNode):
                 quotation = cast(concat.level0.parse.QuoteWordNode, node)
@@ -356,7 +368,7 @@ def infer(
                     [*quotation.children],
                     extensions=extensions,
                     source_dir=source_dir,
-                    initial_stack=TypeSequence(o)
+                    initial_stack=TypeSequence(o),
                 )
                 current_subs, current_effect = (
                     S1(S),

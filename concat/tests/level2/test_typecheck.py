@@ -165,13 +165,13 @@ class TestNamedTypeNode(unittest.TestCase):
     )
     @example(
         named_type_node=concat.level2.typecheck.NamedTypeNode((0, 0), ''),
-        type=concat.level1.typecheck._Function(
+        type=concat.level1.typecheck.types._Function(
             (),
             (
                 (
-                    concat.level1.typecheck._IntersectionType(
-                        concat.level1.typecheck._Function((), ()),
-                        concat.level1.typecheck._Function((), ()),
+                    concat.level1.typecheck.types._IntersectionType(
+                        concat.level1.typecheck.types._Function((), ()),
+                        concat.level1.typecheck.types._Function((), ()),
                     )
                 ),
             ),
