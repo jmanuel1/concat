@@ -345,13 +345,18 @@ def infer(
                         StackEffect(i1, [*o1, S1(name_type)]),
                     )
                 else:
+                    if isinstance(node, concat.level0.parse.QuoteWordNode):
+                        input_stack, _ = node.input_stack_type.to_type(gamma)
+                    else:
+                        # The majority of quotations I've written don't comsume
+                        # anything on the stack, so make that the default.
+                        input_stack = TypeSequence([])
                     S2, fun_type = infer(
                         S1(gamma),
                         node.children,
                         extensions=extensions,
                         source_dir=source_dir,
-                        # FIXME: Require an annotation for input stack here.
-                        initial_stack=TypeSequence([]),
+                        initial_stack=input_stack,
                     )
                     current_subs, current_effect = (
                         S2(S1),
@@ -361,12 +366,18 @@ def infer(
                     )
             elif isinstance(node, concat.level0.parse.QuoteWordNode):
                 quotation = cast(concat.level0.parse.QuoteWordNode, node)
+                # make sure any annotation matches the current stack
+                if quotation.input_stack_type is not None:
+                    input_stack = quotation.input_stack_type.to_type(gamma)
+                    _global_constraints.add(TypeSequence(o), input_stack)
+                else:
+                    input_stack = TypeSequence(o)
                 S1, (i1, o1) = infer(
                     gamma,
                     [*quotation.children],
                     extensions=extensions,
                     source_dir=source_dir,
-                    initial_stack=TypeSequence(o),
+                    initial_stack=input_stack,
                 )
                 current_subs, current_effect = (
                     S1(S),
@@ -378,7 +389,10 @@ def infer(
             elif isinstance(node, concat.level1.parse.WithWordNode):
                 a_bar, b_bar = SequenceVariable(), SequenceVariable()
                 body_type = StackEffect([a_bar, object_type], [b_bar])
-                _global_constraints.add(TypeSequence(o), TypeSequence([a_bar, body_type, context_manager_type]))
+                _global_constraints.add(
+                    TypeSequence(o),
+                    TypeSequence([a_bar, body_type, context_manager_type]),
+                )
                 phi = _global_constraints.equalities_as_substitutions()
                 current_subs, current_effect = (
                     phi(S),
@@ -388,11 +402,13 @@ def infer(
                 a_bar, b_bar = SequenceVariable(), SequenceVariable()
                 _global_constraints.add(
                     TypeSequence(o),
-                    TypeSequence([
-                        a_bar,
-                        iterable_type[StackEffect([a_bar], [b_bar]),],
-                        StackEffect([a_bar], [b_bar]),
-                    ]),
+                    TypeSequence(
+                        [
+                            a_bar,
+                            iterable_type[StackEffect([a_bar], [b_bar]),],
+                            StackEffect([a_bar], [b_bar]),
+                        ]
+                    ),
                 )
                 phi = _global_constraints.equalities_as_substitutions()
                 current_subs, current_effect = (
@@ -468,7 +484,11 @@ def infer(
                 out_types = o[:-1]
                 invert_attr_type = o[-1].get_type_of_attribute('__invert__')
                 if not isinstance(invert_attr_type, PythonFunctionType):
-                    raise TypeError('__invert__ of type {} must be a Python function'.format(o[-1]))
+                    raise TypeError(
+                        '__invert__ of type {} must be a Python function'.format(
+                            o[-1]
+                        )
+                    )
                 result_type = invert_attr_type.type_arguments[1]
                 current_subs, current_effect = (
                     S,

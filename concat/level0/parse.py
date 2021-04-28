@@ -29,6 +29,7 @@ tokenization phase.
 import abc
 from typing import (
     Iterable,
+    Optional,
     TypeVar,
     Any,
     Sequence,
@@ -37,11 +38,15 @@ from typing import (
     Generator,
     List,
     Callable,
+    TYPE_CHECKING,
 )
 import concat.level0.lex
 import concat.astutils
 from concat.parser_combinators import desc_cumulatively
 import parsy
+
+if TYPE_CHECKING:
+    from concat.level2.typecheck import TypeSequenceNode
 
 
 class Node(abc.ABC):
@@ -120,14 +125,23 @@ class StringWordNode(WordNode):
 
 class QuoteWordNode(WordNode):
     def __init__(
-        self, children: Sequence[WordNode], location: Tuple[int, int]
+        self,
+        children: Sequence[WordNode],
+        location: Tuple[int, int],
+        input_stack_type: Optional['TypeSequenceNode'] = None,
     ):
         super().__init__()
         self.location = location
         self.children: Sequence[WordNode] = children
+        self.input_stack_type = input_stack_type
 
     def __str__(self) -> str:
-        return '(' + ' '.join(map(str, self.children)) + ')'
+        input_stack_type = (
+            ''
+            if self.input_stack_type is None
+            else str(self.input_stack_type) + ': '
+        )
+        return '(' + input_stack_type + ' '.join(map(str, self.children)) + ')'
 
 
 class NameWordNode(WordNode):
@@ -245,9 +259,16 @@ def level_0_extension(parsers: ParserDict) -> None:
     @parsy.generate('quote word')
     def quote_word_parser() -> Generator[parsy.Parser, Any, QuoteWordNode]:
         lpar = yield parsers.token('LPAR')
+        if 'type-sequence' in parsers:
+            input_stack_type_parser = parsers[
+                'type-sequence'
+            ] << parsers.token('COLON')
+            input_stack_type = yield input_stack_type_parser.optional()
+        else:
+            input_stack_type = None
         children = yield parsers['word'].many()
         yield parsers.token('RPAR')
-        return QuoteWordNode(children, lpar.start)
+        return QuoteWordNode(children, lpar.start, input_stack_type)
 
     parsers['quote-word'] = quote_word_parser
 

@@ -16,6 +16,7 @@ from concat.level1.typecheck.types import (
     StackItemType,
     Type,
     TypeWithAttribute,
+    TypeSequence,
     base_exception_type,
     bool_type,
     context_manager_type,
@@ -36,7 +37,16 @@ from concat.level1.typecheck.types import (
     subtractable_type,
     tuple_type,
 )
-from typing import Tuple, Generator, Sequence, Optional, Union, cast
+from typing import (
+    Iterable,
+    List,
+    Tuple,
+    Generator,
+    Sequence,
+    Optional,
+    Union,
+    cast,
+)
 import abc
 import importlib
 import sys
@@ -99,26 +109,131 @@ class NamedTypeNode(TypeNode):
         return type, env
 
 
+class IntersectionTypeNode(IndividualTypeNode):
+    def __init__(
+        self,
+        location: concat.astutils.Location,
+        type_1: IndividualTypeNode,
+        type_2: IndividualTypeNode,
+    ):
+        super().__init__(location)
+        self.type_1 = type_1
+        self.type_2 = type_2
+
+    def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
+        type_1, new_env = self.type_1.to_type(env)
+        type_2, newer_env = self.type_2.to_type(new_env)
+        return type_1 & type_2, newer_env
+
+
+class _GenericTypeNode(IndividualTypeNode):
+    def __init__(
+        self,
+        location: concat.astutils.Location,
+        generic_type: IndividualTypeNode,
+        type_arguments: Sequence[IndividualTypeNode],
+    ) -> None:
+        super().__init__(location)
+        self._generic_type = generic_type
+        self._type_arguments = type_arguments
+
+    def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
+        args = []
+        for arg in self._type_arguments:
+            arg_as_type, env = arg.to_type(env)
+            args.append(arg_as_type)
+        generic_type, env = self._generic_type.to_type(env)
+        if isinstance(generic_type, ObjectType):
+            return generic_type[args], env
+        raise TypeError('{} is not a generic type'.format(generic_type))
+
+
+class _TypeSequenceIndividualTypeNode(IndividualTypeNode):
+    def __init__(
+        self,
+        args: Sequence[Union[concat.level0.lex.Token, IndividualTypeNode]],
+    ) -> None:
+        if args[0] is None:
+            location = args[1].location
+        else:
+            location = args[0].start
+        super().__init__(location)
+        self._name = None if args[0] is None else args[0].value
+        self._type = args[1]
+
+    # QUESTION: Should I have a separate space for the temporary associated names?
+    def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
+        if self._name is None:
+            return self._type.to_type(env)
+        elif self._type is None:
+            return env[self._name].to_type(env)
+        elif self._name in env:
+            raise TypeError(
+                '{} is associated with a type more than once in this sequence of types'.format(
+                    self._name
+                )
+            )
+        else:
+            type, env = self._type.to_type(env)
+            env = env.copy()
+            env[self._name] = type
+            return type, env
+
+    @property
+    def name(self) -> Optional[str]:
+        return self._name
+
+    @property
+    def type(self) -> Optional[IndividualTypeNode]:
+        return self._type
+
+
+class TypeSequenceNode(TypeNode):
+    def __init__(
+        self,
+        location: Optional[concat.astutils.Location],
+        seq_var: Optional[str],
+        individual_type_items: Iterable[_TypeSequenceIndividualTypeNode],
+    ) -> None:
+        super().__init__(location or (-1, -1))
+        self._sequence_variable = seq_var
+        self._individual_type_items = tuple(individual_type_items)
+
+    def to_type(self, env: Environment) -> Tuple[TypeSequence, Environment]:
+        sequence: List[StackItemType] = []
+        if self._sequence_variable is not None:
+            if self._sequence_variable not in env:
+                env = env.copy()
+                env[self._sequence_variable] = SequenceVariable()
+            sequence.append(env[self._sequence_variable])
+        for type_node in self._individual_type_items:
+            type, env = type_node.to_type(env)
+            sequence.append(type)
+        return TypeSequence(sequence), env
+
+    @property
+    def sequence_variable(self) -> Optional[str]:
+        return self._sequence_variable
+
+    @property
+    def individual_type_items(
+        self,
+    ) -> Sequence[_TypeSequenceIndividualTypeNode]:
+        return self._individual_type_items
+
+
 class StackEffectTypeNode(IndividualTypeNode):
     def __init__(
         self,
         location: concat.astutils.Location,
-        in_seq_var: Optional[concat.level0.lex.Token],
-        input: Sequence[Tuple[concat.level0.lex.Token, IndividualTypeNode]],
-        out_seq_var: Optional[concat.level0.lex.Token],
-        output: Sequence[Tuple[concat.level0.lex.Token, IndividualTypeNode]],
+        input: TypeSequenceNode,
+        output: TypeSequenceNode,
     ) -> None:
         super().__init__(location)
-        self.input_sequence_variable = in_seq_var.value if in_seq_var else None
-
-        def extract_value(i):
-            return (i[0].value, i[1])
-
-        self.input = [extract_value(i) for i in input]
-        self.output_sequence_variable = (
-            out_seq_var.value if out_seq_var else None
-        )
-        self.output = [extract_value(o) for o in output]
+        self.input_sequence_variable = input.sequence_variable
+        self.input = [(i.name, i.type) for i in input.individual_type_items]
+        self.output_sequence_variable = output.sequence_variable
+        self.output = [(o.name, o.type) for o in output.individual_type_items]
 
     def __repr__(self) -> str:
         return '{}({!r}, {!r}, {!r}, {!r}, location={!r})'.format(
@@ -163,52 +278,12 @@ class StackEffectTypeNode(IndividualTypeNode):
         return StackEffect([a_bar, *in_types], [b_bar, *out_types]), new_env
 
 
-class IntersectionTypeNode(IndividualTypeNode):
-    def __init__(
-        self,
-        location: concat.astutils.Location,
-        type_1: IndividualTypeNode,
-        type_2: IndividualTypeNode,
-    ):
-        super().__init__(location)
-        self.type_1 = type_1
-        self.type_2 = type_2
-
-    def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
-        type_1, new_env = self.type_1.to_type(env)
-        type_2, newer_env = self.type_2.to_type(new_env)
-        return type_1 & type_2, newer_env
-
-
-class _GenericTypeNode(IndividualTypeNode):
-    def __init__(
-        self,
-        location: concat.astutils.Location,
-        generic_type: IndividualTypeNode,
-        type_arguments: Sequence[IndividualTypeNode],
-    ) -> None:
-        super().__init__(location)
-        self._generic_type = generic_type
-        self._type_arguments = type_arguments
-
-    def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
-        args = []
-        for arg in self._type_arguments:
-            arg_as_type, env = arg.to_type(env)
-            args.append(arg_as_type)
-        generic_type, env = self._generic_type.to_type(env)
-        if isinstance(generic_type, ObjectType):
-            return generic_type[args], env
-        raise TypeError('{} is not a generic type'.format(generic_type))
-
-
 _index_type_var = concat.level1.typecheck.IndividualVariable()
 _result_type_var = concat.level1.typecheck.IndividualVariable()
 subscriptable_type = ForAll(
     [_index_type_var, _result_type_var],
     TypeWithAttribute(
-        '__getitem__',
-        py_function_type[(_index_type_var, ), _result_type_var],
+        '__getitem__', py_function_type[(_index_type_var,), _result_type_var],
     ),
 )
 
@@ -482,33 +557,53 @@ def typecheck_extension(parsers: concat.level0.parse.ParserDict) -> None:
         return NamedTypeNode(name_token.start, name_token.value)
 
     @parsy.generate
-    def stack_effect_type_parser() -> Generator:
-        print('parsing stack effect')
+    def type_sequence_parser() -> Generator:
         name = parsers.token('NAME')
         individual_type_variable = (
-            parsers.token('BACKTICK') >> name >> parsy.success(None)
+            # FIXME: Keep track of individual type variables
+            parsers.token('BACKTICK')
+            >> name
+            >> parsy.success(None)
         )
         lpar = parsers.token('LPAR')
         rpar = parsers.token('RPAR')
         nested_stack_effect = lpar >> parsers['stack-effect-type'] << rpar
         type = parsers['type'] | individual_type_variable | nested_stack_effect
+
+        # TODO: Allow type-only items
+        item = parsy.seq(
+            name, (parsers.token('COLON') >> type).optional()
+        ).map(_TypeSequenceIndividualTypeNode)
+        items = item.many()
+
         seq_var = parsers.token('STAR') >> name
+        seq_var_parsed, i = yield parsy.seq(seq_var.optional(), items)
+        seq_var_value = None
+
+        if seq_var_parsed is None and i:
+            location = i[0].location
+        elif seq_var_parsed is not None:
+            location = seq_var_parsed.start
+            seq_var_value = seq_var_parsed.value
+        else:
+            location = None
+
+        return TypeSequenceNode(location, seq_var_value, i)
+
+    @parsy.generate
+    def stack_effect_type_parser() -> Generator:
+        print('parsing stack effect')
 
         separator = parsers.token('MINUS').times(2)
 
-        item = parsy.seq(
-            name, (parsers.token('COLON') >> type).optional()
-        ).map(tuple)
-        items = item.many()
-
         stack_effect = parsy.seq(  # type: ignore
-            seq_var.optional(), items << separator, seq_var.optional(), items
+            parsers['type-sequence'] << separator, parsers['type-sequence']
         )
 
-        a_bar_parsed, i, b_bar_parsed, o = yield stack_effect
+        i, o = yield stack_effect
 
         # FIXME: Get the location
-        return StackEffectTypeNode((0, 0), a_bar_parsed, i, b_bar_parsed, o)
+        return StackEffectTypeNode((0, 0), i, o)
 
     @parsy.generate
     def intersection_type_parser() -> Generator:
@@ -550,4 +645,8 @@ def typecheck_extension(parsers: concat.level0.parse.ParserDict) -> None:
             generic_type_parser, 'generic type'
         ),
         parsers.ref_parser('nonparameterized-type'),
+    )
+
+    parsers['type-sequence'] = concat.parser_combinators.desc_cumulatively(
+        type_sequence_parser, 'type sequence'
     )
