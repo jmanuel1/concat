@@ -424,13 +424,20 @@ def infer(
                         key,
                         extensions=extensions,
                         source_dir=source_dir,
-                        initial_stack=TypeSequence(collected_type)
+                        initial_stack=TypeSequence(collected_type),
                     )
-                    _global_constraints.add(TypeSequence(phi1(collected_type)), TypeSequence(i1))
-                    phi = _global_constraints.equalities_as_substitutions()(phi1(phi))
+                    _global_constraints.add(
+                        TypeSequence(phi1(collected_type)), TypeSequence(i1)
+                    )
+                    phi = _global_constraints.equalities_as_substitutions()(
+                        phi1(phi)
+                    )
                     collected_type = phi(o1)
                     # drop the top of the stack to use as the key
-                    collected_type, key_type = collected_type[:-1], collected_type[-1]
+                    collected_type, key_type = (
+                        collected_type[:-1],
+                        collected_type[-1],
+                    )
                     phi2, (i2, o2) = infer(
                         phi(gamma),
                         value,
@@ -438,11 +445,18 @@ def infer(
                         source_dir=source_dir,
                         initial_stack=TypeSequence(collected_type),
                     )
-                    _global_constraints.add(TypeSequence(phi2(collected_type)), TypeSequence(i2))
-                    phi = _global_constraints.equalities_as_substitutions()(phi2(phi))
+                    _global_constraints.add(
+                        TypeSequence(phi2(collected_type)), TypeSequence(i2)
+                    )
+                    phi = _global_constraints.equalities_as_substitutions()(
+                        phi2(phi)
+                    )
                     collected_type = phi(o2)
                     # drop the top of the stack to use as the value
-                    collected_type, value_type = collected_type[:-1], collected_type[-1]
+                    collected_type, value_type = (
+                        collected_type[:-1],
+                        collected_type[-1],
+                    )
                 current_subs, current_effect = (
                     phi,
                     phi(StackEffect(i, [*collected_type, dict_type])),
@@ -456,7 +470,7 @@ def infer(
                         item,
                         extensions=extensions,
                         source_dir=source_dir,
-                        initial_stack=TypeSequence(collected_type)
+                        initial_stack=TypeSequence(collected_type),
                     )
                     collected_type = fun_type.output
                     # drop the top of the stack to use as the item
@@ -465,7 +479,11 @@ def infer(
                 current_subs, current_effect = (
                     phi,
                     # FIXME: Infer the type of elements in the list.
-                    phi(StackEffect(i, [*collected_type, list_type[object_type,]])),
+                    phi(
+                        StackEffect(
+                            i, [*collected_type, list_type[object_type,]]
+                        )
+                    ),
                 )
             elif isinstance(node, concat.level1.operators.InvertWordNode):
                 out_types = o[:-1]
@@ -528,6 +546,9 @@ def infer(
         except TypeError as e:
             e.set_location_if_missing(node.location)
             raise
+    current_subs = _global_constraints.equalities_as_substitutions()(
+        current_subs
+    )
     return current_subs, current_effect
 
 
@@ -535,7 +556,7 @@ def unify(i1: List[StackItemType], i2: List[StackItemType]) -> Substitutions:
     """The unify function described by Kleffner, but with support for subtyping.
 
     Since subtyping is a directional relation, we say i1 is the input type, and
-    i2 is the output type. The subsitutions returned will make i1 a subtype of
+    i2 is the output type. The substitutions returned will make i1 a subtype of
     i2. This is inspired by Polymorphism, Subtyping, and Type Inference in
     MLsub (Dolan and Mycroft 2016)."""
 

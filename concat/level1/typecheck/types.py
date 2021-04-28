@@ -627,7 +627,9 @@ class _Function(IndividualType):
         return True
 
     def __repr__(self) -> str:
-        return '_Function({!r}, {!r})'.format(self.input, self.output)
+        return '{}({!r}, {!r})'.format(
+            type(self).__qualname__, self.input, self.output
+        )
 
     def __str__(self) -> str:
         in_types = ' '.join(map(str, self.input))
@@ -980,7 +982,22 @@ class ObjectType(IndividualType):
         return True
 
     def constrain(self, supertype: Type, constraints: Constraints) -> None:
-        if not isinstance(supertype, ObjectType):
+        if isinstance(supertype, IndividualVariable):
+            constraints.add(self, supertype)
+            return
+        elif isinstance(supertype, (SequenceVariable, TypeSequence)):
+            raise TypeError(
+                '{} is an individual type, but {} is a sequence type'.format(
+                    self, supertype
+                )
+            )
+        elif isinstance(supertype, TypeWithAttribute):
+            x = IndividualVariable()
+            return self.constrain(
+                ObjectType(x, {supertype.attribute: supertype.attribute_type}),
+                constraints,
+            )
+        elif not isinstance(supertype, ObjectType):
             raise NotImplementedError(supertype)
         if self._arity != supertype._arity:
             raise TypeError(
@@ -1006,12 +1023,15 @@ class ObjectType(IndividualType):
         return self_sub(self._attributes[attribute])
 
     def __repr__(self) -> str:
-        return '{}({!r}, {!r}, {!r}, {!r})'.format(
+        return '{}({!r}, {!r}, {!r}, {!r}, {!r}, {!r}, {!r})'.format(
             type(self).__qualname__,
             self._self_type,
             self._attributes,
             self._type_parameters,
             self._nominal_supertypes,
+            self._nominal,
+            self._type_arguments,
+            None if self._head is self else self._head,
         )
 
     # QUESTION: Define in terms of <= (a <= b and b <= a)? For all kinds of types?
