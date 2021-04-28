@@ -12,6 +12,7 @@ from typing import (
     Iterator,
     Set,
     Mapping,
+    NoReturn,
     cast,
 )
 from typing_extensions import Literal
@@ -262,6 +263,11 @@ class SequenceVariable(_Variable):
         constraints.add(self, supertype)
         constraints.add(supertype, self)
 
+    def get_type_of_attribute(self, name: str) -> NoReturn:
+        raise TypeError(
+            'the sequence type {} does not hold attributes'.format(self)
+        )
+
 
 class TypeSequence(Type, Iterable['StackItemType']):
     def __init__(self, sequence: Sequence['StackItemType']) -> None:
@@ -295,7 +301,6 @@ class TypeSequence(Type, Iterable['StackItemType']):
         if isinstance(supertype, SequenceVariable):
             supertype.constrain(self, constraints)
         elif isinstance(supertype, TypeSequence):
-            # This is basically the old unify function.
             if self._is_empty() and supertype._is_empty():
                 return
             elif (
@@ -480,17 +485,21 @@ class _Function(IndividualType):
 
         out_var = SequenceVariable()
         try:
+            # FIXME: Use a temporary constraints object.
             _global_constraints.add(self, _Function([], [out_var]))
         except concat.level1.typecheck.TypeError:
             # FIXME: Undo failed constraints.
             return False
         return True
 
+    # TODO: If I don't use this anywhere, I should remove it.
     def compose(self, other: '_Function') -> '_Function':
         """Returns the type of applying self then other to a stack."""
         i2, o2 = other
         (i1, o1) = self
-        phi = concat.level1.typecheck.unify(list(o1), list(i2))
+        constraints = Constraints()
+        constraints.add(TypeSequence(o1), TypeSequence(i2))
+        phi = constraints.equalities_as_substitutions()
         return phi(_Function(i1, o2))
 
     def __eq__(self, other: object) -> bool:
