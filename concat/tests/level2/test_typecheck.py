@@ -4,7 +4,9 @@ import concat.level1.parse
 import concat.level1.typecheck
 from concat.level1.typecheck.types import (
     IndividualVariable,
+    _IntersectionType,
     StackEffect,
+    ObjectType,
     object_type,
 )
 import concat.level2.typecheck
@@ -166,23 +168,32 @@ class TestNamedTypeNode(unittest.TestCase):
     )
     @example(
         named_type_node=concat.level2.typecheck.NamedTypeNode((0, 0), ''),
-        type=concat.level1.typecheck.types._Function(
+        type=StackEffect(
             (),
-            (
-                (
-                    concat.level1.typecheck.types._IntersectionType(
-                        concat.level1.typecheck.types._Function((), ()),
-                        concat.level1.typecheck.types._Function((), ()),
-                    )
-                ),
-            ),
+            ((_IntersectionType(StackEffect((), ()), StackEffect((), ()),)),),
         ),
     )
     @example(
         named_type_node=concat.level2.typecheck.NamedTypeNode((0, 0), ''),
         type=IndividualVariable(),
     )
+    @example(
+        named_type_node=concat.level2.typecheck.NamedTypeNode((0, 0), ''),
+        type=StackEffect(
+            (),
+            (
+                (
+                    IndividualVariable()
+                    & (
+                        ObjectType(IndividualVariable(), {}, (), [], False)
+                        & IndividualVariable()
+                    )
+                ),
+            ),
+        ),
+    )
     def test_name_does_exist(self, named_type_node, type):
         env = concat.level1.typecheck.Environment({named_type_node.name: type})
-        note((named_type_node.to_type(env)[0], type))
+        expected_type = named_type_node.to_type(env)[0]
+        note((expected_type, type))
         self.assertEqual(named_type_node.to_type(env)[0], type)
