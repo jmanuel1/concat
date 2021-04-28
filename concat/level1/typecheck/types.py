@@ -31,12 +31,6 @@ class Type(abc.ABC):
             return True
         if isinstance(supertype, IndividualVariable):
             return self.is_subtype_of(supertype.bound)
-        if isinstance(supertype, TypeWithAttribute):
-            try:
-                attr_type = self.get_type_of_attribute(supertype.attribute)
-            except concat.level1.typecheck.AttributeError:
-                return False
-            return attr_type <= supertype.attribute_type
         if isinstance(supertype, _IntersectionType):
             return self.is_subtype_of(supertype.type_1) and self.is_subtype_of(
                 supertype.type_2
@@ -711,57 +705,6 @@ class QuotationType(_Function):
         return QuotationType(super().apply_substitution(sub))
 
 
-class TypeWithAttribute(IndividualType):
-    def __init__(
-        self, attribute: str, attribute_type: 'IndividualType'
-    ) -> None:
-        super().__init__()
-        self.attribute = attribute
-        self.attribute_type = attribute_type
-
-    def __repr__(self) -> str:
-        return 'TypeWithAttribute({!r}, {!r})'.format(
-            self.attribute, self.attribute_type
-        )
-
-    def __str__(self) -> str:
-        type = ''
-        if self.attribute_type is not object_type:
-            type = ':' + str(self.attribute_type)
-        return '.{}'.format(self.attribute) + type
-
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, TypeWithAttribute):
-            return (self.attribute, self.attribute_type) == (
-                other.attribute,
-                other.attribute_type,
-            )
-        return super().__eq__(other)
-
-    def __hash__(self) -> int:
-        return hash((self.attribute, self.attribute_type))
-
-    def get_type_of_attribute(self, name: str) -> 'IndividualType':
-        if name != self.attribute:
-            raise concat.level1.typecheck.AttributeError(self, name)
-        return self.attribute_type
-
-    def apply_substitution(
-        self, sub: 'concat.level1.typecheck.Substitutions'
-    ) -> 'TypeWithAttribute':
-        return TypeWithAttribute(
-            self.attribute, cast(IndividualType, sub(self.attribute_type))
-        )
-
-    def constrain(self, supertype: Type, constraints: Constraints) -> None:
-        raise NotImplementedError('time to get rid of TypeWithAttribute')
-
-    def collapse_bounds(self) -> 'TypeWithAttribute':
-        return TypeWithAttribute(
-            self.attribute, self.attribute_type.collapse_bounds()
-        )
-
-
 def _intersect_sequences(
     seq1: Sequence['StackItemType'], seq2: Sequence['StackItemType']
 ) -> Sequence['StackItemType']:
@@ -832,8 +775,6 @@ def _ftv(
         return ftv
     elif isinstance(f, _IntersectionType):
         return _ftv(f.type_1) | _ftv(f.type_2)
-    elif isinstance(f, TypeWithAttribute):
-        return _ftv(f.attribute_type)
     elif isinstance(f, ObjectType):
         ftv = _ftv(f.attributes)
         for arg in f.type_arguments:
@@ -990,12 +931,6 @@ class ObjectType(IndividualType):
                 '{} is an individual type, but {} is a sequence type'.format(
                     self, supertype
                 )
-            )
-        elif isinstance(supertype, TypeWithAttribute):
-            x = IndividualVariable()
-            return self.constrain(
-                ObjectType(x, {supertype.attribute: supertype.attribute_type}),
-                constraints,
             )
         elif not isinstance(supertype, ObjectType):
             raise NotImplementedError(supertype)
