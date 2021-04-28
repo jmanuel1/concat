@@ -161,8 +161,16 @@ class IndividualVariable(_Variable, IndividualType):
     def __repr__(self) -> str:
         return '<individual variable {}>'.format(id(self))
 
-    def get_type_of_attribute(self, name: str) -> 'IndividualType':
-        return self.bound.get_type_of_attribute(name)
+    def get_type_of_attribute(
+        self, name: str, constraints: Constraints = Constraints()
+    ) -> 'IndividualType':
+        try:
+            return self.bound.get_type_of_attribute(name)
+        except AttributeError:
+            # FIXME: We assume we will get the type object with the attribute.
+            return constraints.get_supertype_of(self).get_type_of_attribute(
+                name
+            )
 
     def apply_substitution(
         self, sub: 'concat.level1.typecheck.Substitutions'
@@ -248,7 +256,9 @@ class SequenceVariable(_Variable):
 
     def constrain(self, supertype: Type, constraints: Constraints) -> None:
         if not isinstance(supertype, (SequenceVariable, TypeSequence)):
-            raise TypeError('{} must be a sequence type, not {}'.format(self, supertype))
+            raise TypeError(
+                '{} must be a sequence type, not {}'.format(self, supertype)
+            )
         constraints.add(self, supertype)
         constraints.add(supertype, self)
 
@@ -273,7 +283,9 @@ class TypeSequence(Type, Iterable['StackItemType']):
     def apply_substitution(self, sub) -> 'TypeSequence':
         return TypeSequence(sub(self.as_sequence()))
 
-    def constrain(self, supertype: Type, constraints: Constraints, polymorphic=False) -> None:
+    def constrain(
+        self, supertype: Type, constraints: Constraints, polymorphic=False
+    ) -> None:
         """Constrain self to be a subtype of supertype.
 
         The `polymorphic` flag is used to enable special handling of type
@@ -286,9 +298,17 @@ class TypeSequence(Type, Iterable['StackItemType']):
             # This is basically the old unify function.
             if self._is_empty() and supertype._is_empty():
                 return
-            elif self._is_empty() and supertype._rest and not supertype._individual_types:
+            elif (
+                self._is_empty()
+                and supertype._rest
+                and not supertype._individual_types
+            ):
                 supertype._rest.constrain(self, constraints)
-            elif supertype._is_empty() and self._rest and not self._individual_types:
+            elif (
+                supertype._is_empty()
+                and self._rest
+                and not self._individual_types
+            ):
                 self._rest.constrain(supertype, constraints)
             elif not self._individual_types:
                 if self._rest and self == supertype:
@@ -301,11 +321,10 @@ class TypeSequence(Type, Iterable['StackItemType']):
                 and supertype._rest not in _ftv(self)
             ):
                 supertype._rest.constrain(self, constraints)
-            elif (
-                self._individual_types
-                and supertype._individual_types
-            ):
-                self._individual_types[-1].constrain(supertype._individual_types[-1], constraints)
+            elif self._individual_types and supertype._individual_types:
+                self._individual_types[-1].constrain(
+                    supertype._individual_types[-1], constraints
+                )
                 # NOTE: Simplifying assumption: If polymorphic is True,
                 # constrain individual variables in the second sequence type to
                 # be *equal* to the corresponding type in the first sequence
@@ -320,12 +339,12 @@ class TypeSequence(Type, Iterable['StackItemType']):
                 self[:-1].constrain(supertype[:-1], constraints, polymorphic)
             else:
                 raise TypeError(
-                    ' {} is not a subtype of {}'.format(
-                        self, supertype
-                    )
+                    ' {} is not a subtype of {}'.format(self, supertype)
                 )
         else:
-            raise TypeError('{} must be a sequence type, not {}'.format(self, supertype))
+            raise TypeError(
+                '{} must be a sequence type, not {}'.format(self, supertype)
+            )
 
     def _is_empty(self) -> bool:
         return self._rest is None and not self._individual_types
@@ -436,8 +455,8 @@ class ForAll(Type):
 class _Function(IndividualType):
     def __init__(
         self,
-        input: Sequence['StackItemType'],
-        output: Sequence['StackItemType'],
+        input: Iterable['StackItemType'],
+        output: Iterable['StackItemType'],
     ) -> None:
         super().__init__()
         self.input = (*input,)
@@ -560,12 +579,18 @@ class _Function(IndividualType):
 
     def constrain(self, supertype: Type, constraints: Constraints) -> None:
         if not supertype.has_attribute('__call__'):
-            raise TypeError('{} is not a subtype of {}'.format(self, supertype))
+            raise TypeError(
+                '{} is not a subtype of {}'.format(self, supertype)
+            )
         fun_type = supertype.get_type_of_attribute('__call__')
         if not isinstance(fun_type, _Function):
-            raise TypeError('{} is not a subtype of {}'.format(self, supertype))
+            raise TypeError(
+                '{} is not a subtype of {}'.format(self, supertype)
+            )
         constraints.add(TypeSequence(self.input), TypeSequence(fun_type.input))
-        constraints.add(TypeSequence(self.output), TypeSequence(fun_type.output))
+        constraints.add(
+            TypeSequence(self.output), TypeSequence(fun_type.output)
+        )
 
     @staticmethod
     def _rename_sequence_variable(
@@ -648,7 +673,10 @@ class QuotationType(_Function):
         return False
 
     def constrain(self, supertype: Type, constraints: Constraints) -> None:
-        if isinstance(supertype, ObjectType) and supertype.head == iterable_type:
+        if (
+            isinstance(supertype, ObjectType)
+            and supertype.head == iterable_type
+        ):
             # FIXME: Don't present new variables every time.
             # FIXME: Account for the types of the elements of the quotation.
             in_var = IndividualVariable()
@@ -660,7 +688,9 @@ class QuotationType(_Function):
             return
         super().constrain(supertype, constraints)
 
-    def apply_substitution(self, sub: 'concat.level1.typecheck.Substitutions') -> 'QuotationType':
+    def apply_substitution(
+        self, sub: 'concat.level1.typecheck.Substitutions'
+    ) -> 'QuotationType':
         return QuotationType(super().apply_substitution(sub))
 
 
@@ -734,9 +764,7 @@ def _intersect_sequences(
 
 
 # FIXME: This should be a method on types
-def inst(
-    sigma: Union[ForAll, _Function]
-) -> IndividualType:
+def inst(sigma: Union[ForAll, _Function]) -> IndividualType:
     """This is based on the inst function described by Kleffner."""
     if isinstance(sigma, ForAll):
         subs = concat.level1.typecheck.Substitutions(
@@ -745,15 +773,11 @@ def inst(
         return cast(IndividualType, subs(sigma.type))
     if isinstance(sigma, _Function):
         input = [
-            inst(type)
-            if isinstance(type, (ForAll, _Function))
-            else type
+            inst(type) if isinstance(type, (ForAll, _Function)) else type
             for type in sigma.input
         ]
         output = [
-            inst(type)
-            if isinstance(type, (ForAll, _Function))
-            else type
+            inst(type) if isinstance(type, (ForAll, _Function)) else type
             for type in sigma.output
         ]
         return _Function(input, output)
@@ -780,6 +804,8 @@ def _ftv(
         for t in f:
             ftv |= _ftv(t)
         return ftv
+    elif isinstance(f, TypeSequence):
+        return _ftv(f.as_sequence())
     elif isinstance(f, ForAll):
         return _ftv(f.type) - set(f.quantified_variables)
     elif isinstance(f, dict):
@@ -1148,12 +1174,20 @@ py_function_type = PythonFunctionType(
 )
 
 _invert_result_var = IndividualVariable()
-invertible_type = ObjectType(_x, {'__invert__': py_function_type[(), _invert_result_var]}, [_invert_result_var])
+invertible_type = ObjectType(
+    _x,
+    {'__invert__': py_function_type[(), _invert_result_var]},
+    [_invert_result_var],
+)
 
 _sub_operand_type = IndividualVariable()
 _sub_result_type = IndividualVariable()
 # FIXME: Add reverse_substractable_type for __rsub__
-subtractable_type = ObjectType(_x, {'__sub__': py_function_type[(_sub_operand_type,), _sub_result_type]}, [_sub_operand_type, _sub_result_type])
+subtractable_type = ObjectType(
+    _x,
+    {'__sub__': py_function_type[(_sub_operand_type,), _sub_result_type]},
+    [_sub_operand_type, _sub_result_type],
+)
 
 # FIXME: invertible_type, subtractable_type are structural supertypes
 # but for now they are both explicit
@@ -1167,7 +1201,9 @@ int_type = ObjectType(
 
 # FIXME: Use an iterator interface instead of _x
 _result_type = IndividualVariable()
-iterable_type = ObjectType(_x, {'__iter__': py_function_type[(), _x]}, [_result_type])
+iterable_type = ObjectType(
+    _x, {'__iter__': py_function_type[(), _x]}, [_result_type]
+)
 
 context_manager_type = ObjectType(
     _x,
@@ -1201,7 +1237,7 @@ list_type = ObjectType(
     {
         '__getitem__': py_function_type[(int_type,), _element_type_var],
         # FIXME: __iter__ should return an iterator.
-        '__iter__': py_function_type[(), object_type]
+        '__iter__': py_function_type[(), object_type],
     },
     [_element_type_var],
 )

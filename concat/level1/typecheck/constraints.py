@@ -3,7 +3,13 @@ from typing import TYPE_CHECKING, Iterator, List, Set, Tuple, cast
 
 
 if TYPE_CHECKING:
-    from concat.level1.typecheck.types import Type, _Variable
+    from concat.level1.typecheck.types import (
+        IndividualType,
+        IndividualVariable,
+        Type,
+        _Variable,
+    )
+    from concat.level1.typecheck import Substitutions
 
 
 class _ConstraintDirection(Enum):
@@ -100,7 +106,7 @@ class Constraints:
         return sub
 
     def get_supertype_of(self, var: 'IndividualVariable') -> 'IndividualType':
-        from concat.level1.typecheck.types import object_type
+        from concat.level1.typecheck.types import IndividualType, object_type
 
         # FIXME: We assume there is only one answer.
         for constraint in self._list:
