@@ -504,20 +504,25 @@ def infer(
                     StackEffect(i, [*o, str_type]),
                 )
             elif isinstance(node, concat.level0.parse.AttributeWordNode):
-                out_var = SequenceVariable()
-                attr_function_type = StackEffect(
-                    [SequenceVariable()], [SequenceVariable()]
+                stack_top_type = o[-1]
+                out_types = o[:-1]
+                attr_function_type = stack_top_type.get_type_of_attribute(
+                    node.value
+                ).instantiate()
+                if not isinstance(attr_function_type, StackEffect):
+                    raise UnhandledNodeTypeError(
+                        'attribute {} of type {} (repr {!r})'.format(
+                            node.value, attr_function_type, attr_function_type
+                        )
+                    )
+                _global_constraints.add(
+                    TypeSequence(out_types),
+                    TypeSequence(attr_function_type.input),
                 )
-                stack_top_type = ObjectType(
-                    IndividualVariable(), {node.value: attr_function_type}
-                )
-                phi = unify(list(o), [out_var, stack_top_type])
-                attr_function_type = phi(attr_function_type)
-                out_types = phi([out_var])
-                R = unify(out_types, phi([*attr_function_type.input]))
+                R = _global_constraints.equalities_as_substitutions()
                 current_subs, current_effect = (
-                    R(phi(S)),
-                    R(phi(StackEffect(i, attr_function_type.output))),
+                    R(S),
+                    R(StackEffect(i, attr_function_type.output)),
                 )
             else:
                 fail = True
@@ -549,53 +554,6 @@ def infer(
         current_subs
     )
     return current_subs, current_effect
-
-
-def unify(i1: List[StackItemType], i2: List[StackItemType]) -> Substitutions:
-    """The unify function described by Kleffner, but with support for subtyping.
-
-    Since subtyping is a directional relation, we say i1 is the input type, and
-    i2 is the output type. The substitutions returned will make i1 a subtype of
-    i2. This is inspired by Polymorphism, Subtyping, and Type Inference in
-    MLsub (Dolan and Mycroft 2016)."""
-
-    if (len(i1), len(i2)) == (0, 0):
-        return Substitutions({})
-    if len(i1) == 1:
-        if isinstance(i1[0], SequenceVariable) and i1 == i2:
-            return Substitutions({})
-        elif isinstance(i1[0], SequenceVariable) and i1[0] not in _ftv(i2):
-            return Substitutions({i1[0]: [*i2]})
-    if (
-        len(i2) == 1
-        and isinstance(i2[0], SequenceVariable)
-        and i2[0] not in _ftv(i1)
-    ):
-        return Substitutions({i2[0]: [*i1]})
-    if (
-        len(i1) > 0
-        and len(i2) > 0
-        and isinstance(i1[-1], IndividualType)
-        and isinstance(i2[-1], IndividualType)
-    ):
-        _global_constraints.add(i1[-1], i2[-1])
-        phi1 = _global_constraints.equalities_as_substitutions()
-        phi2 = unify(phi1(i1[:-1]), phi1(i2[:-1]))
-        return phi2(phi1)
-    raise TypeError(
-        'cannot unify {} with {}'.format(
-            '(' + ', '.join(str(t) for t in i1) + ')', '(' + ', '.join(str(t) for t in i2) + ')'
-        )
-    )
-
-
-def drop_last_from_type_seq(
-    l: List[StackItemType],
-) -> Tuple[List[StackItemType], Substitutions]:
-    kept = SequenceVariable()
-    dropped = IndividualVariable()
-    drop_sub = unify(l, [kept, dropped])
-    return drop_sub([kept]), drop_sub
 
 
 init_primitives()

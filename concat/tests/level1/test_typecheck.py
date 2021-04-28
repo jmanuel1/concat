@@ -10,6 +10,7 @@ from concat.level1.typecheck.types import (
     IndividualVariable,
     ObjectType,
     ClassType,
+    TypeSequence,
     dict_type,
     file_type,
     float_type,
@@ -102,12 +103,18 @@ class TestTypeChecker(unittest.TestCase):
     @given(from_type(concat.level0.parse.AttributeWordNode))
     def test_attribute_word(self, attr_word) -> None:
         _, type = concat.level1.typecheck.infer(
-            concat.level1.typecheck.Environment(), [attr_word]
+            concat.level1.typecheck.Environment(),
+            [attr_word],
+            initial_stack=TypeSequence(
+                [
+                    ObjectType(
+                        IndividualVariable(),
+                        {attr_word.value: StackEffect([], [int_type]),},
+                    ),
+                ]
+            ),
         )
-        self.assertIsInstance(type, StackEffect)
-        type = type.collapse_bounds()
-        attr_type = type.input[-1]
-        self.assertTrue(attr_type.has_attribute(attr_word.value))
+        self.assertEqual(list(type.output), [int_type])
 
     @given(integers(min_value=0), integers(min_value=0))
     def test_add_operator_inference(self, a: int, b: int) -> None:

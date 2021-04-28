@@ -354,11 +354,9 @@ def infer(
     subs, (input, output) = previous
     if isinstance(program[-1], concat.level2.parse.CastWordNode):
         new_type, _ = program[-1].type.to_type(env)
-        rest, subs_2 = concat.level1.typecheck.drop_last_from_type_seq(
-            list(output)
-        )
-        effect = subs_2(subs(StackEffect(input, [*rest, new_type])))
-        return subs_2(subs), effect
+        rest = output[:-1]
+        effect = subs(StackEffect(input, [*rest, new_type]))
+        return subs, effect
     elif isinstance(program[-1], concat.level1.parse.FromImportStatementNode):
         imported_name = program[-1].asname or program[-1].imported_name
         # mutate type environment
@@ -401,33 +399,25 @@ def infer(
         # FIXME: The object being indexed is not popped before computing the
         # index.
         seq_var = SequenceVariable()
+        seq = TypeSequence(output[:-1])
         index_type_var = IndividualVariable()
         result_type_var = IndividualVariable()
         subscriptable_interface = subscriptable_type[
             index_type_var, result_type_var
         ]
-        subs_2 = concat.level1.typecheck.unify(
-            list(output), [seq_var, subscriptable_interface]
-        )
+        _global_constraints.add(output[-1], subscriptable_interface)
         (
             index_subs,
             (index_input, index_output),
-        ) = concat.level1.typecheck.infer(
-            subs_2(subs(env)), program[-1].children
-        )
-        subs_3 = concat.level1.typecheck.unify(
-            subs_2(subs([seq_var])), subs_2(subs(index_input))
-        )
+        ) = concat.level1.typecheck.infer(subs(env), program[-1].children)
+        _global_constraints.add(seq, TypeSequence(index_input))
         seq_var_2 = concat.level1.typecheck.SequenceVariable()
 
-        index_types = [seq_var_2, index_type_var]
-        result_types = [seq_var_2, result_type_var]
+        index_types = TypeSequence([seq_var_2, index_type_var])
+        result_types = TypeSequence([seq_var_2, result_type_var])
 
-        final_subs = concat.level1.typecheck.unify(
-            subs_3(subs_2(subs(index_output))),
-            subs_3(subs_2(subs([*index_types]))),
-        )
-        final_subs = final_subs(subs_3(subs_2(subs)))
+        _global_constraints.add(TypeSequence(index_output), index_types)
+        final_subs = _global_constraints.equalities_as_substitutions()
         return final_subs, final_subs(StackEffect(input, result_types))
     elif isinstance(program[-1], concat.level1.parse.FuncdefStatementNode):
         S = subs
@@ -439,13 +429,18 @@ def infer(
                 S(env)
             )
         else:
-            declared_type = None
-            env_with_types = env.copy()
+            # NOTE: To continue the "bidirectional" bent, we will require a
+            # type annotation.
+            # TODO: Make the return types optional?
+            # FIXME: Should be a parse error.
+            raise TypeError('must have type annotation on function definition')
+        print(declared_type)
         phi1, inferred_type = concat.level1.typecheck.infer(
             S(env_with_types),
             program[-1].body,
             is_top_level=False,
             extensions=extensions,
+            initial_stack=TypeSequence(declared_type.input),
         )
         if declared_type is not None:
             declared_type = S(declared_type)
@@ -481,21 +476,18 @@ def infer(
             S2, (i2, o2) = concat.level1.typecheck.infer(
                 subs(env), child.children, extensions=extensions
             )
-            phi1 = concat.level1.typecheck.unify(S2(output), subs(i2))
+            _global_constraints.add(TypeSequence(S2(output)), TypeSequence(i2))
             # FIXME: Should be generic
             subscriptable_interface = subscriptable_type[
                 int_type, str_type,
             ]
-            expected_o2 = [
-                rest_var,
-                subscriptable_interface,
-                int_type,
-            ]
-            phi2 = concat.level1.typecheck.unify(phi1(subs(o2)), expected_o2)
-            effect = phi2(
-                phi1(S2(subs((StackEffect(input, [rest_var, str_type],)))))
+            expected_o2 = TypeSequence(
+                [rest_var, subscriptable_interface, int_type,]
             )
-            return phi2(phi1(S2(subs))), effect
+            _global_constraints.add(TypeSequence(subs(o2)), expected_o2)
+            subs = _global_constraints.equalities_as_substitutions()(S2(subs))
+            effect = subs(StackEffect(input, [rest_var, str_type]))
+            return subs, effect
         else:
             raise NotImplementedError(child)
     else:
