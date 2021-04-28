@@ -159,7 +159,11 @@ class IndividualVariable(_Variable, IndividualType):
         return '`t_{}'.format(id(self)) + bound
 
     def __repr__(self) -> str:
-        return '<individual variable {}>'.format(id(self))
+        if self.bound == object_type:
+            bound = ''
+        else:
+            bound = ', bound: ' + repr(self.bound)
+        return '<individual variable {}{}>'.format(id(self), bound)
 
     def get_type_of_attribute(
         self, name: str, constraints: Constraints = Constraints()
@@ -1199,7 +1203,7 @@ int_type = ObjectType(
     _x,  # FIXME: Make unique for each type.
     {
         '__add__': py_function_type[(object_type,), _x],
-        '__invert__': py_function_type[(), _x]
+        '__invert__': py_function_type[(), _x],
     },
     [],
     [subtractable_type],
