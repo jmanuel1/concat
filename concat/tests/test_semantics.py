@@ -5,9 +5,10 @@ from concat.level0.stdlib.ski import s, k, i
 from concat.level0.lex import Token
 from concat.level2.execute import execute
 import unittest
-from typing import Iterable, List, Tuple, TypeVar
+from typing import Callable, Iterable, List, Tuple, TypeVar, Union, cast
 from hypothesis import given, assume
 from hypothesis.strategies import (
+    SearchStrategy,
     composite,
     integers,
     text,
@@ -16,7 +17,7 @@ from hypothesis.strategies import (
 )
 
 
-ProgramFragment = TypeVar('Node', covariant=True)
+ProgramFragment = TypeVar('ProgramFragment', covariant=True)
 ProgramFragmentAndEffect = Tuple[ProgramFragment, List[object], List[object]]
 
 
@@ -47,10 +48,13 @@ def suite(
 def word(
     draw, init_stack, init_stash
 ) -> ProgramFragmentAndEffect[concat.level0.parse.WordNode]:
+    def f(strategy: Callable[..., object]) -> SearchStrategy[object]:
+        return cast(SearchStrategy[object], strategy(init_stack, init_stash))
+
     return draw(
         one_of(
-            map(
-                lambda strategy: strategy(init_stack, init_stash),
+            *map(
+                f,
                 [
                     number_word,
                     string_word,
@@ -130,7 +134,7 @@ def attribute_word(
     attribute = draw(sampled_from(callable_attributes))
     try:
         getattr(obj, attribute)(stack, stash)
-    except TypeError:
+    except (TypeError, ValueError):
         assume(False)
 
     attribute_token = Token('NAME', attribute)
@@ -164,8 +168,16 @@ def static_push(
             concat.level0.parse.StringWordNode,
         ),
     ):
+        literal_node = cast(
+            Union[
+                concat.level0.parse.NumberWordNode,
+                concat.level0.parse.StringWordNode,
+            ],
+            word,
+        )
         return (
-            init_stack + [lambda stack, stash: stack.append(word.value)],
+            init_stack
+            + [lambda stack, stash: stack.append(literal_node.value)],
             init_stash,
         )
     if isinstance(word, concat.level0.parse.QuoteWordNode):
@@ -223,7 +235,11 @@ def stack_equal(
     actual_stack: List[object], expected_stack: List[object]
 ) -> bool:
     for actual_item, expected_item in zip(actual_stack, expected_stack):
-        if callable(expected_item):
+        if callable(expected_item) and callable(actual_item):
+            stack: List[object]
+            stash: List[object]
+            stack_2: List[object]
+            stash_2: List[object]
             stack, stash = [], []
             stack_2, stash_2 = [], []
             actual_item(stack, stash)
