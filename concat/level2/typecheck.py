@@ -270,8 +270,6 @@ subscriptable_type = ObjectType(
 # TODO: Separate type-check-time environment from runtime environment.
 builtin_environment = Environment(
     {
-        'Ellipsis': ellipsis_type,
-        'NotImplemented': not_implemented_type,
         'tuple': tuple_type,
         'BaseException': base_exception_type,
         'NoReturn': no_return_type,
@@ -285,7 +283,6 @@ builtin_environment = Environment(
         'list': list_type,
         'str': str_type,
         'py_function': py_function_type,
-        'None': none_type,
         'Optional': optional_type,
         'int': int_type,
         'float': float_type,

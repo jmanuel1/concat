@@ -11,11 +11,15 @@ from concat.level1.typecheck.types import (
     ObjectType,
     ClassType,
     TypeSequence,
+    bool_type,
     dict_type,
+    ellipsis_type,
     file_type,
     float_type,
     int_type,
+    none_type,
     no_return_type,
+    not_implemented_type,
     object_type,
     py_function_type,
 )
@@ -146,6 +150,22 @@ class TestTypeChecker(unittest.TestCase):
             is_top_level=True,
         )
         self.assertEqual(type, StackEffect([], [int_type]))
+
+    @given(from_type(concat.level1.parse.SimpleValueWordNode))
+    def test_simple_value_word(self, simple_value_word) -> None:
+        _, effect = concat.level1.typecheck.infer(
+            concat.level1.typecheck.Environment(),
+            [simple_value_word],
+            initial_stack=TypeSequence([]),
+        )
+        expected_types = {
+            concat.level1.parse.NoneWordNode: none_type,
+            concat.level1.parse.NotImplWordNode: not_implemented_type,
+            concat.level1.parse.EllipsisWordNode: ellipsis_type,
+            concat.level1.parse.TrueWordNode: bool_type,
+        }
+        expected_type = expected_types[type(simple_value_word)]
+        self.assertEqual(list(effect.output), [expected_type])
 
 
 class TestDiagnosticInfo(unittest.TestCase):
