@@ -177,15 +177,18 @@ from concat.level1.typecheck.types import (
     bool_type,
     context_manager_type,
     dict_type,
+    ellipsis_type,
     int_type,
     _ftv,
     init_primitives,
     invertible_type,
     iterable_type,
     list_type,
-    str_type,
+    none_type,
+    not_implemented_type,
     object_type,
     py_function_type,
+    str_type,
 )
 
 
@@ -528,6 +531,12 @@ def infer(
                     R(S),
                     R(StackEffect(i, attr_function_type.output)),
                 )
+            elif isinstance(node, concat.level1.parse.NoneWordNode):
+                current_effect = StackEffect(i, [*o, none_type])
+            elif isinstance(node, concat.level1.parse.NotImplWordNode):
+                current_effect = StackEffect(i, [*o, not_implemented_type])
+            elif isinstance(node, concat.level1.parse.EllipsisWordNode):
+                current_effect = StackEffect(i, [*o, ellipsis_type])
             else:
                 fail = True
                 original_error = None
