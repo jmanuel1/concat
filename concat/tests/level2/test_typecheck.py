@@ -7,6 +7,7 @@ from concat.level1.typecheck.types import (
     _IntersectionType,
     StackEffect,
     ObjectType,
+    int_type,
     object_type,
 )
 import concat.level2.typecheck
@@ -100,6 +101,7 @@ class TestTypeChecker(unittest.TestCase):
             True,
         )
 
+    # QUESTION: Should fail?
     def test_pushed_subscription(self) -> None:
         """Test that the type checker allows pushed subscription words."""
         tree = parse('$[0] cast (int)')
@@ -108,6 +110,17 @@ class TestTypeChecker(unittest.TestCase):
             tree.children,
             (concat.level2.typecheck.infer,),
         )
+
+    def test_cast_word(self) -> None:
+        """Test that the type checker properly checks casts."""
+        tree = parse('"str" cast (int)')
+        _, type = concat.level1.typecheck.infer(
+            concat.level2.typecheck.builtin_environment,
+            tree.children,
+            (concat.level2.typecheck.infer,),
+            is_top_level=True,
+        )
+        self.assertEqual(type, StackEffect([], [int_type]))
 
 
 class TestStackEffectParser(unittest.TestCase):
