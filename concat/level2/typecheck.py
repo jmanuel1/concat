@@ -301,8 +301,14 @@ def _generate_type_of_innermost_module(
 ) -> StackEffect:
     # We resolve imports as if we are the source file.
     sys.path, old_path = [source_dir, *sys.path], sys.path
-    module = importlib.import_module(qualified_name)
-    sys.path = old_path
+    try:
+        module = importlib.import_module(qualified_name)
+    except ModuleNotFoundError:
+        raise TypeError(
+            'module {} not found during type checking'.format(qualified_name)
+        )
+    finally:
+        sys.path = old_path
     module_t: concat.level1.typecheck.IndividualType = module_type
     for name in dir(module):
         attribute_type = object_type
