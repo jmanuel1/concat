@@ -1125,6 +1125,16 @@ class PythonFunctionType(ObjectType):
         else:
             return super().get_type_of_attribute(attribute)
 
+    @property
+    def input(self) -> Sequence[IndividualType]:
+        assert self._arity == 0
+        return self._type_arguments[0]
+
+    @property
+    def output(self) -> IndividualType:
+        assert self._arity == 0
+        return self._type_arguments[1]
+
     def bind(self) -> 'PythonFunctionType':
         assert self._arity == 0
         inputs = self._type_arguments[0][1:]
