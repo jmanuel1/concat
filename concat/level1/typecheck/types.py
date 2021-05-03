@@ -845,6 +845,10 @@ class ObjectType(IndividualType):
                 for attr, t in self._attributes.items()
             },
             self._type_parameters,
+            self._nominal_supertypes,
+            self._nominal,
+            self._type_arguments,
+            self._head,
         )
 
     def apply_substitution(
@@ -878,6 +882,7 @@ class ObjectType(IndividualType):
             attributes,
             self._type_parameters,
             nominal_supertypes,
+            nominal=self._nominal,
             _type_arguments=type_arguments,
             _head=head,
         )
@@ -947,6 +952,10 @@ class ObjectType(IndividualType):
             raise TypeError(
                 '{} and {} do not have the same arity'.format(self, supertype)
             )
+        # Don't forget that there's nominal subtyping too.
+        if supertype._nominal:
+            if supertype not in self._nominal_supertypes and supertype != self:
+                raise TypeError('{} is not a subtype of {}'.format(self, supertype))
         for name in supertype._attributes:
             type = self.get_type_of_attribute(name)
             type.constrain(supertype.get_type_of_attribute(name), constraints)
@@ -1016,6 +1025,8 @@ class ObjectType(IndividualType):
             type2 = subs(type2)  # type: ignore
             if type1 != type2:
                 return False
+        if self._nominal != other._nominal:
+            return False
         return True
 
     _hash_variable = None
@@ -1027,7 +1038,15 @@ class ObjectType(IndividualType):
             ObjectType._hash_variable = IndividualVariable()
         sub = Substitutions({self._self_type: ObjectType._hash_variable})
         type_to_hash = sub(self)
-        return hash(tuple(type_to_hash._attributes.items()))
+        return hash((
+            tuple(type_to_hash._attributes.items()),
+            tuple(type_to_hash._type_parameters),
+            tuple(type_to_hash._nominal_supertypes),
+            type_to_hash._nominal,
+            # FIXME: I get 'not hashable' errors about this.
+            # tuple(type_to_hash._type_arguments),
+            None if type_to_hash._head == self else type_to_hash._head,
+        ))
 
     def __getitem__(
         self, type_arguments: Sequence[StackItemType]
@@ -1041,6 +1060,7 @@ class ObjectType(IndividualType):
             {n: cast(IndividualType, sub(t)) for n, t in attribute_items},
             (),
             [sub(supertype) for supertype in self._nominal_supertypes],
+            nominal=self._nominal,
             _type_arguments=type_arguments,
             _head=self,
         )
