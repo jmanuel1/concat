@@ -7,6 +7,7 @@ from typing import (
     Iterable,
     Iterator,
     Sequence,
+    Tuple,
     Union,
     List,
     Iterator,
@@ -818,6 +819,7 @@ class ObjectType(IndividualType):
         nominal: bool = False,
         _type_arguments: TypeArguments = (),
         _head: Optional['ObjectType'] = None,
+        **_other_kwargs,
     ) -> None:
         from concat.level1.typecheck import Substitutions
 
@@ -837,6 +839,15 @@ class ObjectType(IndividualType):
         ]
         self._head = _head or self
 
+        self._internal_name: Optional[str] = None
+        self._internal_name = self._head._internal_name
+
+        self._other_kwargs = _other_kwargs.copy()
+        if '_type_arguments' in self._other_kwargs:
+            del self._other_kwargs['_type_arguments']
+        if 'nominal' in self._other_kwargs:
+            del self._other_kwargs['nominal']
+
     def collapse_bounds(self) -> 'ObjectType':
         return ObjectType(
             self._self_type,
@@ -848,7 +859,8 @@ class ObjectType(IndividualType):
             self._nominal_supertypes,
             self._nominal,
             self._type_arguments,
-            self._head,
+            self if self._head is None else self._head,
+            **self._other_kwargs,
         )
 
     def apply_substitution(
@@ -874,7 +886,7 @@ class ObjectType(IndividualType):
             sub(type_argument) for type_argument in self._type_arguments
         ]
         if self._head is self:
-            head = None
+            head = self
         else:
             head = sub(self._head)
         return type(self)(
@@ -885,6 +897,7 @@ class ObjectType(IndividualType):
             nominal=self._nominal,
             _type_arguments=type_arguments,
             _head=head,
+            **self._other_kwargs,
         )
 
     def is_subtype_of(self, supertype: 'Type') -> bool:
@@ -952,10 +965,29 @@ class ObjectType(IndividualType):
             raise TypeError(
                 '{} and {} do not have the same arity'.format(self, supertype)
             )
+
         # Don't forget that there's nominal subtyping too.
         if supertype._nominal:
-            if supertype not in self._nominal_supertypes and supertype != self:
-                raise TypeError('{} is not a subtype of {}'.format(self, supertype))
+            if (
+                supertype not in self._nominal_supertypes
+                and supertype != self
+                and self._head != supertype._head
+            ):
+                raise TypeError(
+                    '{} is not a subtype of {}'.format(self, supertype)
+                )
+                # don't constrain the type arguments, constrain those based on
+                # the attributes
+
+        # constraining to an optional type
+        if supertype._head == optional_type and supertype._arity == 0:
+            try:
+                self.constrain(none_type, constraints)
+                return
+            except TypeError:
+                self.constrain(supertype._type_arguments[0], constraints)
+                return
+
         for name in supertype._attributes:
             type = self.get_type_of_attribute(name)
             type.constrain(supertype.get_type_of_attribute(name), constraints)
@@ -986,6 +1018,22 @@ class ObjectType(IndividualType):
             self._type_arguments,
             None if self._head is self else self._head,
         )
+
+    def __str__(self) -> str:
+        if self._internal_name is not None:
+            if len(self._type_arguments) > 0:
+                return (
+                    self._internal_name
+                    + '['
+                    + ', '.join(map(str, self._type_arguments))
+                    + ']'
+                )
+            return self._internal_name
+        assert self._internal_name is None
+        return repr(self)
+
+    def set_internal_name(self, name: str) -> None:
+        self._internal_name = name
 
     # QUESTION: Define in terms of <= (a <= b and b <= a)? For all kinds of types?
     def __eq__(self, other: object) -> bool:
@@ -1038,15 +1086,17 @@ class ObjectType(IndividualType):
             ObjectType._hash_variable = IndividualVariable()
         sub = Substitutions({self._self_type: ObjectType._hash_variable})
         type_to_hash = sub(self)
-        return hash((
-            tuple(type_to_hash._attributes.items()),
-            tuple(type_to_hash._type_parameters),
-            tuple(type_to_hash._nominal_supertypes),
-            type_to_hash._nominal,
-            # FIXME: I get 'not hashable' errors about this.
-            # tuple(type_to_hash._type_arguments),
-            None if type_to_hash._head == self else type_to_hash._head,
-        ))
+        return hash(
+            (
+                tuple(type_to_hash._attributes.items()),
+                tuple(type_to_hash._type_parameters),
+                tuple(type_to_hash._nominal_supertypes),
+                type_to_hash._nominal,
+                # FIXME: I get 'not hashable' errors about this.
+                # tuple(type_to_hash._type_arguments),
+                None if type_to_hash._head == self else type_to_hash._head,
+            )
+        )
 
     def __getitem__(
         self, type_arguments: Sequence[StackItemType]
@@ -1063,9 +1113,13 @@ class ObjectType(IndividualType):
             nominal=self._nominal,
             _type_arguments=type_arguments,
             _head=self,
+            **self._other_kwargs,
         )
 
     def instantiate(self) -> 'ObjectType':
+        # Avoid overwriting the type arguments if type is already instantiated.
+        if self._arity == 0:
+            return self
         fresh_variables = [type(a)() for a in self._type_parameters]
         return self[fresh_variables]
 
@@ -1111,19 +1165,51 @@ class ClassType(ObjectType):
 
 
 class PythonFunctionType(ObjectType):
+    def __init__(
+        self,
+        *args,
+        _overloads: Sequence[
+            Tuple[Sequence[IndividualType], IndividualType]
+        ] = (),
+        **kwargs,
+    ) -> None:
+        super().__init__(*args, **kwargs, _overloads=_overloads)
+        assert (
+            self._arity == 0
+            and len(self._type_arguments) == 2
+            or self._arity == 2
+        )
+        self._args = args
+        self._kwargs = kwargs.copy()
+        if '_head' in self._kwargs:
+            del self._kwargs['_head']
+        self._overloads = _overloads
+
     def __str__(self) -> str:
         if not self._type_arguments:
             return 'py_function_type'
-        return 'py_function_type[{}, {}]'.format(*self._type_arguments)
+        return 'py_function_type[{}, {}]'.format(
+            _iterable_to_str(self._type_arguments[0]), self._type_arguments[1]
+        )
 
     def get_type_of_attribute(self, attribute: str) -> IndividualType:
         from concat.level1.typecheck import Substitutions
 
         sub = Substitutions({self._self_type: self})
         if attribute == '__call__':
-            return sub(self)
+            return self
         else:
             return super().get_type_of_attribute(attribute)
+
+    def apply_substitution(
+        self, sub: 'concat.level1.typecheck.Substitutions'
+    ) -> 'PythonFunctionType':
+        if self._arity == 0:
+            type = py_function_type[sub(self.input), sub(self.output)]
+            for overload in self._overloads:
+                type = type.with_overload(sub(overload[0]), sub(overload[1]))
+            return type
+        return self
 
     @property
     def input(self) -> Sequence[IndividualType]:
@@ -1134,6 +1220,33 @@ class PythonFunctionType(ObjectType):
     def output(self) -> IndividualType:
         assert self._arity == 0
         return self._type_arguments[1]
+
+    def select_overload(
+        self, input_types: Sequence[IndividualType], constraints: Constraints
+    ) -> 'PythonFunctionType':
+        # FIXME: use temporary constraints
+        for overload in [(self.input, self.output), *self._overloads]:
+            # print('overload:', overload[0])
+            for a, b in zip(input_types, overload[0]):
+                try:
+                    a.constrain(b, constraints)
+                except TypeError:
+                    break
+            else:
+                return py_function_type[overload[0], overload[1]]
+        raise TypeError(
+            'no overload of {} matches types {}'.format(self, input_types)
+        )
+
+    def with_overload(
+        self, input: Sequence[IndividualType], output: IndividualType
+    ) -> 'PythonFunctionType':
+        return PythonFunctionType(
+            *self._args,
+            **self._kwargs,
+            _overloads=[*self._overloads, (input, output)],
+            _head=py_function_type,
+        )
 
     def bind(self) -> 'PythonFunctionType':
         assert self._arity == 0
@@ -1163,12 +1276,27 @@ class _OptionalType(ObjectType):
     def __init__(self, _type_arguments=[]) -> None:
         x = IndividualVariable()
         type_var = IndividualVariable()
-        super().__init__(x, {}, [type_var], _type_arguments=_type_arguments)
+        if len(_type_arguments) > 0:
+            super().__init__(x, {}, [], _type_arguments=_type_arguments)
+        else:
+            super().__init__(x, {}, [type_var])
+
+    def __getitem__(
+        self, type_arguments: Sequence[StackItemType]
+    ) -> '_OptionalType':
+        assert len(type_arguments) == 1
+        return _OptionalType(type_arguments)
+
+    # def constrain(self, supertype, )
 
     def apply_substitution(
         self, sub: 'concat.level1.typecheck.Substitutions'
     ) -> '_OptionalType':
         return _OptionalType(sub(self._type_arguments))
+
+
+def _iterable_to_str(iterable: Iterable) -> str:
+    return '[' + ', '.join(map(str, iterable)) + ']'
 
 
 # expose _Function as StackEffect
@@ -1203,7 +1331,7 @@ subtractable_type = ObjectType(
     [_sub_operand_type, _sub_result_type],
 )
 
-# FIXME: invertible_type, subtractable_type are structural supertypes
+# FIXME: subtractable_type are structural supertypes
 # but for now they are both explicit
 int_type = ObjectType(
     _x,  # FIXME: Make unique for each type.
@@ -1215,6 +1343,7 @@ int_type = ObjectType(
     [subtractable_type],
     nominal=True,
 )
+int_type.set_internal_name('int_type')
 
 # FIXME: Use an iterator interface instead of _x
 _result_type = IndividualVariable()
@@ -1232,7 +1361,10 @@ context_manager_type = ObjectType(
     },
 )
 optional_type = _OptionalType()
+
 none_type = ObjectType(_x, {})
+none_type.set_internal_name('none_type')
+
 dict_type = ObjectType(_x, {}, [], [iterable_type])
 bool_type = ObjectType(_x, {})
 file_type = ObjectType(
@@ -1248,16 +1380,32 @@ file_type = ObjectType(
     [iterable_type],
 )
 
+_start_type_var, _stop_type_var, _step_type_var = (
+    IndividualVariable(),
+    IndividualVariable(),
+    IndividualVariable(),
+)
+slice_type = ObjectType(
+    _x, {}, [_start_type_var, _stop_type_var, _step_type_var], nominal=True
+)
+slice_type.set_internal_name('slice_type')
+
 _element_type_var = IndividualVariable()
+_list_getitem_type = py_function_type[
+    (int_type,), _element_type_var
+].with_overload((slice_type[(optional_type[int_type,],) * 3],), _x)
 list_type = ObjectType(
     _x,
     {
-        '__getitem__': py_function_type[(int_type,), _element_type_var],
+        '__getitem__': _list_getitem_type,
         # FIXME: __iter__ should return an iterator.
         '__iter__': py_function_type[(), object_type],
     },
     [_element_type_var],
+    nominal=True,
 )
+list_type.set_internal_name('list_type')
+print('_x', _x)
 
 str_type = ObjectType(_x, {'__getitem__': py_function_type[(int_type,), _x]})
 
