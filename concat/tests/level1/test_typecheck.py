@@ -17,6 +17,7 @@ from concat.level1.typecheck.types import (
     file_type,
     float_type,
     int_type,
+    list_type,
     none_type,
     no_return_type,
     not_implemented_type,
@@ -166,6 +167,14 @@ class TestTypeChecker(unittest.TestCase):
         }
         expected_type = expected_types[type(simple_value_word)]
         self.assertEqual(list(effect.output), [expected_type])
+
+    def test_slice_inference(self) -> None:
+        slice_prog = '[1, 2, 3, 4, 5, 6, 7, 8] [1:None:2]\n'
+        tree = parse(slice_prog)
+        _, type = concat.level1.typecheck.infer(
+            Environment(types), tree.children, is_top_level=True,
+        )
+        self.assertEqual(type, StackEffect([], [list_type[int_type,]]))
 
 
 class TestDiagnosticInfo(unittest.TestCase):
