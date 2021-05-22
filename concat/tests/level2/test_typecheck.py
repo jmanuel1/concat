@@ -14,6 +14,7 @@ import concat.level2.typecheck
 import concat.level2.preamble_types
 import concat.level2.parse
 import concat.astutils
+import concat.tests.strategies  # for side-effects
 import unittest
 from textwrap import dedent
 from typing import List, Dict, cast

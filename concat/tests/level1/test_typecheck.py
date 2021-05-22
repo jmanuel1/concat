@@ -4,12 +4,14 @@ import concat.level1.parse
 import concat.level1.typecheck
 from concat.level1.typecheck import Environment
 from concat.level1.typecheck.types import (
-    SequenceVariable,
-    StackEffect,
+    ClassType,
     IndividualType,
     IndividualVariable,
     ObjectType,
-    ClassType,
+    SequenceVariable,
+    StackEffect,
+    StackItemType,
+    Type as ConcatType,
     TypeSequence,
     bool_type,
     dict_type,
@@ -25,10 +27,22 @@ from concat.level1.typecheck.types import (
     py_function_type,
 )
 from concat.level1.preamble_types import types
+import concat.tests.strategies
 import unittest
-from hypothesis import given
-from hypothesis.strategies import from_type, dictionaries, text, integers
-from typing import cast
+from hypothesis import example, given, note
+from hypothesis.strategies import (
+    SearchStrategy,
+    booleans,
+    composite,
+    from_type,
+    dictionaries,
+    integers,
+    lists,
+    register_type_strategy,
+    sampled_from,
+    text,
+)
+from typing import Iterable, Sequence, Type, cast
 
 
 def parse(string: str) -> concat.level0.parse.TopLevelNode:
@@ -130,6 +144,7 @@ class TestTypeChecker(unittest.TestCase):
             tree.children,
             is_top_level=True,
         )
+        note(type)
         self.assertEqual(type, StackEffect([], [int_type]))
 
     def test_if_then_inference(self) -> None:
@@ -193,7 +208,9 @@ class TestDiagnosticInfo(unittest.TestCase):
 
 class TestSequenceVariableTypeInference(unittest.TestCase):
     def test_with_word_inference(self):
-        wth = '$(drop 0 ~) {"file": "a_file"} open with'
+        wth = (
+            'def fn(object -- int): drop 0 ~\n$fn {"file": "a_file"} open with'
+        )
         tree = parse(wth)
         _, type = concat.level1.typecheck.infer(
             Environment(
@@ -209,7 +226,38 @@ class TestSequenceVariableTypeInference(unittest.TestCase):
             ),
             tree.children,
         )
+        print(type)
         self.assertEqual(type, StackEffect([in_var], [in_var, int_type]))
+
+
+class TestTypeEquality(unittest.TestCase):
+    @given(from_type(ConcatType))
+    @example(type=int_type.self_type)
+    @example(type=int_type.get_type_of_attribute('__add__'))
+    @example(type=int_type)
+    @example(
+        type=ObjectType(
+            IndividualVariable(),
+            {
+                '': (
+                    IndividualVariable()
+                    & StackEffect(TypeSequence([]), TypeSequence([]))
+                )
+            },
+            (),
+            (),
+            False,
+            [],
+            None,
+        )
+    )
+    @example(
+        type=IndividualVariable()
+        & StackEffect(TypeSequence([]), TypeSequence([]))
+    )
+    def test_reflexive_equality(self, type):
+        # print(type)
+        self.assertEqual(type, type)
 
 
 class TestSubtyping(unittest.TestCase):
