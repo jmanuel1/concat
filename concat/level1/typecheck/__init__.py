@@ -302,6 +302,8 @@ def infer(
                     if child.value not in gamma:
                         raise NameError(child)
                     name_type = gamma[child.value].instantiate()
+                    print(child.value, name_type)
+                    print(child.value, 'uninstantiated', gamma[child.value])
                     current_subs, current_effect = (
                         S1,
                         StackEffect(i1, [*o1, S1(name_type)]),
@@ -353,16 +355,25 @@ def infer(
             elif isinstance(node, concat.level1.parse.WithWordNode):
                 a_bar, b_bar = SequenceVariable(), SequenceVariable()
                 body_type = StackEffect([a_bar, object_type], [b_bar])
-                # FIXME: Require the stack size to be already known, e.g.
-                # extract body_type from o and constrain that individually.
+                # FIXME: Require the stack types to be already known, e.g.
+                # extract the context manager type from o and constrain that
+                # individually.
+                if len(o) < 2:
+                    raise TypeError(
+                        'Stack underflow, expected [..., {}, {}]'.format(
+                            body_type, context_manager_type
+                        )
+                    )
                 _global_constraints.add(
                     TypeSequence(o),
                     TypeSequence([a_bar, body_type, context_manager_type]),
                 )
+                actual_body_type = o[-2].get_type_of_attribute('__call__')
+                print('actual_body_type:', actual_body_type)
                 phi = _global_constraints.equalities_as_substitutions()
                 current_subs, current_effect = (
                     phi(S),
-                    phi(StackEffect(i, [b_bar])),
+                    phi(StackEffect(i, actual_body_type.output)),
                 )
             elif isinstance(node, concat.level1.parse.TryWordNode):
                 a_bar, b_bar = SequenceVariable(), SequenceVariable()
