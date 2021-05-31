@@ -431,6 +431,8 @@ def infer(
             declared_type, env_with_types = program[-1].stack_effect.to_type(
                 S(env)
             )
+            print('declared type of', name, 'is:', declared_type)
+            print('env_with_types:', env_with_types)
         else:
             # NOTE: To continue the "bidirectional" bent, we will require a
             # type annotation.

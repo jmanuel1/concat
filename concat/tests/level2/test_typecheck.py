@@ -2,12 +2,16 @@ import concat.lex as lex
 import concat.level0.parse
 import concat.level1.parse
 import concat.level1.typecheck
+from concat.level1.typecheck import Environment
 from concat.level1.typecheck.types import (
     IndividualVariable,
     _IntersectionType,
+    SequenceVariable,
     StackEffect,
     ObjectType,
     int_type,
+    dict_type,
+    file_type,
     object_type,
 )
 import concat.level2.typecheck
@@ -212,3 +216,28 @@ class TestNamedTypeNode(unittest.TestCase):
         expected_type = named_type_node.to_type(env)[0]
         note((expected_type, type))
         self.assertEqual(named_type_node.to_type(env)[0], type)
+
+
+class TestSequenceVariableTypeInference(unittest.TestCase):
+    def test_with_word_and_funcdef_inference(self):
+        wth = 'def fn(f:object -- n:int): drop 0 ~\n$fn {"file": "a_file"} open with'
+        tree = parse(wth)
+        in_var = SequenceVariable()
+        _, type = concat.level1.typecheck.infer(
+            Environment(
+                {
+                    **concat.level2.typecheck.builtin_environment,
+                    'drop': concat.level1.typecheck.ForAll(
+                        [in_var], StackEffect([in_var, object_type], [in_var])
+                    ),
+                    'open': concat.level1.typecheck.ForAll(
+                        [in_var],
+                        StackEffect([in_var, dict_type], [in_var, file_type]),
+                    ),
+                }
+            ),
+            tree.children,
+            (concat.level2.typecheck.infer,),
+        )
+        print('actual:', type)
+        self.assertEqual(type, StackEffect([in_var], [in_var, int_type]))

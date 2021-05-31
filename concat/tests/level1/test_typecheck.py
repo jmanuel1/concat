@@ -14,9 +14,7 @@ from concat.level1.typecheck.types import (
     Type as ConcatType,
     TypeSequence,
     bool_type,
-    dict_type,
     ellipsis_type,
-    file_type,
     float_type,
     int_type,
     list_type,
@@ -204,30 +202,6 @@ class TestDiagnosticInfo(unittest.TestCase):
             self.assertEqual(e.location, tree.children[1].location)
         else:
             self.fail('no type error')
-
-
-class TestSequenceVariableTypeInference(unittest.TestCase):
-    def test_with_word_inference(self):
-        wth = (
-            'def fn(object -- int): drop 0 ~\n$fn {"file": "a_file"} open with'
-        )
-        tree = parse(wth)
-        _, type = concat.level1.typecheck.infer(
-            Environment(
-                {
-                    'drop': concat.level1.typecheck.ForAll(
-                        [in_var], StackEffect([in_var, object_type], [in_var])
-                    ),
-                    'open': concat.level1.typecheck.ForAll(
-                        [in_var],
-                        StackEffect([in_var, dict_type], [in_var, file_type]),
-                    ),
-                }
-            ),
-            tree.children,
-        )
-        print(type)
-        self.assertEqual(type, StackEffect([in_var], [in_var, int_type]))
 
 
 class TestTypeEquality(unittest.TestCase):
