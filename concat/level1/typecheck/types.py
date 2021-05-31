@@ -893,12 +893,6 @@ class ObjectType(IndividualType):
         self._attributes = {
             name: self_sub(t) for name, t in attributes.items()
         }
-        if hasattr(concat.level1, 'typecheck'):
-            # print('self before:', self_type)
-            # print('self after:', self._self_type)
-            # print('attr before:', attributes)
-            # print('attr after:', self._attributes)
-            print()
 
         self._type_parameters = type_parameters
         self._nominal_supertypes = tuple(
@@ -1130,15 +1124,11 @@ class ObjectType(IndividualType):
                 set(subbed_attributes.values())
                 == set(other._attributes.values()),
             )
-            # print('value', list(subbed_attributes.values())[0] == list(other._attributes.values())[0])
-            # print('self', id(self), ':', repr(self))
-            # print('other', id(other), ':', repr(other))
             return False
 
         if len(self._type_parameters) != len(other._type_parameters) or len(
             self._type_arguments
         ) != len(other._type_arguments):
-            print('different arity or different number of arguments')
             return False
         # We can't use plain unification here because variables can only map to
         # variables of the same type.
@@ -1329,8 +1319,6 @@ class PythonFunctionType(ObjectType):
         self, sub: 'concat.level1.typecheck.Substitutions'
     ) -> 'PythonFunctionType':
         if self._arity == 0:
-            print('substitution:', sub)
-            print('self:', self)
             type = py_function_type[
                 tuple(sub(TypeSequence(self.input))), sub(self.output)
             ]
@@ -1338,8 +1326,6 @@ class PythonFunctionType(ObjectType):
                 type = type.with_overload(
                     tuple(sub(TypeSequence(overload[0]))), sub(overload[1])
                 )
-            print('result:', type)
-            print()
             return type
         return self
 
