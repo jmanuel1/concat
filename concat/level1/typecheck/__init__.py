@@ -98,10 +98,6 @@ class _Substitutable(Protocol[_Result]):
 
 class Substitutions(Dict['_Variable', 'Type']):
     def __call__(self, arg: _Substitutable[_Result]) -> _Result:
-        from concat.level1.typecheck.types import TypeSequence
-
-        if isinstance(arg, collections.abc.Sequence):
-            assert False
         return arg.apply_substitution(self)
 
     def _dom(self) -> Set['_Variable']:
