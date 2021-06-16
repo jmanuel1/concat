@@ -441,20 +441,21 @@ def infer(
                 )
             elif isinstance(node, concat.level1.parse.ListWordNode):
                 phi = S
-                collected_type = o
-                element_type = object_type
+                collected_type = TypeSequence(o)
+                element_type: IndividualType = object_type
                 for item in node.list_children:
                     phi1, fun_type = infer(
                         phi(gamma),
                         item,
                         extensions=extensions,
                         source_dir=source_dir,
-                        initial_stack=TypeSequence(collected_type),
+                        initial_stack=collected_type,
                     )
                     collected_type = fun_type.output
                     # FIXME: Infer the type of elements in the list based on
                     # ALL the elements.
                     if element_type == object_type:
+                        assert isinstance(collected_type[-1], IndividualType)
                         element_type = collected_type[-1]
                     # drop the top of the stack to use as the item
                     collected_type = collected_type[:-1]
