@@ -445,7 +445,7 @@ def infer(
             program[-1].body,
             is_top_level=False,
             extensions=extensions,
-            initial_stack=TypeSequence(declared_type.input),
+            initial_stack=declared_type.input,
         )
         if declared_type is not None:
             declared_type = S(declared_type)

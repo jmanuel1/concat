@@ -281,7 +281,7 @@ class TypeSequence(Type, Iterable['StackItemType']):
     def __init__(self, sequence: Sequence['StackItemType']) -> None:
         self._rest: Optional[SequenceVariable]
         # FIXME: This assertion shoudn't fail, but it does.
-        # assert not isinstance(sequence, TypeSequence)
+        assert not isinstance(sequence, TypeSequence)
         assert all(not isinstance(i, TypeSequence) for i in sequence)
         if sequence and isinstance(sequence[0], SequenceVariable):
             self._rest = sequence[0]
@@ -1117,13 +1117,6 @@ class ObjectType(IndividualType):
             attr: sub(t) for attr, t in self._attributes.items()
         }
         if subbed_attributes != other._attributes:
-            print('subbed_attributes != other._attributes', self, other)
-            print('key set', set(subbed_attributes) == set(other._attributes))
-            print(
-                'value set',
-                set(subbed_attributes.values())
-                == set(other._attributes.values()),
-            )
             return False
 
         if len(self._type_parameters) != len(other._type_parameters) or len(
@@ -1157,8 +1150,6 @@ class ObjectType(IndividualType):
             if isinstance(type1, collections.abc.Sequence):
                 type1 = tuple(type1)
             if type1 != type2:
-                print('type paramater/argument mismatch')
-                print(type1, 'vs.', type2)
                 return False
         if self._nominal != other._nominal:
             return False
