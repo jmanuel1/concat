@@ -272,7 +272,7 @@ class TestSubtyping(unittest.TestCase):
     @given(from_type(IndividualType), from_type(IndividualType))
     def test_object_subtype_of_py_function(self, type1, type2):
         x = IndividualVariable()
-        py_function = py_function_type[(type1,), type2]
+        py_function = py_function_type[TypeSequence([type1]), type2]
         object = ObjectType(x, {'__call__': py_function})
         self.assertLessEqual(object, py_function)
 
@@ -287,7 +287,7 @@ class TestSubtyping(unittest.TestCase):
     @given(from_type(IndividualType), from_type(IndividualType))
     def test_class_subtype_of_py_function(self, type1, type2):
         x = IndividualVariable()
-        py_function = py_function_type[(type1,), type2]
-        unbound_py_function = py_function_type[(x, type1), type2]
+        py_function = py_function_type[TypeSequence([type1]), type2]
+        unbound_py_function = py_function_type[TypeSequence([x, type1]), type2]
         cls = ClassType(x, {'__init__': unbound_py_function})
         self.assertLessEqual(cls, py_function)
