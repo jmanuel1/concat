@@ -263,7 +263,11 @@ _index_type_var = concat.level1.typecheck.IndividualVariable()
 _result_type_var = concat.level1.typecheck.IndividualVariable()
 subscriptable_type = ObjectType(
     IndividualVariable(),
-    {'__getitem__': py_function_type[(_index_type_var,), _result_type_var],},
+    {
+        '__getitem__': py_function_type[
+            TypeSequence([_index_type_var]), _result_type_var
+        ],
+    },
     [_index_type_var, _result_type_var],
 )
 
@@ -481,7 +485,7 @@ def infer(
             S2, (i2, o2) = concat.level1.typecheck.infer(
                 subs(env), child.children, extensions=extensions
             )
-            _global_constraints.add(TypeSequence(S2(output)), TypeSequence(i2))
+            _global_constraints.add(S2(TypeSequence(output)), TypeSequence(i2))
             # FIXME: Should be generic
             subscriptable_interface = subscriptable_type[
                 int_type, str_type,
@@ -489,7 +493,7 @@ def infer(
             expected_o2 = TypeSequence(
                 [rest_var, subscriptable_interface, int_type,]
             )
-            _global_constraints.add(TypeSequence(subs(o2)), expected_o2)
+            _global_constraints.add(subs(TypeSequence(o2)), expected_o2)
             subs = _global_constraints.equalities_as_substitutions()(S2(subs))
             effect = subs(StackEffect(input, [rest_var, str_type]))
             return subs, effect

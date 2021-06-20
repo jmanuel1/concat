@@ -863,7 +863,7 @@ def init_primitives():
     pass
 
 
-TypeArguments = Sequence[Union[StackItemType, Sequence[StackItemType]]]
+TypeArguments = Sequence[Union[StackItemType, TypeSequence]]
 
 
 class ObjectType(IndividualType):
@@ -900,13 +900,10 @@ class ObjectType(IndividualType):
         )
         self._nominal = nominal
 
-        assert isinstance(_type_arguments, collections.abc.Sequence)
-        type_arguments = list(_type_arguments)
-        for i, arg in enumerate(_type_arguments):
-            if isinstance(arg, collections.abc.Sequence):
-                type_arguments[i] = tuple(self_sub(TypeSequence(arg)))
-            else:
-                type_arguments[i] = self_sub(arg)
+        type_arguments = [
+            cast(Union[StackItemType, TypeSequence], self_sub(arg))
+            for arg in _type_arguments
+        ]
         self._type_arguments: TypeArguments = type_arguments
 
         self._head = _head or self
@@ -951,12 +948,12 @@ class ObjectType(IndividualType):
             Dict[str, IndividualType],
             {attr: sub(t) for attr, t in self._attributes.items()},
         )
-        nominal_supertypes = cast(
-            Sequence[IndividualType],
-            tuple(sub(TypeSequence(self._nominal_supertypes))),
-        )
+        nominal_supertypes = [
+            sub(supertype) for supertype in self._nominal_supertypes
+        ]
         type_arguments = [
-            sub(type_argument) for type_argument in self._type_arguments
+            cast(Union[StackItemType, TypeSequence], sub(type_argument))
+            for type_argument in self._type_arguments
         ]
         return type(self)(
             self._self_type,
@@ -1242,7 +1239,7 @@ class PythonFunctionType(ObjectType):
         self_type: IndividualVariable,
         *args,
         _overloads: Sequence[
-            Tuple[Sequence[IndividualType], IndividualType]
+            Tuple[Sequence[StackItemType], IndividualType]
         ] = (),
         type_parameters=(),
         **kwargs,
@@ -1272,6 +1269,7 @@ class PythonFunctionType(ObjectType):
         self._overloads = _overloads
         if '_head' in self._kwargs:
             del self._kwargs['_head']
+        self._head: PythonFunctionType
 
     def __str__(self) -> str:
         if not self._type_arguments:
@@ -1290,16 +1288,17 @@ class PythonFunctionType(ObjectType):
             return super().get_type_of_attribute(attribute)
 
     def __getitem__(
-        self, arguments: Tuple[Sequence[StackItemType], IndividualType]
+        self, arguments: Tuple[TypeSequence, IndividualType]
     ) -> 'PythonFunctionType':
         assert self._arity == 2
-        # print('args', *arguments)
+        input = arguments[0]
+        output = arguments[1]
         return PythonFunctionType(
             self._self_type,
             *self._args,
             **{
                 **self._kwargs,
-                '_type_arguments': arguments,
+                '_type_arguments': (input, output),
                 'type_parameters': (),
             },
             _overloads=[],
@@ -1311,11 +1310,11 @@ class PythonFunctionType(ObjectType):
     ) -> 'PythonFunctionType':
         if self._arity == 0:
             type = py_function_type[
-                tuple(sub(TypeSequence(self.input))), sub(self.output)
+                sub(TypeSequence(self.input)), sub(self.output)
             ]
             for overload in self._overloads:
                 type = type.with_overload(
-                    tuple(sub(TypeSequence(overload[0]))), sub(overload[1])
+                    [sub(i) for i in overload[0]], sub(overload[1])
                 )
             return type
         return self
@@ -1325,15 +1324,17 @@ class PythonFunctionType(ObjectType):
         assert self._arity == 0
         if isinstance(self._type_arguments[0], SequenceVariable):
             return (self._type_arguments[0],)
-        return self._type_arguments[0]
+        assert not isinstance(self._type_arguments[0], IndividualType)
+        return tuple(self._type_arguments[0])
 
     @property
     def output(self) -> IndividualType:
         assert self._arity == 0
+        assert isinstance(self._type_arguments[1], IndividualType)
         return self._type_arguments[1]
 
     def select_overload(
-        self, input_types: Sequence[IndividualType], constraints: Constraints
+        self, input_types: Sequence[StackItemType], constraints: Constraints
     ) -> 'PythonFunctionType':
         # FIXME: use temporary constraints
         for overload in [(self.input, self.output), *self._overloads]:
@@ -1344,13 +1345,13 @@ class PythonFunctionType(ObjectType):
                 except TypeError:
                     break
             else:
-                return py_function_type[overload[0], overload[1]]
+                return py_function_type[TypeSequence(overload[0]), overload[1]]
         raise TypeError(
             'no overload of {} matches types {}'.format(self, input_types)
         )
 
     def with_overload(
-        self, input: Sequence[IndividualType], output: IndividualType
+        self, input: Sequence[StackItemType], output: IndividualType
     ) -> 'PythonFunctionType':
         return PythonFunctionType(
             self._self_type,
@@ -1362,9 +1363,9 @@ class PythonFunctionType(ObjectType):
 
     def bind(self) -> 'PythonFunctionType':
         assert self._arity == 0
-        inputs = self._type_arguments[0][1:]
-        output = self._type_arguments[1]
-        return self._head[inputs, output]
+        inputs = self.input[1:]
+        output = self.output
+        return self._head[TypeSequence(inputs), output]
 
 
 class _NoReturnType(ObjectType):
@@ -1430,7 +1431,7 @@ py_function_type = PythonFunctionType(
 _invert_result_var = IndividualVariable()
 invertible_type = ObjectType(
     _x,
-    {'__invert__': py_function_type[(), _invert_result_var]},
+    {'__invert__': py_function_type[TypeSequence([]), _invert_result_var]},
     [_invert_result_var],
 )
 
@@ -1439,16 +1440,23 @@ _sub_result_type = IndividualVariable()
 # FIXME: Add reverse_substractable_type for __rsub__
 subtractable_type = ObjectType(
     _x,
-    {'__sub__': py_function_type[(_sub_operand_type,), _sub_result_type]},
+    {
+        '__sub__': py_function_type[
+            TypeSequence([_sub_operand_type]), _sub_result_type
+        ]
+    },
     [_sub_operand_type, _sub_result_type],
 )
 
-_int_add_type = py_function_type[(object_type,), _x]
+_int_add_type = py_function_type[TypeSequence([object_type]), _x]
 # FIXME: subtractable_type are structural supertypes
 # but for now they are both explicit
 int_type = ObjectType(
     _x,  # FIXME: Make unique for each type.
-    {'__add__': _int_add_type, '__invert__': py_function_type[(), _x],},
+    {
+        '__add__': _int_add_type,
+        '__invert__': py_function_type[TypeSequence([]), _x],
+    },
     [],
     [subtractable_type],
     nominal=True,
@@ -1462,7 +1470,7 @@ print('int_type:', repr(int_type))
 # FIXME: Use an iterator interface instead of _x
 _result_type = IndividualVariable()
 iterable_type = ObjectType(
-    _x, {'__iter__': py_function_type[(), _x]}, [_result_type]
+    _x, {'__iter__': py_function_type[TypeSequence([]), _x]}, [_result_type]
 )
 
 context_manager_type = ObjectType(
@@ -1484,7 +1492,7 @@ bool_type = ObjectType(_x, {})
 file_type = ObjectType(
     _x,
     {
-        'seek': py_function_type[(int_type,), int_type],
+        'seek': py_function_type[TypeSequence([int_type]), int_type],
         'read': py_function_type,
         '__enter__': py_function_type,
         '__exit__': py_function_type,
@@ -1506,21 +1514,23 @@ slice_type.set_internal_name('slice_type')
 
 _element_type_var = IndividualVariable()
 _list_getitem_type = py_function_type[
-    (int_type,), _element_type_var
+    TypeSequence([int_type]), _element_type_var
 ].with_overload((slice_type[(optional_type[int_type,],) * 3],), _x)
 list_type = ObjectType(
     _x,
     {
         '__getitem__': _list_getitem_type,
         # FIXME: __iter__ should return an iterator.
-        '__iter__': py_function_type[(), object_type],
+        '__iter__': py_function_type[TypeSequence([]), object_type],
     },
     [_element_type_var],
     nominal=True,
 )
 list_type.set_internal_name('list_type')
 
-str_type = ObjectType(_x, {'__getitem__': py_function_type[(int_type,), _x]})
+str_type = ObjectType(
+    _x, {'__getitem__': py_function_type[TypeSequence([int_type]), _x]}
+)
 
 ellipsis_type = ObjectType(_x, {})
 not_implemented_type = ObjectType(_x, {})
