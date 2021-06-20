@@ -238,8 +238,7 @@ def infer(
                         )
                     print(_global_constraints)
                     current_effect = StackEffect(
-                        current_effect.input,
-                        [*rest, add_type.type_arguments[1]],
+                        current_effect.input, [*rest, add_type.output],
                     )
                 if try_radd:
                     radd_type = type2.get_type_of_attribute('__radd__')
@@ -254,8 +253,7 @@ def infer(
                             )
                         )
                     current_effect = StackEffect(
-                        current_effect.input,
-                        [*rest, radd_type.type_arguments[1]],
+                        current_effect.input, [*rest, radd_type.output],
                     )
             elif isinstance(node, concat.level0.parse.NameWordNode):
                 (i1, o1) = current_effect
@@ -477,7 +475,7 @@ def infer(
                             o[-1]
                         )
                     )
-                result_type = invert_attr_type.type_arguments[1]
+                result_type = invert_attr_type.output
                 current_subs, current_effect = (
                     S,
                     StackEffect(i, [*out_types, result_type]),
@@ -500,8 +498,7 @@ def infer(
                         )
                     )
                 _global_constraints.add(
-                    TypeSequence(out_types),
-                    TypeSequence(attr_function_type.input),
+                    TypeSequence(out_types), attr_function_type.input,
                 )
                 R = _global_constraints.equalities_as_substitutions()
                 current_subs, current_effect = (
@@ -526,7 +523,7 @@ def infer(
                     initial_stack=TypeSequence(o[:-1]),
                 )
                 start_type = start_effect.output[-1]
-                o = start_effect.output[:-1]
+                o = tuple(start_effect.output[:-1])
                 sub2, stop_effect = infer(
                     sub1(gamma),
                     list(node.stop_children),
@@ -534,7 +531,7 @@ def infer(
                     initial_stack=TypeSequence(o),
                 )
                 stop_type = stop_effect.output[-1]
-                o = stop_effect.output[:-1]
+                o = tuple(stop_effect.output[:-1])
                 sub3, step_effect = infer(
                     sub2(sub1(gamma)),
                     list(node.step_children),
@@ -542,7 +539,7 @@ def infer(
                     initial_stack=TypeSequence(o),
                 )
                 step_type = step_effect.output[-1]
-                o = step_effect.output[:-1]
+                o = tuple(step_effect.output[:-1])
                 this_slice_type = slice_type[start_type, stop_type, step_type]
                 print('this_slice_type', this_slice_type._type_arguments[0])
                 print('this_slice_type', this_slice_type)
