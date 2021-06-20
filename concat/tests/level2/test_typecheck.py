@@ -60,7 +60,6 @@ class TestTypeChecker(unittest.TestCase):
             True,
         )
 
-    @unittest.skip('TOO SLOW')
     def test_function_with_strict_effect(self) -> None:
         """Test that a function type checks with a strict annotated effect.
 
@@ -107,7 +106,6 @@ class TestTypeChecker(unittest.TestCase):
         )
 
     # QUESTION: Should fail?
-    @unittest.skip('TOO SLOW')
     def test_pushed_subscription(self) -> None:
         """Test that the type checker allows pushed subscription words."""
         tree = parse('$[0] cast (int) 1 +')
