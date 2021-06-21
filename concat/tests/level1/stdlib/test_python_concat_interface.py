@@ -47,7 +47,8 @@ class TestObjectFactories(unittest.TestCase):
         concat.level1.stdlib.pyinterop.to_float(stack, stash)
         message = 'to_float has incorrect stack effect'
         self.assertIsInstance(
-            stack[0], float, msg='to_float does not push a float')
+            stack[0], float, msg='to_float does not push a float'
+        )
         self.assertAlmostEqual(cast(float, stack[0]), 10.0, 0, msg=message)
 
     def test_to_complex(self) -> None:
@@ -57,9 +58,11 @@ class TestObjectFactories(unittest.TestCase):
         concat.level1.stdlib.pyinterop.to_complex(stack, stash)
         message = 'to_complex has incorrect stack effect'
         self.assertIsInstance(
-            stack[0], complex, msg='to_complex does not push a complex')
+            stack[0], complex, msg='to_complex does not push a complex'
+        )
         self.assertAlmostEqual(  # type: ignore
-            stack[0], 20 + 10j, 0, msg=message)
+            stack[0], 20 + 10j, 0, msg=message
+        )
 
     def test_to_slice(self) -> None:
         """Test that to_slice works."""
@@ -139,10 +142,14 @@ class TestObjectFactories(unittest.TestCase):
         stash: List[object] = []
         concat.level1.stdlib.pyinterop.to_stop_iteration(stack, stash)
         message = 'to_stop_iteration has incorrect stack effect'
-        self.assertIsInstance(stack[0], StopIteration,
-                              msg='top of stack is not a StopIteration')
-        self.assertEqual(cast(StopIteration, stack[0]).value, [
-                         (None, None), (5, True)], msg=message)
+        self.assertIsInstance(
+            stack[0], StopIteration, msg='top of stack is not a StopIteration'
+        )
+        self.assertEqual(
+            cast(StopIteration, stack[0]).value,
+            [(None, None), (5, True)],
+            msg=message,
+        )
 
 
 class TestBuiltinAnalogs(unittest.TestCase):
@@ -230,18 +237,6 @@ class TestBuiltinAnalogs(unittest.TestCase):
         self.assertIsInstance(stack[0], io.TextIOWrapper, msg=message)
         cast(TextIO, stack[0]).close()
 
-    @unittest.skip('How do I test popen without taking over stdin and stdout?')
-    def test_popen(self) -> None:
-        """Test that popen works."""
-        stack: List[object] = [None, None, 'python']
-        stash: List[object] = []
-        concat.level1.stdlib.pyinterop.popen(stack, stash)
-        message = 'popen has incorrect stack effect'
-        try:
-            self.assertIsInstance(stack[0], io.IOBase, msg=message)
-        finally:
-            cast(io.IOBase, stack[0]).close()
-
     def test_fdopen(self) -> None:
         """Test that fdopen works."""
         fileobj = open(__file__)
@@ -253,7 +248,8 @@ class TestBuiltinAnalogs(unittest.TestCase):
         self.assertIsInstance(stack[0], io.TextIOWrapper, msg=message)
         message = 'fdopen return file object with wrong file descriptor'
         self.assertEqual(
-            cast(io.TextIOWrapper, stack[0]).fileno(), fd, msg=message)
+            cast(io.TextIOWrapper, stack[0]).fileno(), fd, msg=message
+        )
         fileobj.close()
 
 
@@ -283,7 +279,8 @@ class TestUserDefinedFunctionAttributeAccessors(unittest.TestCase):
         stack: List[object] = [dummy]
         stash: List[object] = []
         concat.level1.stdlib.pyinterop.user_defined_function.qualname(
-            stack, stash)
+            stack, stash
+        )
         message = 'user_defined_function.qualname has incorrect stack effect'
         self.assertEqual(stack, [dummy.__qualname__], msg=message)
 
@@ -292,7 +289,8 @@ class TestUserDefinedFunctionAttributeAccessors(unittest.TestCase):
         stack: List[object] = [dummy]
         stash: List[object] = []
         concat.level1.stdlib.pyinterop.user_defined_function.module(
-            stack, stash)
+            stack, stash
+        )
         message = 'user_defined_function.module has incorrect stack effect'
         self.assertEqual(stack, [dummy.__module__], msg=message)
 
@@ -301,10 +299,14 @@ class TestUserDefinedFunctionAttributeAccessors(unittest.TestCase):
         stack: List[object] = [dummy]
         stash: List[object] = []
         concat.level1.stdlib.pyinterop.user_defined_function.defaults(
-            stack, stash)
+            stack, stash
+        )
         message = 'user_defined_function.defaults has incorrect stack effect'
-        self.assertEqual(stack, [dummy.__defaults__],  # type: ignore
-                         msg=message)
+        self.assertEqual(
+            stack,
+            [dummy.__defaults__],  # type: ignore
+            msg=message,
+        )
 
     def test_code(self) -> None:
         """Test that user_defined_function.code works."""
@@ -319,10 +321,14 @@ class TestUserDefinedFunctionAttributeAccessors(unittest.TestCase):
         stack: List[object] = [dummy]
         stash: List[object] = []
         concat.level1.stdlib.pyinterop.user_defined_function.globals(
-            stack, stash)
+            stack, stash
+        )
         message = 'user_defined_function.globals has incorrect stack effect'
-        self.assertEqual(stack, [dummy.__globals__],  # type: ignore
-                         msg=message)
+        self.assertEqual(
+            stack,
+            [dummy.__globals__],  # type: ignore
+            msg=message,
+        )
 
     def test_dict(self) -> None:
         """Test that user_defined_function.dict works."""
@@ -337,18 +343,25 @@ class TestUserDefinedFunctionAttributeAccessors(unittest.TestCase):
         stack: List[object] = [dummy]
         stash: List[object] = []
         concat.level1.stdlib.pyinterop.user_defined_function.closure(
-            stack, stash)
+            stack, stash
+        )
         message = 'user_defined_function.closure has incorrect stack effect'
-        self.assertEqual(stack, [dummy.__closure__],   # type: ignore
-                         msg=message)
+        self.assertEqual(
+            stack,
+            [dummy.__closure__],  # type: ignore
+            msg=message,
+        )
 
     def test_annotations(self) -> None:
         """Test that user_defined_function.annotations works."""
         stack: List[object] = [dummy]
         stash: List[object] = []
         concat.level1.stdlib.pyinterop.user_defined_function.annotations(
-            stack, stash)
-        message = 'user_defined_function.annotations has incorrect stack effect'
+            stack, stash
+        )
+        message = (
+            'user_defined_function.annotations has incorrect stack effect'
+        )
         self.assertEqual(stack, [dummy.__annotations__], msg=message)
 
     def test_kwdefaults(self) -> None:
@@ -356,10 +369,14 @@ class TestUserDefinedFunctionAttributeAccessors(unittest.TestCase):
         stack: List[object] = [dummy]
         stash: List[object] = []
         concat.level1.stdlib.pyinterop.user_defined_function.kwdefaults(
-            stack, stash)
+            stack, stash
+        )
         message = 'user_defined_function.kwdefaults has incorrect stack effect'
         self.assertEqual(
-            stack, [cast(types.FunctionType, dummy).__kwdefaults__], msg=message)
+            stack,
+            [cast(types.FunctionType, dummy).__kwdefaults__],
+            msg=message,
+        )
 
 
 class TestMethodAttributeAccessors(unittest.TestCase):
@@ -373,7 +390,8 @@ class TestMethodAttributeAccessors(unittest.TestCase):
         concat.level1.stdlib.pyinterop.method.self(stack, stash)
         message = 'method.self has incorrect stack effect'
         self.assertEqual(
-            stack, [cast(types.MethodType, self.dummy).__self__], msg=message)
+            stack, [cast(types.MethodType, self.dummy).__self__], msg=message
+        )
 
     def test_func(self) -> None:
         """Test that method.func works."""
@@ -382,7 +400,8 @@ class TestMethodAttributeAccessors(unittest.TestCase):
         concat.level1.stdlib.pyinterop.method.func(stack, stash)
         message = 'method.func has incorrect stack effect'
         self.assertEqual(
-            stack, [cast(types.MethodType, self.dummy).__func__], msg=message)
+            stack, [cast(types.MethodType, self.dummy).__func__], msg=message
+        )
 
     def test_doc(self) -> None:
         """Test that method.doc works."""
@@ -460,13 +479,17 @@ class TestAsync(unittest.TestCase):
     def test_coroutine_throw(self) -> None:
         """Test that coroutine.throw works."""
         stack: List[object] = [
-            None, None, DummyException, self.dummy_coroutine()]
+            None,
+            None,
+            DummyException,
+            self.dummy_coroutine(),
+        ]
         stash: List[object] = []
         self.assertRaises(
             DummyException,
             concat.level1.stdlib.pyinterop.coroutine.throw,
             stack,
-            stash
+            stash,
         )
         message = 'coroutine.throw has incorrect stack effect'
         self.assertEqual(stack, [], msg=message)
@@ -604,7 +627,8 @@ class TestCustomClassAttributeAccessors(unittest.TestCase):
         concat.level1.stdlib.pyinterop.custom_class.name(stack, stash)
         message = 'custom_class.name has incorrect stack effect'
         self.assertEqual(
-            stack, [TestCustomClassAttributeAccessors.__name__], msg=message)
+            stack, [TestCustomClassAttributeAccessors.__name__], msg=message
+        )
 
     def test_doc(self) -> None:
         """Test that custom_class.doc works."""
@@ -613,7 +637,8 @@ class TestCustomClassAttributeAccessors(unittest.TestCase):
         concat.level1.stdlib.pyinterop.custom_class.doc(stack, stash)
         message = 'custom_class.doc has incorrect stack effect'
         self.assertEqual(
-            stack, [TestCustomClassAttributeAccessors.__doc__], msg=message)
+            stack, [TestCustomClassAttributeAccessors.__doc__], msg=message
+        )
 
     def test_annotations(self) -> None:
         """Test that custom_class.annotations works."""
@@ -623,7 +648,10 @@ class TestCustomClassAttributeAccessors(unittest.TestCase):
         concat.level1.stdlib.pyinterop.custom_class.annotations(stack, stash)
         message = 'custom_class.annotations has incorrect stack effect'
         self.assertEqual(
-            stack, [TestCustomClassAttributeAccessors.__annotations__], msg=message)
+            stack,
+            [TestCustomClassAttributeAccessors.__annotations__],
+            msg=message,
+        )
 
     def test_dict(self) -> None:
         """Test that custom_class.dict works."""
@@ -632,7 +660,8 @@ class TestCustomClassAttributeAccessors(unittest.TestCase):
         concat.level1.stdlib.pyinterop.custom_class.dict(stack, stash)
         message = 'custom_class.dict has incorrect stack effect'
         self.assertEqual(
-            stack, [TestCustomClassAttributeAccessors.__dict__], msg=message)
+            stack, [TestCustomClassAttributeAccessors.__dict__], msg=message
+        )
 
     def test_module(self) -> None:
         """Test that custom_class.module works."""
@@ -641,7 +670,8 @@ class TestCustomClassAttributeAccessors(unittest.TestCase):
         concat.level1.stdlib.pyinterop.custom_class.module(stack, stash)
         message = 'custom_class.module has incorrect stack effect'
         self.assertEqual(
-            stack, [TestCustomClassAttributeAccessors.__module__], msg=message)
+            stack, [TestCustomClassAttributeAccessors.__module__], msg=message
+        )
 
     def test_bases(self) -> None:
         """Test that custom_class.bases works."""
@@ -650,7 +680,8 @@ class TestCustomClassAttributeAccessors(unittest.TestCase):
         concat.level1.stdlib.pyinterop.custom_class.bases(stack, stash)
         message = 'custom_class.bases has incorrect stack effect'
         self.assertEqual(
-            stack, [TestCustomClassAttributeAccessors.__bases__], msg=message)
+            stack, [TestCustomClassAttributeAccessors.__bases__], msg=message
+        )
 
 
 class Dummy:
