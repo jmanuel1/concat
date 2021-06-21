@@ -27,7 +27,7 @@ from concat.level1.typecheck.types import (
 from concat.level1.preamble_types import types
 import concat.tests.strategies
 import unittest
-from hypothesis import example, given, note
+from hypothesis import HealthCheck, example, given, note, settings
 from hypothesis.strategies import (
     SearchStrategy,
     booleans,
@@ -36,7 +36,6 @@ from hypothesis.strategies import (
     dictionaries,
     integers,
     lists,
-    register_type_strategy,
     sampled_from,
     text,
 )
@@ -240,6 +239,7 @@ class TestSubtyping(unittest.TestCase):
         self.assertFalse(int_type <= float_type)
 
     @given(from_type(IndividualType), from_type(IndividualType))
+    @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_stack_effect_subtyping(self, type1, type2):
         fun1 = StackEffect([type1], [type2])
         fun2 = StackEffect([no_return_type], [object_type])
@@ -250,6 +250,7 @@ class TestSubtyping(unittest.TestCase):
     )
 
     @given(__attributes_generator, __attributes_generator)
+    @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_object_structural_subtyping(self, attributes, other_attributes):
         x1, x2 = IndividualVariable(), IndividualVariable()
         object1 = ObjectType(x1, {**other_attributes, **attributes})
@@ -257,6 +258,7 @@ class TestSubtyping(unittest.TestCase):
         self.assertLessEqual(object1, object2)
 
     @given(__attributes_generator, __attributes_generator)
+    @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_class_structural_subtyping(self, attributes, other_attributes):
         x1, x2 = IndividualVariable(), IndividualVariable()
         object1 = ClassType(x1, {**other_attributes, **attributes})
@@ -264,12 +266,14 @@ class TestSubtyping(unittest.TestCase):
         self.assertLessEqual(object1, object2)
 
     @given(from_type(StackEffect))
+    @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_object_subtype_of_stack_effect(self, effect):
         x = IndividualVariable()
         object = ObjectType(x, {'__call__': effect})
         self.assertLessEqual(object, effect)
 
     @given(from_type(IndividualType), from_type(IndividualType))
+    @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_object_subtype_of_py_function(self, type1, type2):
         x = IndividualVariable()
         py_function = py_function_type[TypeSequence([type1]), type2]
@@ -285,6 +289,7 @@ class TestSubtyping(unittest.TestCase):
         self.assertLessEqual(cls, effect)
 
     @given(from_type(IndividualType), from_type(IndividualType))
+    @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_class_subtype_of_py_function(self, type1, type2):
         x = IndividualVariable()
         py_function = py_function_type[TypeSequence([type1]), type2]
