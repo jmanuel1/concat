@@ -1,12 +1,13 @@
 import concat.transpile
 import concat.astutils
 import concat.level0.parse
+from concat.level0.parse import AttributeWordNode, NumberWordNode, TopLevelNode
 from concat.level0.stdlib.ski import s, k, i
 from concat.level0.lex import Token
 from concat.level2.execute import execute
 import unittest
 from typing import Callable, Iterable, List, Tuple, TypeVar, Union, cast
-from hypothesis import given, assume
+from hypothesis import given, assume, example
 from hypothesis.strategies import (
     SearchStrategy,
     composite,
@@ -253,6 +254,19 @@ def stack_equal(
 
 
 class TestDynamicSemantics(unittest.TestCase):
+    @example(
+        prog=(
+            TopLevelNode(
+                Token('ENCODING', '', (0, 0)),
+                [
+                    NumberWordNode(Token('NUMBER', '0', (0, 0))),
+                    AttributeWordNode(Token('NAME', '__init__', (0, 0))),
+                ],
+            ),
+            [],
+            [],
+        )
+    )
     @given(program())
     def test_generated_program(self, prog):
         module = concat.transpile.transpile_ast(prog[0])
