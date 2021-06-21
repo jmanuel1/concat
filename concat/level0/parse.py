@@ -67,6 +67,11 @@ class TopLevelNode(Node):
         self.location = encoding.start
         self.children: concat.astutils.WordsOrStatements = children
 
+    def __repr__(self) -> str:
+        return 'TopLevelNode(Token("ENCODING", {!r}, {!r}), {!r})'.format(
+            self.encoding, self.location, self.children
+        )
+
 
 class StatementNode(Node, abc.ABC):
     pass
@@ -96,6 +101,9 @@ class PushWordNode(WordNode):
     def __str__(self) -> str:
         return '$' + str(self.children[0])
 
+    def __repr__(self) -> str:
+        return 'PushWordNode({!r})'.format(self.children[0])
+
 
 class NumberWordNode(WordNode):
     def __init__(self, number: 'concat.level0.lex.Token'):
@@ -108,6 +116,11 @@ class NumberWordNode(WordNode):
             raise ValueError(
                 '{!r} cannot eval to a number'.format(number.value)
             )
+
+    def __repr__(self) -> str:
+        return 'NumberWordNode(Token("NUMBER", {!r}, {!r}))'.format(
+            str(self.value), self.location
+        )
 
 
 class StringWordNode(WordNode):
@@ -161,6 +174,11 @@ class AttributeWordNode(WordNode):
         self.location = attribute.start
         self.children: List[Node] = []
         self.value = attribute.value
+
+    def __repr__(self) -> str:
+        return 'AttributeWordNode(Token("NAME", {!r}, {!r}))'.format(
+            self.value, self.location
+        )
 
 
 T = TypeVar('T')
