@@ -1,18 +1,69 @@
 """Concat-Python interoperation helpers."""
-from typing import (List, cast, Sized, Sequence, Union, Iterable, Mapping,
-                    Iterator, AsyncContextManager, Callable, AsyncIterable,
-                    Optional, Any)
+from typing import (
+    List,
+    cast,
+    Sized,
+    Sequence,
+    Union,
+    Iterable,
+    Mapping,
+    Iterator,
+    AsyncContextManager,
+    Callable,
+    AsyncIterable,
+    Optional,
+    Any,
+)
 import builtins
 import importlib
 import os
 import concat.level0.stdlib.ski
+from concat.level1.typecheck.types import (
+    SequenceVariable,
+    StackEffect,
+    TypeSequence,
+    object_type,
+    str_type,
+)
 
 
-__all__ = ['to_int', 'to_bool', 'to_float', 'to_complex', 'len',
-           'getitem', 'to_slice', 'to_str', 'ord', 'chr', 'encode_str',
-           'to_bytes', 'to_bytearray', 'to_set', 'to_list', 'to_tuple',
-           'decode_bytes', 'add_to_set', 'to_frozenset', 'to_dict', 'next',
-           'with_async', 'for_async', 'call', 'import_module', 'open', 'popen']
+__all__ = [
+    'to_int',
+    'to_bool',
+    'to_float',
+    'to_complex',
+    'len',
+    'getitem',
+    'to_slice',
+    'to_str',
+    'ord',
+    'chr',
+    'encode_str',
+    'to_bytes',
+    'to_bytearray',
+    'to_set',
+    'to_list',
+    'to_tuple',
+    'decode_bytes',
+    'add_to_set',
+    'to_frozenset',
+    'to_dict',
+    'next',
+    'with_async',
+    'for_async',
+    'call',
+    'import_module',
+    'open',
+    'popen',
+]
+
+_stack_type_var = SequenceVariable()
+globals()['@@types'] = {
+    'to_str': StackEffect(
+        TypeSequence([_stack_type_var, object_type, object_type, object_type]),
+        TypeSequence([_stack_type_var, str_type]),
+    )
+}
 
 
 def to_int(stack: List[object], stash: List[object]) -> None:
@@ -86,8 +137,9 @@ def encode_str(stack: List[object], stash: List[object]) -> None:
     receiver, encoding, errors = (stack.pop() for _ in range(3))
     encoding = 'utf-8' if encoding is None else encoding
     errors = 'strict' if errors is None else errors
-    stack.append(cast(str, receiver).encode(
-        cast(str, encoding), cast(str, errors)))
+    stack.append(
+        cast(str, receiver).encode(cast(str, encoding), cast(str, errors))
+    )
 
 
 def to_bytes(stack: List[object], stash: List[object]) -> None:
@@ -99,8 +151,9 @@ def to_bytes(stack: List[object], stash: List[object]) -> None:
         else:
             stack.append(bytes(cast(str, source), cast(str, encoding)))
     else:
-        stack.append(bytes(cast(str, source), cast(
-            str, encoding), cast(str, errors)))
+        stack.append(
+            bytes(cast(str, source), cast(str, encoding), cast(str, errors))
+        )
 
 
 def decode_bytes(stack: List[object], stash: List[object]) -> None:
@@ -108,8 +161,9 @@ def decode_bytes(stack: List[object], stash: List[object]) -> None:
     receiver, encoding, errors = (stack.pop() for _ in range(3))
     encoding = 'utf-8' if encoding is None else encoding
     errors = 'strict' if errors is None else errors
-    stack.append(cast(bytes, receiver).decode(
-        cast(str, encoding), cast(str, errors)))
+    stack.append(
+        cast(bytes, receiver).decode(cast(str, encoding), cast(str, errors))
+    )
 
 
 def to_tuple(stack: List[object], stash: List[object]) -> None:
@@ -133,8 +187,11 @@ def to_bytearray(stack: List[object], stash: List[object]) -> None:
         else:
             stack.append(bytearray(cast(str, source), cast(str, encoding)))
     else:
-        stack.append(bytearray(cast(str, source), cast(
-            str, encoding), cast(str, errors)))
+        stack.append(
+            bytearray(
+                cast(str, source), cast(str, encoding), cast(str, errors)
+            )
+        )
 
 
 def to_set(stack: List[object], stash: List[object]) -> None:
@@ -185,8 +242,10 @@ def to_stop_iteration(stack: List[object], stash: List[object]) -> None:
 async def with_async(stack: List[object], stash: List[object]) -> None:
     """$body context_manager -- `async with context_manager: body(stack,
     stash)`"""
-    context_manager, body = cast(AsyncContextManager, stack.pop()), cast(
-        Callable[[List[object], List[object]], None], stack.pop())
+    context_manager, body = (
+        cast(AsyncContextManager, stack.pop()),
+        cast(Callable[[List[object], List[object]], None], stack.pop()),
+    )
     async with context_manager as val:
         stack.append(val)
         body(stack, stash)
@@ -194,8 +253,10 @@ async def with_async(stack: List[object], stash: List[object]) -> None:
 
 async def for_async(stack: List[object], stash: List[object]) -> None:
     """$body iterable -- `async for target in iterable:` target body"""
-    iterable, body = cast(AsyncIterable[object], stack.pop()), cast(
-        Callable[[List[object], List[object]], None], stack.pop())
+    iterable, body = (
+        cast(AsyncIterable[object], stack.pop()),
+        cast(Callable[[List[object], List[object]], None], stack.pop()),
+    )
     async for target in iterable:
         stack.append(target)
         body(stack, stash)
@@ -206,28 +267,35 @@ call = concat.level0.stdlib.ski.i
 
 def import_module(stack: List[object], stash: List[object]) -> None:
     """package name -- importlib.import_module(name, package)"""
-    stack.append(importlib.import_module(
-        cast(str, stack.pop()), cast(Optional[str], stack.pop())))
+    stack.append(
+        importlib.import_module(
+            cast(str, stack.pop()), cast(Optional[str], stack.pop())
+        )
+    )
 
 
 def import_advanced(stack: List[object], stash: List[object]) -> None:
     """level fromlist locals globals name -- __import__(name, globals, locals,
     fromlist, level)"""
     name, globals, locals, fromlist, level = (stack.pop() for _ in range(5))
-    stack.append(__import__(
-        cast(str, name), cast(Optional[Mapping[str, Any]], globals),
-        cast(Optional[Mapping[str, Any]], locals),
-        cast(Sequence[str], () if fromlist is None else fromlist),
-        0 if level is None else cast(int, level)))
+    stack.append(
+        __import__(
+            cast(str, name),
+            cast(Optional[Mapping[str, Any]], globals),
+            cast(Optional[Mapping[str, Any]], locals),
+            cast(Sequence[str], () if fromlist is None else fromlist),
+            0 if level is None else cast(int, level),
+        )
+    )
 
 
 def open(stack: List[object], stash: List[object]) -> None:
-    "kwargs -- open(**kwargs)"  # open has a lot of arguments
+    'kwargs -- open(**kwargs)'  # open has a lot of arguments
     stack.append(builtins.open(**cast(Mapping[str, Any], stack.pop())))
 
 
 def popen(stack: List[object], stash: List[object]) -> None:
-    "buffering mode cmd -- subprocess.popen(cmd, mode, buffering)"
+    'buffering mode cmd -- subprocess.popen(cmd, mode, buffering)'
     cmd = cast(str, stack.pop())
     mode = cast(Optional[str], stack.pop())
     buffering = cast(Optional[int], stack.pop())
@@ -236,6 +304,9 @@ def popen(stack: List[object], stash: List[object]) -> None:
 
 
 def fdopen(stack: List[object], stash: List[object]) -> None:
-    "kwargs fd -- os.fdopen(fd, **kwargs)"  # fdopen has a lot of arguments
-    stack.append(os.fdopen(cast(int, stack.pop()), **
-                           cast(Mapping[str, Any], stack.pop())))
+    'kwargs fd -- os.fdopen(fd, **kwargs)'  # fdopen has a lot of arguments
+    stack.append(
+        os.fdopen(
+            cast(int, stack.pop()), **cast(Mapping[str, Any], stack.pop())
+        )
+    )
