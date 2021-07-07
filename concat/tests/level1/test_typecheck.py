@@ -229,7 +229,6 @@ class TestTypeEquality(unittest.TestCase):
         & StackEffect(TypeSequence([]), TypeSequence([]))
     )
     def test_reflexive_equality(self, type):
-        # print(type)
         self.assertEqual(type, type)
 
 

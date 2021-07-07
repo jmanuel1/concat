@@ -237,5 +237,4 @@ class TestSequenceVariableTypeInference(unittest.TestCase):
             tree.children,
             (concat.level2.typecheck.infer,),
         )
-        print('actual:', type)
         self.assertEqual(type, StackEffect([in_var], [in_var, int_type]))
