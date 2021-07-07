@@ -435,15 +435,12 @@ def infer(
             declared_type, env_with_types = program[-1].stack_effect.to_type(
                 S(env)
             )
-            print('declared type of', name, 'is:', declared_type)
-            print('env_with_types:', env_with_types)
         else:
             # NOTE: To continue the "bidirectional" bent, we will require a
             # type annotation.
             # TODO: Make the return types optional?
             # FIXME: Should be a parse error.
             raise TypeError('must have type annotation on function definition')
-        print(declared_type)
         phi1, inferred_type = concat.level1.typecheck.infer(
             S(env_with_types),
             program[-1].body,
@@ -581,8 +578,6 @@ def typecheck_extension(parsers: concat.level0.parse.ParserDict) -> None:
 
     @parsy.generate
     def stack_effect_type_parser() -> Generator:
-        print('parsing stack effect')
-
         separator = parsers.token('MINUS').times(2)
 
         stack_effect = parsy.seq(  # type: ignore
@@ -596,7 +591,6 @@ def typecheck_extension(parsers: concat.level0.parse.ParserDict) -> None:
 
     @parsy.generate
     def intersection_type_parser() -> Generator:
-        # print('parsing intersection type')
         yield parsers.token('AMPER')
         type_1 = yield parsers['type']
         type_2 = yield parsers['type']

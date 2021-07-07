@@ -235,11 +235,9 @@ class _IntersectionType(IndividualType):
         if not isinstance(other, _IntersectionType):
             return super().__eq__(other)
         result = {self.type_1, self.type_2} == {other.type_1, other.type_2}
-        print('&', result)
         return result
 
     def __hash__(self) -> int:
-        print('& in hash')
         simple_self = self.type_1 & self.type_2
         if not isinstance(simple_self, _IntersectionType):
             return hash(simple_self)
@@ -292,7 +290,6 @@ class TypeSequence(Type, Iterable['StackItemType']):
                     not isinstance(i, SequenceVariable) for i in sequence
                 )
             except AssertionError:
-                print('invalid TypeSequence', sequence)
                 raise
             self._rest = None
             self._individual_types = sequence
@@ -356,7 +353,6 @@ class TypeSequence(Type, Iterable['StackItemType']):
                     )
                 else:
                     # FIXME: handle case where self._rest is in supertype
-                    print(self, supertype)
                     assert False
             elif (
                 not supertype._individual_types
@@ -668,7 +664,6 @@ class _Function(IndividualType):
             raise TypeError(
                 '{} is not a subtype of {}'.format(self, supertype)
             )
-        print(self, fun_type)
         constraints.add(self.input, fun_type.input)
         constraints.add(self.output, fun_type.output)
 
@@ -1262,7 +1257,6 @@ class PythonFunctionType(ObjectType):
             and len(self._type_arguments) == 0
         )
         if self._arity == 0:
-            # print(type(self.input), self.input)
             assert isinstance(self.input, collections.abc.Sequence)
         # assert self._head == py_function_type
         self._args = list(args)
@@ -1338,7 +1332,6 @@ class PythonFunctionType(ObjectType):
     ) -> 'PythonFunctionType':
         # FIXME: use temporary constraints
         for overload in [(self.input, self.output), *self._overloads]:
-            # print('overload:', overload[0])
             for a, b in zip(input_types, overload[0]):
                 try:
                     a.constrain(b, constraints)
@@ -1462,10 +1455,6 @@ int_type = ObjectType(
     nominal=True,
 )
 int_type.set_internal_name('int_type')
-print('_x', _x)
-print('py_function_type:', repr(py_function_type))
-print('int_type.__add__:', repr(_int_add_type))
-print('int_type:', repr(int_type))
 
 # FIXME: Use an iterator interface instead of _x
 _result_type = IndividualVariable()

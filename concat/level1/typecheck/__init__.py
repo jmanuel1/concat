@@ -212,7 +212,6 @@ def infer(
                 try_radd = False
                 try:
                     add_type = type1.get_type_of_attribute('__add__')
-                    print('add_type', add_type)
                 except AttributeError:
                     try_radd = True
                 else:
@@ -223,8 +222,6 @@ def infer(
                             )
                         )
                     if add_type.head != py_function_type:
-                        print('py_function_type', py_function_type)
-                        print('add_type.head', add_type.head)
                         raise TypeError(
                             '__add__ method of type {} is not a Python function, instead it has type {}'.format(
                                 type1, add_type
@@ -236,7 +233,6 @@ def infer(
                                 type1, add_type
                             )
                         )
-                    print(_global_constraints)
                     current_effect = StackEffect(
                         current_effect.input, [*rest, add_type.output],
                     )
@@ -267,7 +263,6 @@ def infer(
                             node.value, type_of_name, type_of_name
                         )
                     )
-                print(node.value, o1, '<=', type_of_name.input)
                 TypeSequence(o1).constrain(
                     type_of_name.input, _global_constraints, polymorphic=True,
                 )
@@ -300,8 +295,6 @@ def infer(
                     if child.value not in gamma:
                         raise NameError(child)
                     name_type = gamma[child.value].instantiate()
-                    print(child.value, name_type)
-                    print(child.value, 'uninstantiated', gamma[child.value])
                     current_subs, current_effect = (
                         S1,
                         StackEffect(i1, [*o1, S1(name_type)]),
@@ -335,7 +328,6 @@ def infer(
                     _global_constraints.add(TypeSequence(o), input_stack)
                 else:
                     input_stack = TypeSequence(o)
-                print('quote-word input:', input_stack)
                 S1, (i1, o1) = infer(
                     gamma,
                     [*quotation.children],
@@ -367,7 +359,6 @@ def infer(
                     TypeSequence([a_bar, body_type, context_manager_type]),
                 )
                 actual_body_type = o[-2].get_type_of_attribute('__call__')
-                print('actual_body_type:', actual_body_type)
                 phi = _global_constraints.equalities_as_substitutions()
                 current_subs, current_effect = (
                     phi(S),
@@ -394,7 +385,6 @@ def infer(
                 phi = S
                 collected_type = TypeSequence(o)
                 for key, value in node.dict_children:
-                    print('collected_type', collected_type)
                     phi1, (i1, o1) = infer(
                         phi(gamma),
                         key,
