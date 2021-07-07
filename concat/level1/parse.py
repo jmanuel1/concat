@@ -3,7 +3,15 @@
 This parser is designed to extend the level zero parser.
 """
 from typing import (
-    Iterable, List, Tuple, Sequence, Optional, Generator, Type, TYPE_CHECKING)
+    Iterable,
+    List,
+    Tuple,
+    Sequence,
+    Optional,
+    Generator,
+    Type,
+    TYPE_CHECKING,
+)
 from concat.level0.lex import Token
 import concat.level0.parse
 from concat.level1.operators import operators
@@ -13,16 +21,19 @@ import concat.parser_combinators
 import abc
 import operator
 import parsy
+
 if TYPE_CHECKING:
     from concat.level2.typecheck import StackEffectTypeNode
 
 
 # Patches to parsy for better errors--useful for debugging
 
+
 class ParseError(parsy.ParseError):
     def line_info(self):
         return '{}:{} ({!r} here)'.format(
-            *self.stream[self.index].start, self.stream[self.index])
+            *self.stream[self.index].start, self.stream[self.index]
+        )
 
 
 # let's lie
@@ -67,15 +78,17 @@ class SubscriptionWordNode(concat.level0.parse.WordNode):
 
 class SliceWordNode(concat.level0.parse.WordNode):
     def __init__(
-        self,
-        children: Iterable[Iterable[concat.level0.parse.WordNode]]
+        self, children: Iterable[Iterable[concat.level0.parse.WordNode]]
     ):
         super().__init__()
         self.start_children, self.stop_children, self.step_children = children
-        self.children = [*self.start_children,
-                         *self.stop_children, *self.step_children]
+        self.children = [
+            *self.start_children,
+            *self.stop_children,
+            *self.step_children,
+        ]
         if self.children:
-            self.location = self.children[0]
+            self.location = self.children[0].location
 
 
 class BytesWordNode(concat.level0.parse.WordNode):
@@ -135,7 +148,7 @@ class DictWordNode(IterableWordNode):
 
     @staticmethod
     def __flatten_pairs(
-        element_words: Iterable[Iterable[Words]]
+        element_words: Iterable[Iterable[Words]],
     ) -> Iterable[Words]:
         for key, value in element_words:
             yield key
@@ -180,7 +193,7 @@ class FuncdefStatementNode(concat.level0.parse.StatementNode):
         annotation: Optional[Iterable[concat.level0.parse.WordNode]],
         body: WordsOrStatements,
         location: Location,
-        stack_effect: Optional['StackEffectTypeNode'] = None
+        stack_effect: Optional['StackEffectTypeNode'] = None,
     ):
         super().__init__()
         self.location = location
@@ -189,7 +202,10 @@ class FuncdefStatementNode(concat.level0.parse.StatementNode):
         self.annotation = annotation
         self.body = body
         self.children = [
-            *self.decorators, *(self.annotation or []), *self.body]
+            *self.decorators,
+            *(self.annotation or []),
+            *self.body,
+        ]
         self.stack_effect = stack_effect
 
 
@@ -202,7 +218,7 @@ class ImportStatementNode(concat.level0.parse.ImportStatementNode):
         self,
         module: str,
         asname: Optional[str] = None,
-        location: Location = (0, 0)
+        location: Location = (0, 0),
     ):
         token = Token()
         token.value = module
@@ -222,7 +238,7 @@ class FromImportStatementNode(ImportStatementNode):
         relative_module: str,
         imported_name: str,
         asname: Optional[str] = None,
-        location: Location = (0, 0)
+        location: Location = (0, 0),
     ):
         super().__init__(relative_module, asname, location)
         self.imported_name = imported_name
@@ -241,7 +257,7 @@ class ClassdefStatementNode(concat.level0.parse.StatementNode):
         location: Location,
         decorators: Optional[Words] = None,
         bases: Iterable[Words] = (),
-        keyword_args: Iterable[Tuple[str, concat.level0.parse.WordNode]] = ()
+        keyword_args: Iterable[Tuple[str, concat.level0.parse.WordNode]] = (),
     ):
         super().__init__()
         self.location = location
@@ -262,7 +278,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         parsers.ref_parser('list-word'),
         parsers.ref_parser('set-word'),
         parsers.ref_parser('dict-word'),
-        parsers.ref_parser('true-word')
+        parsers.ref_parser('true-word'),
     )
 
     # This parses a none word.
@@ -286,13 +302,16 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         parsers.ref_parser('assert-word'),
         parsers.ref_parser('raise-word'),
         parsers.ref_parser('try-word'),
-        parsers.ref_parser('with-word')
+        parsers.ref_parser('with-word'),
     )
 
     # This parses a subscription word.
     # subscription word = LSQB, word*, RSQB ;
-    parsers['subscription-word'] = parsers.token('LSQB') >> parsers.ref_parser(
-        'word').many().map(SubscriptionWordNode) << parsers.token('RSQB')
+    parsers['subscription-word'] = (
+        parsers.token('LSQB')
+        >> parsers.ref_parser('word').many().map(SubscriptionWordNode)
+        << parsers.token('RSQB')
+    )
 
     # This parses a slice word.
     # slice word = LSQB, word*, COLON, word*, [ COLON, word* ], RSQB ;
@@ -324,9 +343,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['bytes-word'] = parsers.token('BYTES').map(BytesWordNode)
 
     def iterable_word_parser(
-        delimiter: str,
-        cls: Type[IterableWordNode],
-        desc: str
+        delimiter: str, cls: Type[IterableWordNode], desc: str
     ) -> 'parsy.Parser[Token, IterableWordNode]':
         @parsy.generate
         def parser() -> Generator:
@@ -334,34 +351,42 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
             element_words = yield word_list_parser
             yield parsers.token('R' + delimiter)
             return cls(element_words, location)
+
         return concat.parser_combinators.desc_cumulatively(parser, desc)
 
     # This parses a tuple word.
     # tuple word = LPAR, word list, RPAR ;
     parsers['tuple-word'] = iterable_word_parser(
-        'PAR', TupleWordNode, 'tuple word')
+        'PAR', TupleWordNode, 'tuple word'
+    )
 
     # This parses a list word.
     # list word = LSQB, word list, RSQB ;
     parsers['list-word'] = iterable_word_parser(
-        'SQB', ListWordNode, 'list word')
+        'SQB', ListWordNode, 'list word'
+    )
 
     # word list = (COMMA | word+, COMMA | word+, (COMMA, word+)+, [ COMMA ]) ;
     @parsy.generate('word list')
     def word_list_parser() -> Generator:
         empty: 'parsy.Parser[Token, List[Words]]' = parsers.token(
-            'COMMA').result([])
-        singleton = parsy.seq(parsers['word'].at_least(
-            1) << parsers.token('COMMA'))
-        multiple_element = parsers['word'].at_least(1).sep_by(
-            parsers.token('COMMA'), min=2) << parsers.token('COMMA').optional()
+            'COMMA'
+        ).result([])
+        singleton = parsy.seq(
+            parsers['word'].at_least(1) << parsers.token('COMMA')
+        )
+        multiple_element = (
+            parsers['word'].at_least(1).sep_by(parsers.token('COMMA'), min=2)
+            << parsers.token('COMMA').optional()
+        )
         element_words = yield (multiple_element | singleton | empty)
         return element_words
 
     # This parses a set word.
     # list word = LBRACE, word list, RBRACE ;
     parsers['set-word'] = iterable_word_parser(
-        'BRACE', SetWordNode, 'set word')
+        'BRACE', SetWordNode, 'set word'
+    )
 
     # This parses a dict word.
     # dict word =
@@ -373,16 +398,20 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     @parsy.generate('dict word')
     def dict_word_parser() -> Generator:
         location = (yield parsers.token('LBRACE')).start
-        elements = key_value_pair.sep_by(parsers.token(
-            'COMMA'), min=0) << parsers.token('COMMA').optional()
+        elements = (
+            key_value_pair.sep_by(parsers.token('COMMA'), min=0)
+            << parsers.token('COMMA').optional()
+        )
         element_words = yield elements
         yield parsers.token('RBRACE')
         return DictWordNode(element_words, location)
 
     parsers['dict-word'] = dict_word_parser
 
-    key_value_pair = parsy.seq(parsers.ref_parser('word').many(
-    ) << parsers.token('COLON'), parsers.ref_parser('word').many())
+    key_value_pair = parsy.seq(
+        parsers.ref_parser('word').many() << parsers.token('COLON'),
+        parsers.ref_parser('word').many(),
+    )
 
     parsers['true-word'] = parsers.token('TRUE').map(TrueWordNode)
 
@@ -402,7 +431,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         parsers.ref_parser('del-statement'),
         parsers.ref_parser('async-funcdef-statement'),
         parsers.ref_parser('classdef-statement'),
-        parsers.ref_parser('funcdef-statement')
+        parsers.ref_parser('funcdef-statement'),
     )
 
     # Parsers a del statement.
@@ -414,22 +443,26 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     #   | attribute word
     #   | subscription word
     #   | slice word ;
-    parsers['del-statement'] = parsers.token(
-        'DEL') >> parsers.ref_parser('target-words').map(DelStatementNode)
+    parsers['del-statement'] = parsers.token('DEL') >> parsers.ref_parser(
+        'target-words'
+    ).map(DelStatementNode)
 
-    parsers['target-words'] = (parsers.ref_parser('target-word').sep_by(
-        parsers.token('COMMA'), min=1) << parsers.token('COMMA').optional()
+    parsers['target-words'] = (
+        parsers.ref_parser('target-word').sep_by(parsers.token('COMMA'), min=1)
+        << parsers.token('COMMA').optional()
     ).map(flatten)
 
     parsers['target-word'] = parsy.alt(
         parsers.ref_parser('name-word'),
-        parsers.token('LPAR') >> parsers.ref_parser(
-            'target-words') << parsers.token('RPAR'),
-        parsers.token('LSQB') >> parsers.ref_parser(
-            'target-words') << parsers.token('RSQB'),
+        parsers.token('LPAR')
+        >> parsers.ref_parser('target-words')
+        << parsers.token('RPAR'),
+        parsers.token('LSQB')
+        >> parsers.ref_parser('target-words')
+        << parsers.token('RSQB'),
         parsers.ref_parser('attribute-word'),
         parsers.ref_parser('subscription-word'),
-        parsers.ref_parser('slice-word')
+        parsers.ref_parser('slice-word'),
     )
 
     # This parses an async function definition.
@@ -446,7 +479,7 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
             func.annotation,
             func.body,
             location,
-            func.stack_effect
+            func.stack_effect,
         )
 
     parsers['async-funcdef-statement'] = async_funcdef_statement_parser
@@ -473,25 +506,33 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         yield parsers.token('COLON')
         body = yield suite
         return FuncdefStatementNode(
-            name, decorators, annotation, body, location, effect_ast)
+            name, decorators, annotation, body, location, effect_ast
+        )
 
     parsers['funcdef-statement'] = concat.parser_combinators.desc_cumulatively(
-        funcdef_statement_parser, 'funcdef statement')
+        funcdef_statement_parser, 'funcdef statement'
+    )
 
     decorator = parsers.token('AT') >> parsers.ref_parser('word')
 
-    annotation_parser = parsers.token(
-        'RARROW') >> parsers.ref_parser('word').many()
+    annotation_parser = (
+        parsers.token('RARROW') >> parsers.ref_parser('word').many()
+    )
 
     @parsy.generate
     def suite():
         words = parsers['word'].at_least(1)
         statement = parsy.seq(parsers['statement'])
-        block_content = (parsers['word'] << parsers.token('NEWLINE').optional()
-                         | parsers['statement'] << parsers.token('NEWLINE')
-                         ).at_least(1)
-        indented_block = parsers.token('NEWLINE').optional() >> parsers.token(
-            'INDENT') >> block_content << parsers.token('DEDENT')
+        block_content = (
+            parsers['word'] << parsers.token('NEWLINE').optional()
+            | parsers['statement'] << parsers.token('NEWLINE')
+        ).at_least(1)
+        indented_block = (
+            parsers.token('NEWLINE').optional()
+            >> parsers.token('INDENT')
+            >> block_content
+            << parsers.token('DEDENT')
+        )
         return (yield indented_block | statement | words)
 
     suite = concat.parser_combinators.desc_cumulatively(suite, 'suite')
@@ -568,13 +609,17 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
             location,
             decorators,
             bases_list,
-            keyword_args
+            keyword_args,
         )
 
     parsers['classdef-statement'] = classdef_statement_parser
 
-    bases = parsers.ref_parser(
-        'tuple-word').map(operator.attrgetter('tuple_children'))
+    bases = parsers.ref_parser('tuple-word').map(
+        operator.attrgetter('tuple_children')
+    )
 
-    keyword_arg = parsy.seq(parsers.token('NAME').map(operator.attrgetter(
-        'value')) << parsers.token('EQUAL'), parsers.ref_parser('word'))
+    keyword_arg = parsy.seq(
+        parsers.token('NAME').map(operator.attrgetter('value'))
+        << parsers.token('EQUAL'),
+        parsers.ref_parser('word'),
+    )
