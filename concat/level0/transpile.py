@@ -117,13 +117,15 @@ def level_0_extension(
         attribute.lineno, attribute.col_offset = node.location
         return attribute
 
+    visitors['pushed-word-special-case'] = pushed_attribute_visitor
+
     @visitors.add_alternative_to('word', 'push-word')
     @assert_annotated_type
     def push_word_visitor(node: concat.level0.parse.PushWordNode) -> ast.expr:
         """Converts a PushWordNode to a Python lambda abstraction."""
-        child = Choice(pushed_attribute_visitor, visitors['word']).visit(
-            list(node.children)[0]
-        )
+        child = Choice(
+            visitors['pushed-word-special-case'], visitors['word']
+        ).visit(list(node.children)[0])
         args = ast.arguments(
             args=[ast.arg('stack', None), ast.arg('stash', None)],
             vararg=None,
