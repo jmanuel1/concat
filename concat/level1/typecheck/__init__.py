@@ -360,15 +360,15 @@ def infer(
                     )
                     current_effect = StackEffect(i, [*o, result_type])
                 else:
-                    if isinstance(node, concat.level0.parse.QuoteWordNode):
-                        input_stack, _ = node.input_stack_type.to_type(gamma)
+                    if isinstance(child, concat.level0.parse.QuoteWordNode) and child.input_stack_type is not None:
+                        input_stack, _ = child.input_stack_type.to_type(gamma)
                     else:
                         # The majority of quotations I've written don't comsume
                         # anything on the stack, so make that the default.
                         input_stack = TypeSequence([])
                     S2, fun_type = infer(
                         S1(gamma),
-                        node.children,
+                        child.children,
                         extensions=extensions,
                         source_dir=source_dir,
                         initial_stack=input_stack,
