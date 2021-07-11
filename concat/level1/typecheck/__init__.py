@@ -304,6 +304,61 @@ def infer(
                         S1,
                         StackEffect(i1, [*o1, S1(name_type)]),
                     )
+                elif isinstance(child, concat.level1.parse.SliceWordNode):
+                    sliceable_object_type = o[-1]
+                    # This doesn't match the evaluation order used by the
+                    # transpiler.
+                    # FIXME: Change the transpiler to fit the type checker.
+                    sub1, start_effect = infer(
+                        gamma,
+                        list(child.start_children),
+                        extensions=extensions,
+                        source_dir=source_dir,
+                        initial_stack=TypeSequence(o[:-1]),
+                    )
+                    start_type = start_effect.output[-1]
+                    o = tuple(start_effect.output[:-1])
+                    sub2, stop_effect = infer(
+                        sub1(gamma),
+                        list(child.stop_children),
+                        extensions=extensions,
+                        source_dir=source_dir,
+                        initial_stack=TypeSequence(o),
+                    )
+                    stop_type = stop_effect.output[-1]
+                    o = tuple(stop_effect.output[:-1])
+                    sub3, step_effect = infer(
+                        sub2(sub1(gamma)),
+                        list(child.step_children),
+                        extensions=extensions,
+                        source_dir=source_dir,
+                        initial_stack=TypeSequence(o),
+                    )
+                    step_type = step_effect.output[-1]
+                    o = tuple(step_effect.output[:-1])
+                    this_slice_type = slice_type[start_type, stop_type, step_type]
+                    getitem_type = sliceable_object_type.get_type_of_attribute(
+                        '__getitem__'
+                    )
+                    getitem_type = getitem_type.get_type_of_attribute('__call__')
+                    getitem_type = getitem_type.instantiate()
+                    if (
+                        not isinstance(getitem_type, PythonFunctionType)
+                        or len(getitem_type.input) != 1
+                    ):
+                        raise TypeError(
+                            '__getitem__ method of {} has incorrect type {}'.format(
+                                node, getitem_type
+                            )
+                        )
+                    getitem_type = getitem_type.select_overload(
+                        (this_slice_type,), _global_constraints
+                    )
+                    result_type = getitem_type.output
+                    current_subs = _global_constraints.equalities_as_substitutions()(
+                        sub3(sub2(sub1(current_subs)))
+                    )
+                    current_effect = StackEffect(i, [*o, result_type])
                 else:
                     if isinstance(node, concat.level0.parse.QuoteWordNode):
                         input_stack, _ = node.input_stack_type.to_type(gamma)
@@ -506,63 +561,6 @@ def infer(
                 current_effect = StackEffect(i, [*o, not_implemented_type])
             elif isinstance(node, concat.level1.parse.EllipsisWordNode):
                 current_effect = StackEffect(i, [*o, ellipsis_type])
-            elif isinstance(node, concat.level1.parse.SliceWordNode):
-                sliceable_object_type = o[-1]
-                # This doesn't match the evaluation order used by the
-                # transpiler.
-                # FIXME: Change the transpiler to fit the type checker.
-                sub1, start_effect = infer(
-                    gamma,
-                    list(node.start_children),
-                    source_dir=source_dir,
-                    initial_stack=TypeSequence(o[:-1]),
-                )
-                start_type = start_effect.output[-1]
-                o = tuple(start_effect.output[:-1])
-                sub2, stop_effect = infer(
-                    sub1(gamma),
-                    list(node.stop_children),
-                    source_dir=source_dir,
-                    initial_stack=TypeSequence(o),
-                )
-                stop_type = stop_effect.output[-1]
-                o = tuple(stop_effect.output[:-1])
-                sub3, step_effect = infer(
-                    sub2(sub1(gamma)),
-                    list(node.step_children),
-                    source_dir=source_dir,
-                    initial_stack=TypeSequence(o),
-                )
-                step_type = step_effect.output[-1]
-                o = tuple(step_effect.output[:-1])
-                this_slice_type = slice_type[start_type, stop_type, step_type]
-                print('this_slice_type', this_slice_type._type_arguments[0])
-                print('this_slice_type', this_slice_type)
-                getitem_type = sliceable_object_type.get_type_of_attribute(
-                    '__getitem__'
-                )
-                # print('__getitem__', getitem_type._overloads)
-                getitem_type = getitem_type.get_type_of_attribute('__call__')
-                # print('__call__', getitem_type._overloads)
-                getitem_type = getitem_type.instantiate()
-                # print('instantiate', getitem_type._overloads)
-                if (
-                    not isinstance(getitem_type, PythonFunctionType)
-                    or len(getitem_type.input) != 1
-                ):
-                    raise TypeError(
-                        '__getitem__ method of {} has incorrect type {}'.format(
-                            node, getitem_type
-                        )
-                    )
-                getitem_type = getitem_type.select_overload(
-                    (this_slice_type,), _global_constraints
-                )
-                result_type = getitem_type.output
-                current_subs = _global_constraints.equalities_as_substitutions()(
-                    sub3(sub2(sub1(current_subs)))
-                )
-                current_effect = StackEffect(i, [*o, result_type])
             else:
                 fail = True
                 original_error = None
