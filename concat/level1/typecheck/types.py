@@ -348,8 +348,10 @@ class TypeSequence(Type, Iterable['StackItemType']):
                 elif self._is_empty() and not supertype._is_empty():
                     raise StackMismatchError(self, supertype)
                 else:
-                    # FIXME: handle case where self._rest is in supertype
-                    assert False
+                    # case where self._rest is in supertype: self._rest cannot
+                    # equal supertype because that would produce an infinite
+                    # sequence type
+                    raise StackMismatchError(self, supertype)
             elif (
                 not supertype._individual_types
                 and supertype._rest
