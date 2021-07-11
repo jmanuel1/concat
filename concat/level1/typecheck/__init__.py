@@ -85,8 +85,14 @@ class AttributeError(TypeError, builtins.AttributeError):
 
 
 class StackMismatchError(TypeError):
-    def __init__(self, actual: 'TypeSequence', expected: 'TypeSequence') -> None:
-        super().__init__('The stack here is {}, but sequence type {} was expected'.format(actual, expected))
+    def __init__(
+        self, actual: 'TypeSequence', expected: 'TypeSequence'
+    ) -> None:
+        super().__init__(
+            'The stack here is {}, but sequence type {} was expected'.format(
+                actual, expected
+            )
+        )
 
 
 class UnhandledNodeTypeError(builtins.NotImplementedError):
@@ -336,11 +342,15 @@ def infer(
                     )
                     step_type = step_effect.output[-1]
                     o = tuple(step_effect.output[:-1])
-                    this_slice_type = slice_type[start_type, stop_type, step_type]
+                    this_slice_type = slice_type[
+                        start_type, stop_type, step_type
+                    ]
                     getitem_type = sliceable_object_type.get_type_of_attribute(
                         '__getitem__'
                     )
-                    getitem_type = getitem_type.get_type_of_attribute('__call__')
+                    getitem_type = getitem_type.get_type_of_attribute(
+                        '__call__'
+                    )
                     getitem_type = getitem_type.instantiate()
                     if (
                         not isinstance(getitem_type, PythonFunctionType)
@@ -360,7 +370,10 @@ def infer(
                     )
                     current_effect = StackEffect(i, [*o, result_type])
                 else:
-                    if isinstance(child, concat.level0.parse.QuoteWordNode) and child.input_stack_type is not None:
+                    if (
+                        isinstance(child, concat.level0.parse.QuoteWordNode)
+                        and child.input_stack_type is not None
+                    ):
                         input_stack, _ = child.input_stack_type.to_type(gamma)
                     else:
                         # The majority of quotations I've written don't comsume
@@ -562,7 +575,6 @@ def infer(
             elif isinstance(node, concat.level1.parse.EllipsisWordNode):
                 current_effect = StackEffect(i, [*o, ellipsis_type])
             else:
-                fail = True
                 original_error = None
                 for extension in extensions or []:
                     try:
@@ -576,11 +588,10 @@ def infer(
                         current_subs, current_effect = extension(
                             gamma, [node], is_top_level, **kwargs
                         )
-                        fail = False
                         break
                     except UnhandledNodeTypeError as e:
                         original_error = e
-                if fail:
+                else:
                     raise UnhandledNodeTypeError(
                         "don't know how to handle '{}'".format(node)
                     ) from original_error
