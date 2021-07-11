@@ -249,8 +249,8 @@ def infer(
                         or [*radd_type.type_arguments[0]] != [object_type]
                     ):
                         raise TypeError(
-                            '__radd__ method of type {} does not have type (object) -> `t, instead it has type {}'.format(
-                                type2, radd_type
+                            '__radd__ method of type {} does not have type (object) -> `t, instead it has type {} (left operand is of type {})'.format(
+                                type2, radd_type, type1
                             )
                         )
                     current_effect = StackEffect(
