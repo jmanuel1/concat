@@ -84,6 +84,11 @@ class AttributeError(TypeError, builtins.AttributeError):
         self._attribute = attribute
 
 
+class StackMismatchError(TypeError):
+    def __init__(self, actual: 'TypeSequence', expected: 'TypeSequence') -> None:
+        super().__init__('The stack here is {}, but sequence type {} was expected'.format(actual, expected))
+
+
 class UnhandledNodeTypeError(builtins.NotImplementedError):
     pass
 
