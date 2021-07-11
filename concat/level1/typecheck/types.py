@@ -1,5 +1,5 @@
 import concat.level1.typecheck
-from concat.level1.typecheck import AttributeError, TypeError
+from concat.level1.typecheck import AttributeError, StackMismatchError, TypeError
 from concat.level1.typecheck.constraints import Constraints
 from typing import (
     Optional,
@@ -346,11 +346,7 @@ class TypeSequence(Type, Iterable['StackItemType']):
                 elif self._rest and self._rest not in _ftv(supertype):
                     self._rest.constrain(supertype, constraints)
                 elif self._is_empty() and not supertype._is_empty():
-                    raise TypeError(
-                        'The stack is empty here, but sequence type {} was expected'.format(
-                            supertype
-                        )
-                    )
+                    raise StackMismatchError(self, supertype)
                 else:
                     # FIXME: handle case where self._rest is in supertype
                     assert False
@@ -375,7 +371,10 @@ class TypeSequence(Type, Iterable['StackItemType']):
                     supertype._individual_types[-1].constrain(
                         self._individual_types[-1], constraints
                     )
-                self[:-1].constrain(supertype[:-1], constraints, polymorphic)
+                try:
+                    self[:-1].constrain(supertype[:-1], constraints, polymorphic)
+                except StackMismatchError:
+                    raise StackMismatchError(self, supertype)
             else:
                 raise TypeError(
                     ' {} is not a subtype of {}'.format(self, supertype)
