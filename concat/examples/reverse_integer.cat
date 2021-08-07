@@ -1,0 +1,23 @@
+# IN: '123'
+# OUT: '321\n'
+
+# https://leetcode.com/problems/reverse-integer/
+# but the 'signed 32-bit int range' requirement is ignored
+# also this uses strings instead of bit-fiddling
+
+from builtins import abs
+from concat.level1.stdlib.pyinterop import to_str
+
+def get_input( -- result:str):
+  {} [,] $input py_call cast (str)
+
+def put_output(string:str -- ):
+  [(),] {} swap $print py_call drop
+
+def simple_str(obj:object -- string:str):
+  None swap None swap to_str
+
+def mag(n:int -- abs_n:int):
+  [(),] {} swap $abs py_call cast (int)
+
+get_input dup None swap to_int 0 >= $(num:str: $[None:None:0 1 -]) $(num:str: $[1:None:None] '-' + $[None:None:0 1 -]) choose put_output
