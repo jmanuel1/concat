@@ -74,6 +74,6 @@ else:
         print('This is a bug in Concat.')
         raise
     else:
-        concat.level2.execute.execute(filename, python_ast, {})
+        concat.level2.execute.execute(filename, python_ast, {}, should_log_stacks=args.debug)
     finally:
         args.file.close()

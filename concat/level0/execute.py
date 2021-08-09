@@ -16,6 +16,21 @@ class ConcatRuntimeError(RuntimeError):
         return 'Stack: {!r}, Stash: {!r}'.format(self._stack, self._stash)
 
 
+class LoggableStack(List[object]):
+    def __init__(self, name: str, should_log=False) -> None:
+        self._name = name
+        self._should_log = should_log
+
+    def append(self, val: object) -> None:
+        super().append(val)
+        self._should_log and print(self._name, ":: after push (.append):", self)
+
+    def pop(self, i: int = -1) -> object:
+        r = super().pop(i)
+        self._should_log and print(self._name, ":: after pop (.pop):", self)
+        return r
+
+
 def _compile(filename: str, ast_: ast.Module) -> types.CodeType:
     return compile(ast_, filename, 'exec')
 
@@ -36,7 +51,7 @@ def _run(
         raise ConcatRuntimeError(globals['stack'], globals['stash']) from e
 
 
-def _do_preamble(globals: Dict[str, object]) -> None:
+def _do_preamble(globals: Dict[str, object], should_log_stacks=False) -> None:
     """Add key-value pairs expected by Concat code to the passed-in mapping.
 
     This mutates the mapping, but anything already in the mapping is preserved."""
@@ -45,8 +60,8 @@ def _do_preamble(globals: Dict[str, object]) -> None:
 
     globals.setdefault('py_call', py_call)
 
-    globals.setdefault('stack', [])
-    globals.setdefault('stash', [])
+    globals.setdefault('stack', LoggableStack('stack', should_log_stacks))
+    globals.setdefault('stash', LoggableStack('stash', should_log_stacks))
 
     def push(val: object) -> Callable[[List[object], List[object]], None]:
         def push_func(stack: List[object], _: List[object]):
@@ -60,8 +75,9 @@ def execute(
     ast: ast.Module,
     globals: Dict[str, object],
     interactive=False,
-    locals: Optional[Dict[str, object]] = None
+    locals: Optional[Dict[str, object]] = None,
+    should_log_stacks=False,
 ) -> None:
-    _do_preamble(globals)
+    _do_preamble(globals, should_log_stacks)
 
     _run(_compile(filename, ast), globals, locals)
