@@ -78,6 +78,7 @@ def _do_preamble(globals: Dict[str, object], interactive=False) -> None:
     globals['loop'] = concat.level1.stdlib.execution.loop
 
     globals['True'] = lambda s, _: s.append(True)
+    globals['False'] = lambda s, _: s.append(False)
 
 
 def execute(
@@ -91,4 +92,10 @@ def execute(
     """Run transpiled Concat level 1 code."""
     _do_preamble(globals, interactive)
     concat.level0.execute.execute(
-        filename, ast, globals, interactive, locals, should_log_stacks=should_log_stacks)
+        filename,
+        ast,
+        globals,
+        interactive,
+        locals,
+        should_log_stacks=should_log_stacks,
+    )
