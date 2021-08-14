@@ -14,8 +14,6 @@ def _do_preamble(globals: Dict[str, object], interactive=False) -> None:
     if interactive:
         globals['@@level-2-interactive'] = True
 
-    globals['False'] = lambda s, _: s.append(False)
-
 
 def execute(
     filename: str,
@@ -28,4 +26,10 @@ def execute(
     """Run transpiled Concat level 1 code."""
     _do_preamble(globals, interactive)
     concat.level1.execute.execute(
-        filename, ast, globals, interactive, locals, should_log_stacks=should_log_stacks)
+        filename,
+        ast,
+        globals,
+        interactive,
+        locals,
+        should_log_stacks=should_log_stacks,
+    )
