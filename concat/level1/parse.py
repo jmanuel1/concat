@@ -203,6 +203,16 @@ class FuncdefStatementNode(concat.level0.parse.StatementNode):
         ]
         self.stack_effect = stack_effect
 
+    def __repr__(self) -> str:
+        return 'FuncdefStatementNode(decorators={!r}, name={!r}, annotation={!r}, body={!r}, stack_effect={!r}, location={!r})'.format(
+            self.decorators,
+            self.name,
+            self.annotation,
+            self.body,
+            self.stack_effect,
+            self.location,
+        )
+
 
 class AsyncFuncdefStatementNode(FuncdefStatementNode):
     pass
