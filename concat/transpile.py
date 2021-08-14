@@ -9,6 +9,7 @@ import concat.level2.preamble_types
 import concat.level2.parse
 import concat.level2.transpile
 import concat.level2.typecheck
+import concat.typecheck
 from typing import cast
 
 

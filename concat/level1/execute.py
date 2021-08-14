@@ -77,6 +77,8 @@ def _do_preamble(globals: Dict[str, object], interactive=False) -> None:
     globals['case'] = concat.level1.stdlib.execution.case
     globals['loop'] = concat.level1.stdlib.execution.loop
 
+    globals['True'] = lambda s, _: s.append(True)
+
 
 def execute(
     filename: str,

@@ -32,4 +32,11 @@ types = {
     'call': ObjectType(_x, {'__call__': StackEffect(
         [_rest_var, StackEffect([_rest_var], [_seq_var])], [_seq_var],
     )}, [_rest_var, _seq_var]),
+    'True': ObjectType(
+        _a_var,
+        {
+            '__call__': StackEffect([_rest_var], [_rest_var, bool_type])
+        },
+        [_rest_var]
+    ),
 }
