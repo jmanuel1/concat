@@ -468,7 +468,7 @@ examples = {
     ),
     'True assert\n': to_tokens(
         ('ENCODING', 'utf-8', (0, 0), (0, 0)),
-        ('TRUE', 'True', (1, 0), (1, 4)),
+        ('NAME', 'True', (1, 0), (1, 4)),
         ('ASSERT', 'assert', (1, 5), (1, 11)),
         ('NEWLINE', '\n', (1, 11), (1, 12)),
         ('ENDMARKER', '', (2, 0), (2, 0))

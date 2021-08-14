@@ -63,11 +63,6 @@ class EllipsisWordNode(SimpleValueWordNode):
         super().__init__(token)
 
 
-class TrueWordNode(SimpleValueWordNode):
-    def __init__(self, token: Token):
-        super().__init__(token)
-
-
 class SubscriptionWordNode(concat.level0.parse.WordNode):
     def __init__(self, children: Iterable[concat.level0.parse.WordNode]):
         super().__init__()
@@ -278,7 +273,6 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         parsers.ref_parser('list-word'),
         parsers.ref_parser('set-word'),
         parsers.ref_parser('dict-word'),
-        parsers.ref_parser('true-word'),
     )
 
     # This parses a none word.
@@ -412,8 +406,6 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         parsers.ref_parser('word').many() << parsers.token('COLON'),
         parsers.ref_parser('word').many(),
     )
-
-    parsers['true-word'] = parsers.token('TRUE').map(TrueWordNode)
 
     parsers['yield-word'] = parsers.token('YIELD').map(YieldWordNode)
 

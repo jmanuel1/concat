@@ -31,7 +31,6 @@ class Lexer:
                         'async': 'ASYNC', 'await': 'AWAIT', 'as': 'AS',
                         'class': 'CLASS', 'is': 'IS', 'in': 'IN', 'or': 'OR',
                         'and': 'AND', 'not': 'NOT',
-                        'True': 'TRUE',
                         'assert': 'ASSERT',
                         'raise': 'RAISE', 'try': 'TRY',
                         'with': 'WITH'}

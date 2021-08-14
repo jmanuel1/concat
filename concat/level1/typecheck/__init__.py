@@ -203,9 +203,6 @@ def infer(
                     current_effect = StackEffect(i, [*o, int_type])
                 else:
                     raise UnhandledNodeTypeError
-            # there's no False word at the moment
-            elif isinstance(node, concat.level1.parse.TrueWordNode):
-                current_effect = StackEffect(i, [*o, bool_type])
             elif isinstance(node, concat.level1.operators.AddWordNode):
                 # rules:
                 # require object_type because the methods should return

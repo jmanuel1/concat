@@ -175,7 +175,6 @@ class TestTypeChecker(unittest.TestCase):
             concat.level1.parse.NoneWordNode: none_type,
             concat.level1.parse.NotImplWordNode: not_implemented_type,
             concat.level1.parse.EllipsisWordNode: ellipsis_type,
-            concat.level1.parse.TrueWordNode: bool_type,
         }
         expected_type = expected_types[type(simple_value_word)]
         self.assertEqual(list(effect.output), [expected_type])

@@ -14,7 +14,6 @@ def _do_preamble(globals: Dict[str, object], interactive=False) -> None:
     if interactive:
         globals['@@level-2-interactive'] = True
 
-    # TODO: Replace the level 1 true word with something like this.
     globals['False'] = lambda s, _: s.append(False)
 
 
