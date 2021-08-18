@@ -378,9 +378,7 @@ class TypeSequence(Type, Iterable['StackItemType']):
                 except StackMismatchError:
                     raise StackMismatchError(self, supertype)
             else:
-                raise TypeError(
-                    ' {} is not a subtype of {}'.format(self, supertype)
-                )
+                raise StackMismatchError(self, supertype)
         else:
             raise TypeError(
                 '{} must be a sequence type, not {}'.format(self, supertype)
