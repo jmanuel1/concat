@@ -44,7 +44,9 @@ import astunparse  # type: ignore
 
 # This should stay in this module since it operates on level 1 types.
 def binary_operator_visitor(operator: str) -> Visitor[object, ast.expr]:
-    expression = 'lambda s,_:s.append(s.pop(-2) {} s.pop())'.format(operator)
+    expression = 'lambda s,_:s.append((lambda a,b: a {} b)(s.pop(-2), s.pop()))'.format(
+        operator
+    )
     return assert_type(concat.level1.operators.OperatorWordNode).then(
         node_to_py_string(expression)
     )
