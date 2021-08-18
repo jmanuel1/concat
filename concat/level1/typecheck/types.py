@@ -1,5 +1,9 @@
 import concat.level1.typecheck
-from concat.level1.typecheck import AttributeError, StackMismatchError, TypeError
+from concat.level1.typecheck import (
+    AttributeError,
+    StackMismatchError,
+    TypeError,
+)
 from concat.level1.typecheck.constraints import Constraints
 from typing import (
     Optional,
@@ -374,7 +378,9 @@ class TypeSequence(Type, Iterable['StackItemType']):
                         self._individual_types[-1], constraints
                     )
                 try:
-                    self[:-1].constrain(supertype[:-1], constraints, polymorphic)
+                    self[:-1].constrain(
+                        supertype[:-1], constraints, polymorphic
+                    )
                 except StackMismatchError:
                     raise StackMismatchError(self, supertype)
             else:
@@ -878,27 +884,18 @@ class ObjectType(IndividualType):
         _head: Optional['ObjectType'] = None,
         **_other_kwargs,
     ) -> None:
-        from concat.level1.typecheck import Substitutions
+        # There should be no need to make the self_type variable unique because
+        # it is treated as a bound variable in apply_substitution. In other
+        # words, it is removed from any substitution received.
+        self._self_type = self_type
 
-        # make the variable unique
-        self._self_type = IndividualVariable()
-        self_sub = Substitutions({self_type: self._self_type})
-
-        self._attributes = {
-            name: self_sub(t) for name, t in attributes.items()
-        }
+        self._attributes = attributes
 
         self._type_parameters = type_parameters
-        self._nominal_supertypes = tuple(
-            self_sub(TypeSequence(nominal_supertypes))
-        )
+        self._nominal_supertypes = nominal_supertypes
         self._nominal = nominal
 
-        type_arguments = [
-            cast(Union[StackItemType, TypeSequence], self_sub(arg))
-            for arg in _type_arguments
-        ]
-        self._type_arguments: TypeArguments = type_arguments
+        self._type_arguments: TypeArguments = _type_arguments
 
         self._head = _head or self
 
@@ -927,17 +924,26 @@ class ObjectType(IndividualType):
         )
 
     def apply_substitution(
-        self, sub: 'concat.level1.typecheck.Substitutions'
+        self,
+        sub: 'concat.level1.typecheck.Substitutions',
+        _should_quantify_over_type_parameters=True,
     ) -> 'ObjectType':
         from concat.level1.typecheck import Substitutions
 
-        sub = Substitutions(
-            {
-                a: i
-                for a, i in sub.items()
-                if a not in self._type_parameters and a is not self._self_type
-            }
-        )
+        if _should_quantify_over_type_parameters:
+            sub = Substitutions(
+                {
+                    a: i
+                    for a, i in sub.items()
+                    # Don't include self_type in substitution, it is bound.
+                    if a not in self._type_parameters
+                    and a is not self._self_type
+                }
+            )
+        else:
+            sub = Substitutions(
+                {a: i for a, i in sub.items() if a is not self._self_type}
+            )
         attributes = cast(
             Dict[str, IndividualType],
             {attr: sub(t) for attr, t in self._attributes.items()},
@@ -949,7 +955,7 @@ class ObjectType(IndividualType):
             cast(Union[StackItemType, TypeSequence], sub(type_argument))
             for type_argument in self._type_arguments
         ]
-        return type(self)(
+        subbed_type = type(self)(
             self._self_type,
             attributes,
             type_parameters=self._type_parameters,
@@ -961,6 +967,7 @@ class ObjectType(IndividualType):
             _head=self._head,
             **self._other_kwargs,
         )
+        return subbed_type
 
     def is_subtype_of(self, supertype: 'Type') -> bool:
         if supertype in self._nominal_supertypes:
@@ -1173,7 +1180,9 @@ class ObjectType(IndividualType):
         from concat.level1.typecheck import Substitutions
 
         sub = Substitutions(zip(self._type_parameters, type_arguments))
-        result = sub(self)
+        result = self.apply_substitution(
+            sub, _should_quantify_over_type_parameters=False
+        )
         # HACK: We remove the parameters and add arguments through mutation.
         result._type_parameters = ()
         result._type_arguments = type_arguments
