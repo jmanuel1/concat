@@ -33,11 +33,18 @@ class _InternalNode(Protocol[_NodeType1_co]):
 class VisitFailureException(Exception):
     __no_object = object()
 
-    def __init__(self, node: object = __no_object) -> None:
+    def __init__(
+        self, node: object = __no_object, type: Optional[Type[object]] = None
+    ) -> None:
         self._node = node
+        self._expected_type = type
 
     def __str__(self) -> str:
         if self._node is not self.__no_object:
+            if self._expected_type is not None:
+                return 'Failed to visit {!r}, expected type {}'.format(
+                    self._node, self._expected_type.__qualname__
+                )
             return 'Failed to visit {!r}'.format(self._node)
         return super().__str__()
 
@@ -198,7 +205,7 @@ def assert_type(type: Type[object]) -> Visitor[object, None]:
     @FunctionalVisitor
     def visitor(node: object) -> None:
         if not isinstance(node, type):
-            raise VisitFailureException(node)
+            raise VisitFailureException(node, type)
 
     return visitor
 

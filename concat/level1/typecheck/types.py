@@ -924,7 +924,9 @@ class ObjectType(IndividualType):
         )
 
     def apply_substitution(
-        self, sub: 'concat.level1.typecheck.Substitutions', _should_quantify_over_type_parameters=True
+        self,
+        sub: 'concat.level1.typecheck.Substitutions',
+        _should_quantify_over_type_parameters=True,
     ) -> 'ObjectType':
         from concat.level1.typecheck import Substitutions
 
@@ -934,16 +936,13 @@ class ObjectType(IndividualType):
                     a: i
                     for a, i in sub.items()
                     # Don't include self_type in substitution, it is bound.
-                    if a not in self._type_parameters and a is not self._self_type
+                    if a not in self._type_parameters
+                    and a is not self._self_type
                 }
             )
         else:
             sub = Substitutions(
-                {
-                    a: i
-                    for a, i in sub.items()
-                    if a is not self._self_type
-                }
+                {a: i for a, i in sub.items() if a is not self._self_type}
             )
         attributes = cast(
             Dict[str, IndividualType],
@@ -968,10 +967,13 @@ class ObjectType(IndividualType):
             _head=self._head,
             **self._other_kwargs,
         )
+        if self._internal_name is not None:
+            subbed_type.set_internal_name(self._internal_name)
         return subbed_type
 
+    # TODO: Remove is_subtype_of and replace uses with constraints
     def is_subtype_of(self, supertype: 'Type') -> bool:
-        if supertype in self._nominal_supertypes:
+        if supertype in self._nominal_supertypes or supertype == object_type:
             return True
         if isinstance(supertype, ObjectType) and supertype._nominal:
             return False
@@ -1035,7 +1037,9 @@ class ObjectType(IndividualType):
             raise TypeError(
                 '{} and {} do not have the same arity'.format(self, supertype)
             )
-
+        # every object type is a subtype of object_type
+        if supertype == object_type:
+            return
         # Don't forget that there's nominal subtyping too.
         if supertype._nominal:
             if (
@@ -1100,7 +1104,16 @@ class ObjectType(IndividualType):
                 )
             return self._internal_name
         assert self._internal_name is None
-        return repr(self)
+        return '{}({}, {}, {}, {}, {}, {}, {})'.format(
+            type(self).__qualname__,
+            self._self_type,
+            _mapping_to_str(self._attributes),
+            _iterable_to_str(self._type_parameters),
+            _iterable_to_str(self._nominal_supertypes),
+            self._nominal,
+            _iterable_to_str(self._type_arguments),
+            None if self._head is self else self._head,
+        )
 
     def set_internal_name(self, name: str) -> None:
         self._internal_name = name
@@ -1181,7 +1194,9 @@ class ObjectType(IndividualType):
         from concat.level1.typecheck import Substitutions
 
         sub = Substitutions(zip(self._type_parameters, type_arguments))
-        result = self.apply_substitution(sub, _should_quantify_over_type_parameters=False)
+        result = self.apply_substitution(
+            sub, _should_quantify_over_type_parameters=False
+        )
         # HACK: We remove the parameters and add arguments through mutation.
         result._type_parameters = ()
         result._type_arguments = type_arguments
@@ -1412,21 +1427,32 @@ def _iterable_to_str(iterable: Iterable) -> str:
     return '[' + ', '.join(map(str, iterable)) + ']'
 
 
+def _mapping_to_str(mapping: Mapping) -> str:
+    return (
+        '{'
+        + ', '.join(
+            '{}: {}'.format(key, value) for key, value in mapping.items()
+        )
+        + '}'
+    )
+
+
 # expose _Function as StackEffect
 StackEffect = _Function
 
 _x = IndividualVariable()
 
-
 float_type = ObjectType(_x, {}, nominal=True)
 no_return_type = _NoReturnType()
-object_type = ObjectType(_x, {})
+object_type = ObjectType(_x, {}, nominal=True)
+object_type.set_internal_name('object_type')
 
 _arg_type_var = SequenceVariable()
 _return_type_var = IndividualVariable()
 py_function_type = PythonFunctionType(
     _x, {}, type_parameters=[_arg_type_var, _return_type_var]
 )
+py_function_type.set_internal_name('py_function_type')
 
 _invert_result_var = IndividualVariable()
 invertible_type = ObjectType(
@@ -1448,17 +1474,18 @@ subtractable_type = ObjectType(
     [_sub_operand_type, _sub_result_type],
 )
 
+bool_type = ObjectType(_x, {}, nominal=True)
+bool_type.set_internal_name('bool_type')
+
 _int_add_type = py_function_type[TypeSequence([object_type]), _x]
-# FIXME: subtractable_type are structural supertypes
-# but for now they are both explicit
 int_type = ObjectType(
     _x,  # FIXME: Make unique for each type.
     {
         '__add__': _int_add_type,
+        '__sub__': _int_add_type,
         '__invert__': py_function_type[TypeSequence([]), _x],
+        '__le__': py_function_type[TypeSequence([_x]), bool_type],
     },
-    [],
-    [subtractable_type],
     nominal=True,
 )
 int_type.set_internal_name('int_type')
@@ -1468,6 +1495,7 @@ _result_type = IndividualVariable()
 iterable_type = ObjectType(
     _x, {'__iter__': py_function_type[TypeSequence([]), _x]}, [_result_type]
 )
+iterable_type.set_internal_name('iterable_type')
 
 context_manager_type = ObjectType(
     _x,
@@ -1478,13 +1506,19 @@ context_manager_type = ObjectType(
         '__exit__': py_function_type,
     },
 )
+context_manager_type.set_internal_name('context_manager_type')
+
 optional_type = _OptionalType()
+optional_type.set_internal_name('optional_type')
 
 none_type = ObjectType(_x, {})
 none_type.set_internal_name('none_type')
 
-dict_type = ObjectType(_x, {}, [], [iterable_type])
-bool_type = ObjectType(_x, {})
+dict_type = ObjectType(
+    _x, {'__iter__': py_function_type[TypeSequence([]), object_type]}
+)
+dict_type.set_internal_name('dict_type')
+
 file_type = ObjectType(
     _x,
     {
@@ -1496,7 +1530,9 @@ file_type = ObjectType(
     [],
     # context_manager_type is a structural supertype
     [iterable_type],
+    nominal=True,
 )
+file_type.set_internal_name('file_type')
 
 _start_type_var, _stop_type_var, _step_type_var = (
     IndividualVariable(),
@@ -1524,16 +1560,43 @@ list_type = ObjectType(
 )
 list_type.set_internal_name('list_type')
 
-str_type = ObjectType(
-    _x, {'__getitem__': py_function_type[TypeSequence([int_type]), _x]}
+_str_getitem_type = py_function_type[
+    TypeSequence([int_type]), _x
+].with_overload(
+    [
+        slice_type[
+            optional_type[int_type,],
+            optional_type[int_type,],
+            optional_type[int_type,],
+        ]
+    ],
+    _x,
 )
+str_type = ObjectType(
+    _x,
+    {
+        '__getitem__': _str_getitem_type,
+        '__add__': py_function_type[TypeSequence([object_type]), _x],
+        'find': py_function_type[
+            TypeSequence(
+                [_x, optional_type[int_type,], optional_type[int_type,]]
+            ),
+            int_type,
+        ],
+    },
+    nominal=True,
+)
+str_type.set_internal_name('str_type')
 
 ellipsis_type = ObjectType(_x, {})
 not_implemented_type = ObjectType(_x, {})
+
 tuple_type = ObjectType(
     _x,
     {'__getitem__': py_function_type}
     # iterable_type is a structural supertype
 )
+tuple_type.set_internal_name('tuple_type')
+
 base_exception_type = ObjectType(_x, {})
 module_type = ObjectType(_x, {})

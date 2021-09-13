@@ -27,7 +27,7 @@ from concat.level1.typecheck.types import (
 from concat.level1.preamble_types import types
 import concat.tests.strategies
 import unittest
-from hypothesis import HealthCheck, example, given, note, settings
+from hypothesis import HealthCheck, assume, example, given, note, settings
 from hypothesis.strategies import (
     SearchStrategy,
     booleans,
@@ -180,7 +180,7 @@ class TestTypeChecker(unittest.TestCase):
         self.assertEqual(list(effect.output), [expected_type])
 
     def test_slice_inference(self) -> None:
-        slice_prog = '[1, 2, 3, 4, 5, 6, 7, 8] [1:None:2]\n'
+        slice_prog = '[1, 2, 3, 4, 5, 6, 7, 8] $[1:None:2]\n'
         tree = parse(slice_prog)
         _, type = concat.level1.typecheck.infer(
             Environment(types), tree.children, is_top_level=True,
@@ -242,6 +242,14 @@ class TestSubtyping(unittest.TestCase):
         fun1 = StackEffect([type1], [type2])
         fun2 = StackEffect([no_return_type], [object_type])
         self.assertLessEqual(fun1, fun2)
+
+    @given(from_type(IndividualType))
+    def test_no_return_is_bottom_type(self, type):
+        self.assertLessEqual(no_return_type, type)
+
+    @given(from_type(IndividualType))
+    def test_object_is_top_type(self, type):
+        self.assertLessEqual(type, object_type)
 
     __attributes_generator = dictionaries(
         text(max_size=25), from_type(IndividualType), max_size=5  # type: ignore

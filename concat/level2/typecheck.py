@@ -11,9 +11,11 @@ from concat.level1.typecheck.types import (
     IndividualType,
     IndividualVariable,
     ObjectType,
+    PythonFunctionType,
     SequenceVariable,
     StackEffect,
     StackItemType,
+    StackMismatchError,
     Type,
     TypeSequence,
     base_exception_type,
@@ -182,10 +184,12 @@ class TypeSequenceNode(TypeNode):
 
     def to_type(self, env: Environment) -> Tuple[TypeSequence, Environment]:
         sequence: List[StackItemType] = []
-        if self._sequence_variable is not None:
-            if self._sequence_variable not in env:
-                env = env.copy()
-                env[self._sequence_variable] = SequenceVariable()
+        if self._sequence_variable is None:
+            # implicit stack polymorphism
+            sequence.append(SequenceVariable())
+        elif self._sequence_variable not in env:
+            env = env.copy()
+            env[self._sequence_variable] = SequenceVariable()
             sequence.append(env[self._sequence_variable])
         for type_node in self._individual_type_items:
             type, env = type_node.to_type(env)
@@ -272,8 +276,15 @@ subscriptable_type = ObjectType(
 )
 
 # TODO: Separate type-check-time environment from runtime environment.
+_stack_type_var = SequenceVariable()
 builtin_environment = Environment(
     {
+        'to_int': StackEffect(
+            TypeSequence(
+                [_stack_type_var, optional_type[int_type,], object_type]
+            ),
+            TypeSequence([_stack_type_var, int_type]),
+        ),
         'tuple': tuple_type,
         'BaseException': base_exception_type,
         'NoReturn': no_return_type,
@@ -380,7 +391,17 @@ def infer(
         except (KeyError, AttributeError):
             # attempt instrospection to get a more specific type
             if callable(getattr(module, program[-1].imported_name)):
-                env[imported_name] = py_function_type
+                args_var = SequenceVariable()
+                env[imported_name] = ObjectType(
+                    IndividualVariable(),
+                    {
+                        '__call__': py_function_type[
+                            TypeSequence([args_var]), object_type
+                        ],
+                    },
+                    type_parameters=[args_var],
+                    nominal=True,
+                )
         return subs, StackEffect(input, output)
     elif isinstance(program[-1], concat.level1.parse.ImportStatementNode):
         # TODO: Support all types of import correctly.
@@ -425,52 +446,69 @@ def infer(
 
         _global_constraints.add(TypeSequence(index_output), index_types)
         final_subs = _global_constraints.equalities_as_substitutions()
-        return final_subs, final_subs(StackEffect(input, result_types))
+        return final_subs(subs), final_subs(StackEffect(input, result_types))
+    elif isinstance(program[-1], concat.level1.operators.SubtractWordNode):
+        # FIXME: We should check if the other operand supports __rsub__ if the
+        # first operand doesn't support __sub__.
+        other_operand_type_var = concat.level1.typecheck.IndividualVariable()
+        result_type_var = concat.level1.typecheck.IndividualVariable()
+        subtractable_interface = subtractable_type[
+            other_operand_type_var, result_type_var
+        ]
+        seq_var = concat.level1.typecheck.SequenceVariable()
+        _global_constraints.add(
+            TypeSequence(output),
+            TypeSequence(
+                [seq_var, subtractable_interface, other_operand_type_var]
+            ),
+        )
+        final_subs = _global_constraints.equalities_as_substitutions()
+        return (
+            final_subs(subs),
+            final_subs(StackEffect(input, [seq_var, result_type_var])),
+        )
     elif isinstance(program[-1], concat.level1.parse.FuncdefStatementNode):
         S = subs
         f = StackEffect(input, output)
         name = program[-1].name
         declared_type: Optional[StackEffect]
         if program[-1].stack_effect:
-            declared_type, env_with_types = program[-1].stack_effect.to_type(
-                S(env)
-            )
+            declared_type, _ = program[-1].stack_effect.to_type(S(env))
         else:
             # NOTE: To continue the "bidirectional" bent, we will require a
             # type annotation.
             # TODO: Make the return types optional?
             # FIXME: Should be a parse error.
             raise TypeError('must have type annotation on function definition')
+        recursion_env = env.copy()
+        recursion_env[name] = declared_type.generalized_wrt(S(env))
         phi1, inferred_type = concat.level1.typecheck.infer(
-            S(env_with_types),
+            S(recursion_env),
             program[-1].body,
             is_top_level=False,
             extensions=extensions,
             initial_stack=declared_type.input,
         )
-        if declared_type is not None:
-            declared_type = S(declared_type)
-            declared_type_inst = declared_type.instantiate()
-            inferred_type_inst = S(inferred_type).instantiate()
-            # We want to check that the inferred inputs are supertypes of the
-            # declared inputs, and that the inferred outputs are subtypes of
-            # the declared outputs. Thus, inferred_type should be a subtype
-            # declared_type.
-            _global_constraints.add(inferred_type_inst, declared_type_inst)
-            phi2 = _global_constraints.equalities_as_substitutions()
-            if not phi2(inferred_type_inst).is_subtype_of(
-                phi2(declared_type_inst)
-            ):
-                message = (
-                    'declared function type {} is not compatible with '
-                    'inferred type {}'
-                )
-                raise TypeError(
-                    message.format(phi2(declared_type), phi2(inferred_type))
-                )
-            effect = phi2(declared_type)
-        else:
-            effect = S(inferred_type)
+        declared_type = S(declared_type)
+        declared_type_inst = declared_type.instantiate()
+        inferred_type_inst = S(inferred_type).instantiate()
+        # We want to check that the inferred inputs are supertypes of the
+        # declared inputs, and that the inferred outputs are subtypes of
+        # the declared outputs. Thus, inferred_type should be a subtype
+        # declared_type.
+        _global_constraints.add(inferred_type_inst, declared_type_inst)
+        phi2 = _global_constraints.equalities_as_substitutions()
+        if not phi2(inferred_type_inst).is_subtype_of(
+            phi2(declared_type_inst)
+        ):
+            message = (
+                'declared function type {} is not compatible with '
+                'inferred type {}'
+            )
+            raise TypeError(
+                message.format(phi2(declared_type), phi2(inferred_type))
+            )
+        effect = phi2(declared_type)
         # we *mutate* the type environment
         env[name] = effect.generalized_wrt(S(env))
         return S, f
@@ -480,24 +518,96 @@ def infer(
         # special case for subscription words
         if isinstance(child, concat.level1.parse.SubscriptionWordNode):
             S2, (i2, o2) = concat.level1.typecheck.infer(
-                subs(env), child.children, extensions=extensions
+                subs(env),
+                child.children,
+                extensions=extensions,
+                is_top_level=False,
+                source_dir=source_dir,
+                initial_stack=output,
             )
             _global_constraints.add(S2(TypeSequence(output)), TypeSequence(i2))
             # FIXME: Should be generic
             subscriptable_interface = subscriptable_type[
-                int_type, str_type,
+                int_type, IndividualVariable(),
             ]
+
             expected_o2 = TypeSequence(
                 [rest_var, subscriptable_interface, int_type,]
             )
-            _global_constraints.add(subs(TypeSequence(o2)), expected_o2)
+            if len(o2) < 2:
+                raise StackMismatchError(TypeSequence(o2), expected_o2)
+            _global_constraints.add(o2[-1], int_type)
+            getitem_type = (
+                o2[-2]
+                .get_type_of_attribute('__getitem__')
+                .instantiate()
+                .get_type_of_attribute('__call__')
+                .instantiate()
+            )
+            if not isinstance(getitem_type, PythonFunctionType):
+                raise TypeError(
+                    '__getitem__ of type {} is not a Python function (has type {})'.format(
+                        o2[-2], getitem_type
+                    )
+                )
+            getitem_type = getitem_type.select_overload(
+                [int_type], _global_constraints
+            )
             subs = _global_constraints.equalities_as_substitutions()(S2(subs))
-            effect = subs(StackEffect(input, [rest_var, str_type]))
+            effect = subs(StackEffect(input, [rest_var, getitem_type.output]))
             return subs, effect
         else:
             raise NotImplementedError(child)
+    elif isinstance(
+        program[-1], concat.level1.operators.GreaterThanOrEqualToWordNode
+    ):
+        a_type, b_type = output[-2:]
+        try:
+            ge_type = a_type.get_type_of_attribute('__ge__')
+            if not isinstance(ge_type, PythonFunctionType):
+                raise TypeError(
+                    'method __ge__ of type {} should be a Python function'.format(
+                        ge_type
+                    )
+                )
+            ge_type.select_overload([b_type], _global_constraints)
+        except TypeError:
+            le_type = b_type.get_type_of_attribute('__le__')
+            if not isinstance(le_type, PythonFunctionType):
+                raise TypeError(
+                    'method __le__ of type {} should be a Python function'.format(
+                        le_type
+                    )
+                )
+            le_type.select_overload([a_type], _global_constraints)
+        subs = _global_constraints.equalities_as_substitutions()(subs)
+        return (
+            subs,
+            StackEffect(input, TypeSequence([*output[:-2], bool_type])),
+        )
+    elif isinstance(
+        program[-1],
+        (
+            concat.level1.operators.IsWordNode,
+            concat.level1.operators.AndWordNode,
+            concat.level1.operators.OrWordNode,
+            concat.level1.operators.EqualToWordNode,
+        ),
+    ):
+        if (
+            len(output) < 2
+            or not isinstance(output[-1], IndividualType)
+            or not isinstance(output[-2], IndividualType)
+        ):
+            raise StackMismatchError(
+                TypeSequence(output), TypeSequence([object_type, object_type])
+            )
+        return (
+            subs,
+            StackEffect(input, TypeSequence([*output[:-2], bool_type])),
+        )
     else:
-        raise NotImplementedError
+        raise NotImplementedError(program[-1])
 
 
 def _ensure_type(
@@ -513,7 +623,9 @@ def _ensure_type(
         # are unconstrained. In other words, it would basically become an Any
         # type.
         type = IndividualVariable()
-    elif isinstance(typename, (NamedTypeNode, StackEffectTypeNode)):
+    elif isinstance(
+        typename, (_GenericTypeNode, NamedTypeNode, StackEffectTypeNode)
+    ):
         type, env = typename.to_type(env)
     else:
         raise NotImplementedError(
@@ -603,7 +715,7 @@ def typecheck_extension(parsers: concat.level0.parse.ParserDict) -> None:
         type = yield parsers['nonparameterized-type']
         yield parsers.token('LSQB')
         type_arguments = yield parsers['type'].sep_by(
-            parsers.token('COMMA'), 1
+            parsers.token('COMMA'), min=1
         )
         yield parsers.token('RSQB')
         return _GenericTypeNode(type.location, type, type_arguments)
