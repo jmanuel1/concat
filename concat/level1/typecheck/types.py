@@ -282,19 +282,13 @@ class SequenceVariable(_Variable):
 class TypeSequence(Type, Iterable['StackItemType']):
     def __init__(self, sequence: Sequence['StackItemType']) -> None:
         self._rest: Optional[SequenceVariable]
-        # FIXME: This assertion shoudn't fail, but it does.
-        assert not isinstance(sequence, TypeSequence)
-        assert all(not isinstance(i, TypeSequence) for i in sequence)
         if sequence and isinstance(sequence[0], SequenceVariable):
             self._rest = sequence[0]
             self._individual_types = sequence[1:]
         else:
-            try:
-                assert all(
-                    not isinstance(i, SequenceVariable) for i in sequence
-                )
-            except AssertionError:
-                raise
+            assert not any(
+                isinstance(i, SequenceVariable) for i in sequence
+            )
             self._rest = None
             self._individual_types = sequence
 
