@@ -902,6 +902,8 @@ class ObjectType(IndividualType):
         if 'nominal' in self._other_kwargs:
             del self._other_kwargs['nominal']
 
+        self._instantiations: Dict[TypeArguments, ObjectType] = {}
+
     def collapse_bounds(self) -> 'ObjectType':
         return ObjectType(
             self._self_type,
@@ -934,10 +936,16 @@ class ObjectType(IndividualType):
                     and a is not self._self_type
                 }
             )
+            # if no free type vars will be substituted, just return self
+            if not any(free_var in sub for free_var in _ftv(self)):
+                return self
         else:
             sub = Substitutions(
                 {a: i for a, i in sub.items() if a is not self._self_type}
             )
+            # if no free type vars will be substituted, just return self
+            if not any(free_var in sub for free_var in {*_ftv(self), *self._type_parameters}):
+                return self
         attributes = cast(
             Dict[str, IndividualType],
             {attr: sub(t) for attr, t in self._attributes.items()},
@@ -1118,6 +1126,10 @@ class ObjectType(IndividualType):
 
         if not isinstance(other, ObjectType):
             return super().__eq__(other)
+
+        if self._nominal or other._nominal:
+            return self is other
+
         sub = Substitutions({self._self_type: other._self_type})
         subbed_attributes = {
             attr: sub(t) for attr, t in self._attributes.items()
@@ -1157,8 +1169,6 @@ class ObjectType(IndividualType):
                 type1 = tuple(type1)
             if type1 != type2:
                 return False
-        if self._nominal != other._nominal:
-            return False
         return True
 
     _hash_variable = None
@@ -1187,6 +1197,13 @@ class ObjectType(IndividualType):
     ) -> 'ObjectType':
         from concat.level1.typecheck import Substitutions
 
+        if self._arity != len(type_arguments):
+            raise TypeError('type constructor {} given {} arguments, expected {} arguments'.format(self, len(type_arguments), self._arity))
+
+        type_arguments = tuple(type_arguments)
+        if type_arguments in self._instantiations:
+            return self._instantiations[type_arguments]
+
         sub = Substitutions(zip(self._type_parameters, type_arguments))
         result = self.apply_substitution(
             sub, _should_quantify_over_type_parameters=False
@@ -1194,6 +1211,9 @@ class ObjectType(IndividualType):
         # HACK: We remove the parameters and add arguments through mutation.
         result._type_parameters = ()
         result._type_arguments = type_arguments
+
+        self._instantiations[type_arguments] = result
+
         return result
 
     def instantiate(self) -> 'ObjectType':
