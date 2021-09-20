@@ -337,7 +337,7 @@ def _generate_type_of_innermost_module(
 
 def _generate_module_type(
     components: Sequence[str], _full_name: Optional[str] = None, source_dir='.'
-) -> ForAll:
+) -> ObjectType:
     module_t: IndividualType = module_type
     if _full_name is None:
         _full_name = '.'.join(components)
@@ -347,16 +347,28 @@ def _generate_module_type(
             {
                 components[1]: _generate_module_type(
                     components[1:], _full_name, source_dir
-                ).type,
+                )[_seq_var,],
             },
         )
         effect = StackEffect([_seq_var], [_seq_var, module_type])
-        return ForAll([_seq_var], effect)
+        return ObjectType(
+            IndividualVariable(),
+            {
+                '__call__': effect,
+            },
+            [_seq_var]
+        )
     else:
         innermost_type = _generate_type_of_innermost_module(
             _full_name, source_dir
         )
-        return ForAll([_seq_var], innermost_type)
+        return ObjectType(
+            IndividualVariable(),
+            {
+                '__call__': innermost_type,
+            },
+            [_seq_var]
+        )
 
 
 def infer(

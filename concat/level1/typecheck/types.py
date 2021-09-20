@@ -55,6 +55,10 @@ class Type(abc.ABC):
         except concat.level1.typecheck.AttributeError:
             return False
 
+    @abc.abstractproperty
+    def attributes(self) -> Mapping[str, 'Type']:
+        pass
+
     @abc.abstractmethod
     def free_type_variables(self) -> Set['_Variable']:
         pass
@@ -74,7 +78,7 @@ class Type(abc.ABC):
 
 
 class IndividualType(Type, abc.ABC):
-    def to_for_all(self) -> 'ForAll':
+    def to_for_all(self) -> Type:
         return ForAll([], self)
 
     def __and__(self, other: object) -> 'IndividualType':
@@ -173,6 +177,11 @@ class IndividualVariable(_Variable, IndividualType):
                 name
             )
 
+    @property
+    def attributes(self) -> Mapping[str, 'IndividualType']:
+        # FIXME: Constraints?
+        return cast(Mapping[str, IndividualType], self.bound.attributes)
+
     def apply_substitution(
         self, sub: 'concat.level1.typecheck.Substitutions'
     ) -> IndividualType:
@@ -227,6 +236,10 @@ class _IntersectionType(IndividualType):
         except concat.level1.typecheck.TypeError:
             return self.type_2.get_type_of_attribute(name)
 
+    @property
+    def attributes(self) -> NoReturn:
+        raise NotImplementedError('stop using _IntersectionType')
+
     def free_type_variables(self) -> Set['_Variable']:
         raise NotImplementedError('time to get rid of _IntersectionType?')
 
@@ -272,6 +285,12 @@ class SequenceVariable(_Variable):
         constraints.add(supertype, self)
 
     def get_type_of_attribute(self, name: str) -> NoReturn:
+        raise TypeError(
+            'the sequence type {} does not hold attributes'.format(self)
+        )
+
+    @property
+    def attributes(self) -> NoReturn:
         raise TypeError(
             'the sequence type {} does not hold attributes'.format(self)
         )
@@ -388,6 +407,12 @@ class TypeSequence(Type, Iterable['StackItemType']):
             ftv |= t.free_type_variables()
         return ftv
 
+    @property
+    def attributes(self) -> NoReturn:
+        raise TypeError(
+            'the sequence type {} does not hold attributes'.format(self)
+        )
+
     def __bool__(self) -> bool:
         return not self._is_empty()
 
@@ -427,102 +452,14 @@ class TypeSequence(Type, Iterable['StackItemType']):
         return hash(tuple(self.as_sequence()))
 
 
-# FIXME: Subtyping of universal types.
-class ForAll(Type):
-    def __init__(
-        self, quantified_variables: List[_Variable], type: 'IndividualType'
-    ) -> None:
-        super().__init__()
-        self.quantified_variables = quantified_variables
-        self.type = type
-
-    def to_for_all(self) -> 'ForAll':
-        return self
-
-    def __getitem__(
-        self,
-        type_arguments: Sequence[
-            Union['StackItemType', Sequence['StackItemType']]
-        ],
-    ) -> IndividualType:
-        sub = concat.level1.typecheck.Substitutions()
-        if len(type_arguments) != len(self.quantified_variables):
-            raise concat.level1.typecheck.TypeError(
-                'type argument mismatch in forall type: arguments are {!r}, '
-                'quantified variables are {!r}'.format(
-                    type_arguments, self.quantified_variables
-                )
-            )
-        for argument, variable in zip(
-            type_arguments, self.quantified_variables
-        ):
-            if isinstance(variable, IndividualVariable) and not isinstance(
-                argument, IndividualType
-            ):
-                raise concat.level1.typecheck.TypeError(
-                    'type argument mismatch in forall type: expected '
-                    'individual type for {!r}, got {!r}'.format(
-                        variable, argument
-                    )
-                )
-            if isinstance(variable, SequenceVariable) and not isinstance(
-                argument, (SequenceVariable, collections.abc.Sequence)
-            ):
-                raise concat.level1.typecheck.TypeError(
-                    'type argument mismatch in forall type: expected sequence '
-                    'type for {!r}, got {!r}'.format(variable, argument)
-                )
-            if isinstance(argument, collections.abc.Sequence):
-                sub[variable] = [*argument]
-            else:
-                sub[variable] = argument
-        return cast(IndividualType, sub(self.type))
-
-    def __str__(self) -> str:
-        string = 'for all '
-        string += ' '.join(map(str, self.quantified_variables))
-        string += '. {}'.format(self.type)
-        return string
-
-    def __and__(self, other: object) -> 'ForAll':
-        if not isinstance(other, ForAll):
-            return NotImplemented
-        # TODO: Make variables unique
-        # FIXME: This could inadvertently capture free variables in either
-        # operand
-        return ForAll(
-            self.quantified_variables + other.quantified_variables,
-            self.type & other.type,
-        )
-
-    def apply_substitution(
-        self, sub: 'concat.level1.typecheck.Substitutions'
-    ) -> 'ForAll':
-        return ForAll(
-            self.quantified_variables,
-            cast(
-                IndividualType,
-                concat.level1.typecheck.Substitutions(
-                    {
-                        a: i
-                        for a, i in sub.items()
-                        if a not in self.quantified_variables
-                    }
-                )(self.type),
-            ),
-        )
-
-    def constrain(self, supertype: Type, constraints: Constraints) -> None:
-        raise NotImplementedError('time to get rid of ForAll')
-
-    def instantiate(self) -> 'IndividualType':
-        subs = concat.level1.typecheck.Substitutions(
-            {a: type(a)() for a in self.quantified_variables}
-        )
-        return cast(IndividualType, subs(self.type))
-
-    def free_type_variables(self) -> Set['_Variable']:
-        raise NotImplementedError('time to get rid of ForAll')
+# TODO: Actually get rid of ForAll uses. This is a temporary measure since I
+# don't want to do that work right now.
+def ForAll(type_parameters: Sequence['_Variable'], type: Type) -> Type:
+    return ObjectType(
+        IndividualVariable(),
+        type.attributes,
+        type_parameters,
+    )
 
 
 # TODO: Rename to StackEffect at all use sites.
@@ -725,6 +662,10 @@ class _Function(IndividualType):
             return self
         raise concat.level1.typecheck.AttributeError(self, name)
 
+    @property
+    def attributes(self) -> Mapping[str, 'StackEffect']:
+        return {'__call__': self}
+
     def apply_substitution(
         self, sub: 'concat.level1.typecheck.Substitutions'
     ) -> '_Function':
@@ -807,20 +748,15 @@ def _intersect_sequences(
 
 
 # FIXME: This should be a method on types
-def inst(sigma: Union[ForAll, _Function]) -> IndividualType:
+def inst(sigma: Union[_IntersectionType, _Function]) -> IndividualType:
     """This is based on the inst function described by Kleffner."""
-    if isinstance(sigma, ForAll):
-        subs = concat.level1.typecheck.Substitutions(
-            {a: type(a)() for a in sigma.quantified_variables}
-        )
-        return cast(IndividualType, subs(sigma.type))
     if isinstance(sigma, _Function):
         input = [
-            inst(type) if isinstance(type, (ForAll, _Function)) else type
+            inst(type) if isinstance(type, _Function) else type
             for type in sigma.input
         ]
         output = [
-            inst(type) if isinstance(type, (ForAll, _Function)) else type
+            inst(type) if isinstance(type, _Function) else type
             for type in sigma.output
         ]
         return _Function(input, output)
@@ -1019,6 +955,11 @@ class ObjectType(IndividualType):
                     self, supertype
                 )
             )
+        elif isinstance(supertype, StackEffect):
+            if self._arity != 0:
+                raise TypeError('type constructor {} expected at least one argument cannot be a stack effect (expected effect {})'.format(self, supertype))
+            self.get_type_of_attribute('__call__').constrain(supertype, constraints)
+            return
         elif not isinstance(supertype, ObjectType):
             raise NotImplementedError(supertype)
         if self._arity != supertype._arity:
