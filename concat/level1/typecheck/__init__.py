@@ -149,7 +149,6 @@ from concat.level1.typecheck.types import (
     dict_type,
     ellipsis_type,
     int_type,
-    _ftv,
     init_primitives,
     invertible_type,
     iterable_type,

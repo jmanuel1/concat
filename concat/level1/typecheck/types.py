@@ -28,10 +28,6 @@ import builtins
 
 
 class Type(abc.ABC):
-    @abc.abstractmethod
-    def __init__(self):
-        pass
-
     # TODO: Fully replace with <=.
     def is_subtype_of(self, supertype: 'Type') -> bool:
         if supertype == self or supertype == object_type:
@@ -60,6 +56,10 @@ class Type(abc.ABC):
             return False
 
     @abc.abstractmethod
+    def free_type_variables(self) -> Set['_Variable']:
+        pass
+
+    @abc.abstractmethod
     def apply_substitution(
         self, _: 'concat.level1.typecheck.Substitutions'
     ) -> Union['Type', Sequence['StackItemType']]:
@@ -74,10 +74,6 @@ class Type(abc.ABC):
 
 
 class IndividualType(Type, abc.ABC):
-    @abc.abstractmethod
-    def __init__(self) -> None:
-        super().__init__()
-
     def to_for_all(self) -> 'ForAll':
         return ForAll([], self)
 
@@ -117,16 +113,15 @@ class _Variable(Type, abc.ABC):
     variables can be made simply by creating new objects. They can also be
     compared by identity."""
 
-    @abc.abstractmethod
-    def __init__(self) -> None:
-        super().__init__()
-
     def apply_substitution(
         self, sub: 'concat.level1.typecheck.Substitutions'
     ) -> Union[IndividualType, '_Variable', List['StackItemType']]:
         if self in sub:
             return sub[self]  # type: ignore
         return self
+
+    def free_type_variables(self) -> Set['_Variable']:
+        return {self}
 
 
 class IndividualVariable(_Variable, IndividualType):
@@ -231,6 +226,9 @@ class _IntersectionType(IndividualType):
             return self.type_1.get_type_of_attribute(name)
         except concat.level1.typecheck.TypeError:
             return self.type_2.get_type_of_attribute(name)
+
+    def free_type_variables(self) -> Set['_Variable']:
+        raise NotImplementedError('time to get rid of _IntersectionType?')
 
     def __eq__(self, other: object) -> bool:
         simple_self = self.type_1 & self.type_2
@@ -341,7 +339,7 @@ class TypeSequence(Type, Iterable['StackItemType']):
                     and not supertype._individual_types
                 ):
                     return
-                elif self._rest and self._rest not in _ftv(supertype):
+                elif self._rest and self._rest not in supertype.free_type_variables():
                     self._rest.constrain(supertype, constraints)
                 elif self._is_empty() and not supertype._is_empty():
                     raise StackMismatchError(self, supertype)
@@ -353,7 +351,7 @@ class TypeSequence(Type, Iterable['StackItemType']):
             elif (
                 not supertype._individual_types
                 and supertype._rest
-                and supertype._rest not in _ftv(self)
+                and supertype._rest not in self.free_type_variables()
             ):
                 supertype._rest.constrain(self, constraints)
             elif self._individual_types and supertype._individual_types:
@@ -383,6 +381,12 @@ class TypeSequence(Type, Iterable['StackItemType']):
             raise TypeError(
                 '{} must be a sequence type, not {}'.format(self, supertype)
             )
+
+    def free_type_variables(self) -> Set['_Variable']:
+        ftv: Set[_Variable] = set()
+        for t in self:
+            ftv |= t.free_type_variables()
+        return ftv
 
     def __bool__(self) -> bool:
         return not self._is_empty()
@@ -517,6 +521,9 @@ class ForAll(Type):
         )
         return cast(IndividualType, subs(self.type))
 
+    def free_type_variables(self) -> Set['_Variable']:
+        raise NotImplementedError('time to get rid of ForAll')
+
 
 # TODO: Rename to StackEffect at all use sites.
 class _Function(IndividualType):
@@ -532,8 +539,14 @@ class _Function(IndividualType):
     def __iter__(self) -> Iterator[Sequence['StackItemType']]:
         return iter((tuple(self.input), tuple(self.output)))
 
-    def generalized_wrt(self, gamma: Dict[str, Type]) -> ForAll:
-        return ForAll(list(_ftv(self) - _ftv(gamma)), self)
+    def generalized_wrt(self, gamma: Dict[str, Type]) -> Type:
+        return ObjectType(
+            IndividualVariable(),
+            {
+                '__call__': self,
+            },
+            list(self.free_type_variables() - _free_type_variables_of_mapping(gamma))
+        )
 
     def can_be_complete_program(self) -> bool:
         """Returns true iff the function type is a subtype of ( -- *out)."""
@@ -665,6 +678,9 @@ class _Function(IndividualType):
             )
         constraints.add(self.input, fun_type.input)
         constraints.add(self.output, fun_type.output)
+
+    def free_type_variables(self) -> Set['_Variable']:
+        return self.input.free_type_variables() | self.output.free_type_variables()
 
     @staticmethod
     def _rename_sequence_variable(
@@ -816,41 +832,11 @@ def inst(sigma: Union[ForAll, _Function]) -> IndividualType:
 StackItemType = Union[SequenceVariable, IndividualType]
 
 
-# FIXME: This should be a method on types.
-def _ftv(
-    f: Union[Type, Sequence[StackItemType], Mapping[str, Type]]
-) -> Set[_Variable]:
-    """The ftv function described by Kleffner."""
-    ftv: Set[_Variable]
-    if isinstance(f, _Variable):
-        return {f}
-    elif isinstance(f, _Function):
-        return _ftv(list(f.input)) | _ftv(list(f.output))
-    elif isinstance(f, collections.abc.Sequence):
-        ftv = set()
-        for t in f:
-            ftv |= _ftv(t)
-        return ftv
-    elif isinstance(f, TypeSequence):
-        return _ftv(f.as_sequence())
-    elif isinstance(f, ForAll):
-        return _ftv(f.type) - set(f.quantified_variables)
-    elif isinstance(f, dict):
-        ftv = set()
-        for sigma in f.values():
-            ftv |= _ftv(sigma)
-        return ftv
-    elif isinstance(f, _IntersectionType):
-        return _ftv(f.type_1) | _ftv(f.type_2)
-    elif isinstance(f, ObjectType):
-        ftv = _ftv(f.attributes)
-        for arg in f.type_arguments:
-            ftv |= _ftv(arg)
-        # QUESTION: Include supertypes?
-        ftv -= {f.self_type, *f.type_parameters}
-        return ftv
-    else:
-        raise builtins.TypeError(f)
+def _free_type_variables_of_mapping(attributes: Mapping[str, Type]) -> Set[_Variable]:
+    ftv: Set[_Variable] = set()
+    for sigma in attributes.values():
+        ftv |= sigma.free_type_variables()
+    return ftv
 
 
 def init_primitives():
@@ -937,14 +923,14 @@ class ObjectType(IndividualType):
                 }
             )
             # if no free type vars will be substituted, just return self
-            if not any(free_var in sub for free_var in _ftv(self)):
+            if not any(free_var in sub for free_var in self.free_type_variables()):
                 return self
         else:
             sub = Substitutions(
                 {a: i for a, i in sub.items() if a is not self._self_type}
             )
             # if no free type vars will be substituted, just return self
-            if not any(free_var in sub for free_var in {*_ftv(self), *self._type_parameters}):
+            if not any(free_var in sub for free_var in {*self.free_type_variables(), *self._type_parameters}):
                 return self
         attributes = cast(
             Dict[str, IndividualType],
@@ -1094,6 +1080,14 @@ class ObjectType(IndividualType):
             self._type_arguments,
             None if self._head is self else self._head,
         )
+
+    def free_type_variables(self) -> Set[_Variable]:
+        ftv = _free_type_variables_of_mapping(self.attributes)
+        for arg in self.type_arguments:
+            ftv |= arg.free_type_variables()
+        # QUESTION: Include supertypes?
+        ftv -= {self.self_type, *self.type_parameters}
+        return ftv
 
     def __str__(self) -> str:
         if self._internal_name is not None:
