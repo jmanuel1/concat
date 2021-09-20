@@ -5,7 +5,6 @@ import concat.level1.typecheck
 from concat.level1.typecheck import Environment
 from concat.level1.typecheck.types import (
     IndividualVariable,
-    _IntersectionType,
     SequenceVariable,
     StackEffect,
     ObjectType,
@@ -187,29 +186,7 @@ class TestNamedTypeNode(unittest.TestCase):
     )
     @example(
         named_type_node=concat.level2.typecheck.NamedTypeNode((0, 0), ''),
-        type=StackEffect(
-            (),
-            ((_IntersectionType(StackEffect((), ()), StackEffect((), ()),)),),
-        ),
-    )
-    @example(
-        named_type_node=concat.level2.typecheck.NamedTypeNode((0, 0), ''),
         type=IndividualVariable(),
-    )
-    @example(
-        named_type_node=concat.level2.typecheck.NamedTypeNode((0, 0), ''),
-        type=StackEffect(
-            (),
-            (
-                (
-                    IndividualVariable()
-                    & (
-                        ObjectType(IndividualVariable(), {}, (), [], False)
-                        & IndividualVariable()
-                    )
-                ),
-            ),
-        ),
     )
     def test_name_does_exist(self, named_type_node, type):
         env = concat.level1.typecheck.Environment({named_type_node.name: type})

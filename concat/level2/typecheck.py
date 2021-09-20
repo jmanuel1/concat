@@ -104,9 +104,7 @@ class IntersectionTypeNode(IndividualTypeNode):
         self.type_2 = type_2
 
     def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
-        type_1, new_env = self.type_1.to_type(env)
-        type_2, newer_env = self.type_2.to_type(new_env)
-        return type_1 & type_2, newer_env
+        raise NotImplementedError('intersection types should longer exist')
 
 
 class _GenericTypeNode(IndividualTypeNode):
@@ -322,33 +320,36 @@ def _generate_type_of_innermost_module(
         )
     finally:
         sys.path = old_path
-    module_t: concat.level1.typecheck.IndividualType = module_type
+    module_attributes = {}
     for name in dir(module):
         attribute_type = object_type
         if isinstance(getattr(module, name), int):
             attribute_type = int_type
         elif callable(getattr(module, name)):
             attribute_type = py_function_type
-        module_t = module_t & ObjectType(
-            IndividualVariable(), {name: attribute_type}
-        )
+        module_attributes[name] = attribute_type
+    module_t = ObjectType(
+        IndividualVariable(),
+        module_attributes,
+        nominal_supertypes=[module_type]
+    )
     return StackEffect([_seq_var], [_seq_var, module_type])
 
 
 def _generate_module_type(
     components: Sequence[str], _full_name: Optional[str] = None, source_dir='.'
 ) -> ObjectType:
-    module_t: IndividualType = module_type
     if _full_name is None:
         _full_name = '.'.join(components)
     if len(components) > 1:
-        module_t = module_t & ObjectType(
+        module_t = ObjectType(
             IndividualVariable(),
             {
                 components[1]: _generate_module_type(
                     components[1:], _full_name, source_dir
                 )[_seq_var,],
             },
+            nominal_supertypes=[module_type]
         )
         effect = StackEffect([_seq_var], [_seq_var, module_type])
         return ObjectType(

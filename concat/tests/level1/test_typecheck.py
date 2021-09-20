@@ -207,26 +207,6 @@ class TestTypeEquality(unittest.TestCase):
     @example(type=int_type.self_type)
     @example(type=int_type.get_type_of_attribute('__add__'))
     @example(type=int_type)
-    @example(
-        type=ObjectType(
-            IndividualVariable(),
-            {
-                '': (
-                    IndividualVariable()
-                    & StackEffect(TypeSequence([]), TypeSequence([]))
-                )
-            },
-            (),
-            (),
-            False,
-            [],
-            None,
-        )
-    )
-    @example(
-        type=IndividualVariable()
-        & StackEffect(TypeSequence([]), TypeSequence([]))
-    )
     def test_reflexive_equality(self, type):
         self.assertEqual(type, type)
 

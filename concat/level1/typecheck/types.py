@@ -34,10 +34,6 @@ class Type(abc.ABC):
             return True
         if isinstance(supertype, IndividualVariable):
             return self.is_subtype_of(supertype.bound)
-        if isinstance(supertype, _IntersectionType):
-            return self.is_subtype_of(supertype.type_1) and self.is_subtype_of(
-                supertype.type_2
-            )
         return False
 
     def __le__(self, other: object) -> bool:
@@ -82,13 +78,7 @@ class IndividualType(Type, abc.ABC):
         return ForAll([], self)
 
     def __and__(self, other: object) -> 'IndividualType':
-        if not isinstance(other, IndividualType):
-            return NotImplemented
-        elif self == object_type:
-            return other
-        elif other is object_type:
-            return self
-        return _IntersectionType(self, other)
+        raise NotImplementedError('take advantage of constraints instead')
 
     def is_subtype_of(self, supertype: Type) -> bool:
         if (
@@ -204,69 +194,6 @@ class IndividualVariable(_Variable, IndividualType):
 
     def collapse_bounds(self) -> IndividualType:
         return self.bound.collapse_bounds()
-
-
-# TODO: Reevaluate: do I really need this?
-class _IntersectionType(IndividualType):
-    def __init__(
-        self, type_1: 'IndividualType', type_2: 'IndividualType'
-    ) -> None:
-        self.type_1 = type_1
-        self.type_2 = type_2
-
-    def __repr__(self) -> str:
-        return '({!r} & {!r})'.format(self.type_1, self.type_2)
-
-    def __str__(self) -> str:
-        return '({} & {})'.format(self.type_1, self.type_2)
-
-    def is_subtype_of(self, other: Type) -> bool:
-        return (
-            super().is_subtype_of(other)
-            or self.type_1.is_subtype_of(other)
-            or self.type_2.is_subtype_of(other)
-        )
-
-    def constrain(self, supertype: Type, constraints: Constraints) -> None:
-        raise NotImplementedError('time to get rid of _IntersectionType?')
-
-    def get_type_of_attribute(self, name: str) -> 'IndividualType':
-        try:
-            return self.type_1.get_type_of_attribute(name)
-        except concat.level1.typecheck.TypeError:
-            return self.type_2.get_type_of_attribute(name)
-
-    @property
-    def attributes(self) -> NoReturn:
-        raise NotImplementedError('stop using _IntersectionType')
-
-    def free_type_variables(self) -> Set['_Variable']:
-        raise NotImplementedError('time to get rid of _IntersectionType?')
-
-    def __eq__(self, other: object) -> bool:
-        simple_self = self.type_1 & self.type_2
-        if not isinstance(simple_self, _IntersectionType):
-            return simple_self == other
-        if not isinstance(other, _IntersectionType):
-            return super().__eq__(other)
-        result = {self.type_1, self.type_2} == {other.type_1, other.type_2}
-        return result
-
-    def __hash__(self) -> int:
-        simple_self = self.type_1 & self.type_2
-        if not isinstance(simple_self, _IntersectionType):
-            return hash(simple_self)
-        return hash((self.type_1, self.type_2))
-
-    def apply_substitution(
-        self, sub: 'concat.level1.typecheck.Substitutions'
-    ) -> 'IndividualType':
-        type_1 = cast(IndividualType, sub(self.type_1))
-        type_2 = cast(IndividualType, sub(self.type_2))
-        return type_1 & type_2
-
-    def collapse_bounds(self) -> 'IndividualType':
-        return self.type_1.collapse_bounds() & self.type_2.collapse_bounds()
 
 
 class SequenceVariable(_Variable):
@@ -732,23 +659,11 @@ class QuotationType(_Function):
 def _intersect_sequences(
     seq1: Sequence['StackItemType'], seq2: Sequence['StackItemType']
 ) -> Sequence['StackItemType']:
-    if seq1 and isinstance(seq1[-1], SequenceVariable):
-        return seq2
-    elif seq2 and isinstance(seq2[-1], SequenceVariable):
-        return seq1
-    elif not seq1 and not seq2:
-        return ()
-    elif not seq1 or not seq2:
-        return (no_return_type,)
-    else:
-        return (
-            *_intersect_sequences(seq1[:-1], seq2[:-1]),
-            cast(IndividualType, seq1[-1]) & cast(IndividualType, seq2[-1]),
-        )
+    raise NotImplementedError('stop using _IntersectionType')
 
 
 # FIXME: This should be a method on types
-def inst(sigma: Union[_IntersectionType, _Function]) -> IndividualType:
+def inst(sigma: _Function) -> IndividualType:
     """This is based on the inst function described by Kleffner."""
     if isinstance(sigma, _Function):
         input = [
@@ -760,8 +675,6 @@ def inst(sigma: Union[_IntersectionType, _Function]) -> IndividualType:
             for type in sigma.output
         ]
         return _Function(input, output)
-    if isinstance(sigma, _IntersectionType):
-        return inst(sigma.type_1) & inst(sigma.type_2)
     raise builtins.TypeError(type(sigma))
 
 
