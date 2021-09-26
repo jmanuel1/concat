@@ -162,7 +162,7 @@ from concat.level1.typecheck.types import (
 )
 
 
-class Environment(Dict[str, IndividualType]):
+class Environment(Dict[str, Type]):
     def copy(self) -> 'Environment':
         return Environment(super().copy())
 
