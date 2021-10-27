@@ -1117,9 +1117,7 @@ class PythonFunctionType(ObjectType):
         self,
         self_type: IndividualVariable,
         *args,
-        _overloads: Sequence[
-            Tuple[Sequence[StackItemType], IndividualType]
-        ] = (),
+        _overloads: List[Tuple[Sequence[StackItemType], IndividualType]] = [],
         type_parameters=(),
         **kwargs,
     ) -> None:
@@ -1191,7 +1189,8 @@ class PythonFunctionType(ObjectType):
                 sub(TypeSequence(self.input)), sub(self.output)
             ]
             for overload in self._overloads:
-                type = type.with_overload(
+                # This is one of the few places where a type should be mutated.
+                type._add_overload(
                     [sub(i) for i in overload[0]], sub(overload[1])
                 )
             return type
@@ -1237,6 +1236,11 @@ class PythonFunctionType(ObjectType):
             _overloads=[*self._overloads, (input, output)],
             _head=py_function_type,
         )
+
+    def _add_overload(
+        self, input: Sequence[StackItemType], output: IndividualType
+    ) -> None:
+        self._overloads.append((input, output))
 
     def bind(self) -> 'PythonFunctionType':
         assert self._arity == 0
