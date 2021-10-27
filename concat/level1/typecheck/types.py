@@ -967,6 +967,8 @@ class ObjectType(IndividualType):
             _head=self._head,
             **self._other_kwargs,
         )
+        if self._internal_name is not None:
+            subbed_type.set_internal_name(self._internal_name)
         return subbed_type
 
     def is_subtype_of(self, supertype: 'Type') -> bool:
