@@ -1484,6 +1484,7 @@ int_type = ObjectType(
         '__add__': _int_add_type,
         '__sub__': _int_add_type,
         '__invert__': py_function_type[TypeSequence([]), _x],
+        '__le__': py_function_type[TypeSequence([_x]), bool_type],
     },
     nominal=True,
 )
