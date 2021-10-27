@@ -1445,7 +1445,7 @@ _x = IndividualVariable()
 
 float_type = ObjectType(_x, {}, nominal=True)
 no_return_type = _NoReturnType()
-object_type = ObjectType(_x, {})
+object_type = ObjectType(_x, {}, nominal=True)
 
 _arg_type_var = SequenceVariable()
 _return_type_var = IndividualVariable()
@@ -1521,6 +1521,7 @@ file_type = ObjectType(
     [],
     # context_manager_type is a structural supertype
     [iterable_type],
+    nominal=True,
 )
 
 _start_type_var, _stop_type_var, _step_type_var = (
