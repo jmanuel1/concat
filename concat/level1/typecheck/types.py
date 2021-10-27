@@ -1478,16 +1478,13 @@ bool_type = ObjectType(_x, {}, nominal=True)
 bool_type.set_internal_name('bool_type')
 
 _int_add_type = py_function_type[TypeSequence([object_type]), _x]
-# FIXME: subtractable_type are structural supertypes
-# but for now they are both explicit
 int_type = ObjectType(
     _x,  # FIXME: Make unique for each type.
     {
         '__add__': _int_add_type,
+        '__sub__': _int_add_type,
         '__invert__': py_function_type[TypeSequence([]), _x],
     },
-    [],
-    [subtractable_type],
     nominal=True,
 )
 int_type.set_internal_name('int_type')
@@ -1516,7 +1513,9 @@ optional_type.set_internal_name('optional_type')
 none_type = ObjectType(_x, {})
 none_type.set_internal_name('none_type')
 
-dict_type = ObjectType(_x, {}, [], [iterable_type])
+dict_type = ObjectType(
+    _x, {'__iter__': py_function_type[TypeSequence([]), object_type]}
+)
 dict_type.set_internal_name('dict_type')
 
 file_type = ObjectType(
