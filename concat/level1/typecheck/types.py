@@ -1104,7 +1104,16 @@ class ObjectType(IndividualType):
                 )
             return self._internal_name
         assert self._internal_name is None
-        return repr(self)
+        return '{}({}, {}, {}, {}, {}, {}, {})'.format(
+            type(self).__qualname__,
+            self._self_type,
+            _mapping_to_str(self._attributes),
+            _iterable_to_str(self._type_parameters),
+            _iterable_to_str(self._nominal_supertypes),
+            self._nominal,
+            _iterable_to_str(self._type_arguments),
+            None if self._head is self else self._head,
+        )
 
     def set_internal_name(self, name: str) -> None:
         self._internal_name = name
@@ -1416,6 +1425,16 @@ class _OptionalType(ObjectType):
 
 def _iterable_to_str(iterable: Iterable) -> str:
     return '[' + ', '.join(map(str, iterable)) + ']'
+
+
+def _mapping_to_str(mapping: Mapping) -> str:
+    return (
+        '{'
+        + ', '.join(
+            '{}: {}'.format(key, value) for key, value in mapping.items()
+        )
+        + '}'
+    )
 
 
 # expose _Function as StackEffect
