@@ -1442,16 +1442,17 @@ StackEffect = _Function
 
 _x = IndividualVariable()
 
-
 float_type = ObjectType(_x, {}, nominal=True)
 no_return_type = _NoReturnType()
 object_type = ObjectType(_x, {}, nominal=True)
+object_type.set_internal_name('object_type')
 
 _arg_type_var = SequenceVariable()
 _return_type_var = IndividualVariable()
 py_function_type = PythonFunctionType(
     _x, {}, type_parameters=[_arg_type_var, _return_type_var]
 )
+py_function_type.set_internal_name('py_function_type')
 
 _invert_result_var = IndividualVariable()
 invertible_type = ObjectType(
@@ -1473,6 +1474,9 @@ subtractable_type = ObjectType(
     [_sub_operand_type, _sub_result_type],
 )
 
+bool_type = ObjectType(_x, {}, nominal=True)
+bool_type.set_internal_name('bool_type')
+
 _int_add_type = py_function_type[TypeSequence([object_type]), _x]
 # FIXME: subtractable_type are structural supertypes
 # but for now they are both explicit
@@ -1493,6 +1497,7 @@ _result_type = IndividualVariable()
 iterable_type = ObjectType(
     _x, {'__iter__': py_function_type[TypeSequence([]), _x]}, [_result_type]
 )
+iterable_type.set_internal_name('iterable_type')
 
 context_manager_type = ObjectType(
     _x,
@@ -1503,13 +1508,17 @@ context_manager_type = ObjectType(
         '__exit__': py_function_type,
     },
 )
+context_manager_type.set_internal_name('context_manager_type')
+
 optional_type = _OptionalType()
+optional_type.set_internal_name('optional_type')
 
 none_type = ObjectType(_x, {})
 none_type.set_internal_name('none_type')
 
 dict_type = ObjectType(_x, {}, [], [iterable_type])
-bool_type = ObjectType(_x, {})
+dict_type.set_internal_name('dict_type')
+
 file_type = ObjectType(
     _x,
     {
@@ -1523,6 +1532,7 @@ file_type = ObjectType(
     [iterable_type],
     nominal=True,
 )
+file_type.set_internal_name('file_type')
 
 _start_type_var, _stop_type_var, _step_type_var = (
     IndividualVariable(),
@@ -1553,13 +1563,17 @@ list_type.set_internal_name('list_type')
 str_type = ObjectType(
     _x, {'__getitem__': py_function_type[TypeSequence([int_type]), _x]}
 )
+str_type.set_internal_name('str_type')
 
 ellipsis_type = ObjectType(_x, {})
 not_implemented_type = ObjectType(_x, {})
+
 tuple_type = ObjectType(
     _x,
     {'__getitem__': py_function_type}
     # iterable_type is a structural supertype
 )
+tuple_type.set_internal_name('tuple_type')
+
 base_exception_type = ObjectType(_x, {})
 module_type = ObjectType(_x, {})
