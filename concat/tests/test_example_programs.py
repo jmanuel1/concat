@@ -4,7 +4,7 @@ Example tests: make sure all examples work.
 NOTE: This must be run from project root!
 """
 
-from scripttest import TestFileEnvironment   # type: ignore
+from scripttest import TestFileEnvironment  # type: ignore
 import unittest
 import os
 import sys
@@ -12,11 +12,13 @@ import os.path
 
 env = TestFileEnvironment('./test-output', cwd='.')
 example_dir = './concat/examples'
-examples = [os.path.join(example_dir, x)
-            for x in os.listdir(example_dir) if x.endswith('.cat')]
+examples = [
+    os.path.join(example_dir, x)
+    for x in os.listdir(example_dir)
+    if x.endswith('.cat')
+]
 
 
-# @unittest.skip("broken and not in level 0")
 class TestExamplePrograms(unittest.TestCase):
     """Test all the examples in concat/examples for correctness."""
 
@@ -40,17 +42,25 @@ class TestExamplePrograms(unittest.TestCase):
                 in_start, out_start = '# IN: ', '# OUT:'
                 if not inp.startswith(in_start):
                     raise Exception(
-                        'No input specified for file {}'.format(name))
-                inp = eval(inp[len(in_start):].strip())
+                        'No input specified for file {}'.format(name)
+                    )
+                inp = eval(inp[len(in_start) :].strip())
                 out = spec.readline()
                 if not out.startswith(out_start):
                     raise Exception(
-                        'No output specified for file {}'.format(name))
-                out = eval(out[len(out_start):].strip())
+                        'No output specified for file {}'.format(name)
+                    )
+                out = eval(out[len(out_start) :].strip())
                 # scripttest fails loudly if concat exits with a nonzero code
-                actual = env.run(sys.executable, '-m', 'coverage', 'run',
-                                 '-m',
-                                 'concat',
-                                 name, stdin=inp.encode(),
-                                 expect_stderr=True)
+                actual = env.run(
+                    sys.executable,
+                    '-m',
+                    'coverage',
+                    'run',
+                    '-m',
+                    'concat',
+                    name,
+                    stdin=inp.encode(),
+                    expect_stderr=True,
+                )
                 self.assertEqual(actual.stdout, out)
