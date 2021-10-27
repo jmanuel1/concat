@@ -243,6 +243,14 @@ class TestSubtyping(unittest.TestCase):
         fun2 = StackEffect([no_return_type], [object_type])
         self.assertLessEqual(fun1, fun2)
 
+    @given(from_type(IndividualType))
+    def test_no_return_is_bottom_type(self, type):
+        self.assertLessEqual(no_return_type, type)
+
+    @given(from_type(IndividualType))
+    def test_object_is_top_type(self, type):
+        self.assertLessEqual(type, object_type)
+
     __attributes_generator = dictionaries(
         text(max_size=25), from_type(IndividualType), max_size=5  # type: ignore
     )

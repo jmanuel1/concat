@@ -971,8 +971,9 @@ class ObjectType(IndividualType):
             subbed_type.set_internal_name(self._internal_name)
         return subbed_type
 
+    # TODO: Remove is_subtype_of and replace uses with constraints
     def is_subtype_of(self, supertype: 'Type') -> bool:
-        if supertype in self._nominal_supertypes:
+        if supertype in self._nominal_supertypes or supertype == object_type:
             return True
         if isinstance(supertype, ObjectType) and supertype._nominal:
             return False
@@ -1036,7 +1037,9 @@ class ObjectType(IndividualType):
             raise TypeError(
                 '{} and {} do not have the same arity'.format(self, supertype)
             )
-
+        # every object type is a subtype of object_type
+        if supertype == object_type:
+            return
         # Don't forget that there's nominal subtyping too.
         if supertype._nominal:
             if (
