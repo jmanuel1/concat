@@ -1584,6 +1584,7 @@ str_type = ObjectType(
             int_type,
         ],
     },
+    nominal=True,
 )
 str_type.set_internal_name('str_type')
 
