@@ -1576,6 +1576,13 @@ str_type = ObjectType(
     _x,
     {
         '__getitem__': _str_getitem_type,
+        '__add__': py_function_type[TypeSequence([object_type]), _x],
+        'find': py_function_type[
+            TypeSequence(
+                [_x, optional_type[int_type,], optional_type[int_type,]]
+            ),
+            int_type,
+        ],
     },
 )
 str_type.set_internal_name('str_type')
