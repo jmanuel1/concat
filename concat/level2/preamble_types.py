@@ -2,6 +2,7 @@ from concat.level1.typecheck.types import (
     IndividualVariable,
     SequenceVariable,
     ForAll,
+    ObjectType,
     StackEffect,
     TypeSequence,
     bool_type,
@@ -51,6 +52,16 @@ types = {
     'nip': ForAll(
         [_rest_var, _a_var],
         StackEffect([_rest_var, object_type, _a_var], [_rest_var, _a_var]),
+    ),
+    'nip_2': ObjectType(
+        _a_var,
+        {
+            '__call__': StackEffect(
+                [_rest_var, object_type, object_type, _b_var],
+                [_rest_var, _b_var],
+            )
+        },
+        [_rest_var, _b_var],
     ),
     'drop': ForAll(
         [_rest_var], StackEffect([_rest_var, object_type], [_rest_var])
