@@ -182,10 +182,12 @@ class TypeSequenceNode(TypeNode):
 
     def to_type(self, env: Environment) -> Tuple[TypeSequence, Environment]:
         sequence: List[StackItemType] = []
-        if self._sequence_variable is not None:
-            if self._sequence_variable not in env:
-                env = env.copy()
-                env[self._sequence_variable] = SequenceVariable()
+        if self._sequence_variable is None:
+            # implicit stack polymorphism
+            sequence.append(SequenceVariable())
+        elif self._sequence_variable not in env:
+            env = env.copy()
+            env[self._sequence_variable] = SequenceVariable()
             sequence.append(env[self._sequence_variable])
         for type_node in self._individual_type_items:
             type, env = type_node.to_type(env)
