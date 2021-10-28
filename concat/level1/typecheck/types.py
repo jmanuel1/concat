@@ -1560,8 +1560,23 @@ list_type = ObjectType(
 )
 list_type.set_internal_name('list_type')
 
+_str_getitem_type = py_function_type[
+    TypeSequence([int_type]), _x
+].with_overload(
+    [
+        slice_type[
+            optional_type[int_type,],
+            optional_type[int_type,],
+            optional_type[int_type,],
+        ]
+    ],
+    _x,
+)
 str_type = ObjectType(
-    _x, {'__getitem__': py_function_type[TypeSequence([int_type]), _x]}
+    _x,
+    {
+        '__getitem__': _str_getitem_type,
+    },
 )
 str_type.set_internal_name('str_type')
 
