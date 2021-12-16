@@ -472,45 +472,42 @@ def infer(
         name = program[-1].name
         declared_type: Optional[StackEffect]
         if program[-1].stack_effect:
-            declared_type, env_with_types = program[-1].stack_effect.to_type(
-                S(env)
-            )
+            declared_type, _ = program[-1].stack_effect.to_type(S(env))
         else:
             # NOTE: To continue the "bidirectional" bent, we will require a
             # type annotation.
             # TODO: Make the return types optional?
             # FIXME: Should be a parse error.
             raise TypeError('must have type annotation on function definition')
+        recursion_env = env.copy()
+        recursion_env[name] = declared_type.generalized_wrt(S(env))
         phi1, inferred_type = concat.level1.typecheck.infer(
-            S(env_with_types),
+            S(recursion_env),
             program[-1].body,
             is_top_level=False,
             extensions=extensions,
             initial_stack=declared_type.input,
         )
-        if declared_type is not None:
-            declared_type = S(declared_type)
-            declared_type_inst = declared_type.instantiate()
-            inferred_type_inst = S(inferred_type).instantiate()
-            # We want to check that the inferred inputs are supertypes of the
-            # declared inputs, and that the inferred outputs are subtypes of
-            # the declared outputs. Thus, inferred_type should be a subtype
-            # declared_type.
-            _global_constraints.add(inferred_type_inst, declared_type_inst)
-            phi2 = _global_constraints.equalities_as_substitutions()
-            if not phi2(inferred_type_inst).is_subtype_of(
-                phi2(declared_type_inst)
-            ):
-                message = (
-                    'declared function type {} is not compatible with '
-                    'inferred type {}'
-                )
-                raise TypeError(
-                    message.format(phi2(declared_type), phi2(inferred_type))
-                )
-            effect = phi2(declared_type)
-        else:
-            effect = S(inferred_type)
+        declared_type = S(declared_type)
+        declared_type_inst = declared_type.instantiate()
+        inferred_type_inst = S(inferred_type).instantiate()
+        # We want to check that the inferred inputs are supertypes of the
+        # declared inputs, and that the inferred outputs are subtypes of
+        # the declared outputs. Thus, inferred_type should be a subtype
+        # declared_type.
+        _global_constraints.add(inferred_type_inst, declared_type_inst)
+        phi2 = _global_constraints.equalities_as_substitutions()
+        if not phi2(inferred_type_inst).is_subtype_of(
+            phi2(declared_type_inst)
+        ):
+            message = (
+                'declared function type {} is not compatible with '
+                'inferred type {}'
+            )
+            raise TypeError(
+                message.format(phi2(declared_type), phi2(inferred_type))
+            )
+        effect = phi2(declared_type)
         # we *mutate* the type environment
         env[name] = effect.generalized_wrt(S(env))
         return S, f
