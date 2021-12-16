@@ -274,8 +274,16 @@ subscriptable_type = ObjectType(
 )
 
 # TODO: Separate type-check-time environment from runtime environment.
+_stack_type_var = SequenceVariable()
 builtin_environment = Environment(
     {
+        # XXX: generalize to_int over the stack
+        'to_int': StackEffect(
+            TypeSequence(
+                [_stack_type_var, optional_type[int_type,], object_type]
+            ),
+            TypeSequence([_stack_type_var, int_type]),
+        ),
         'tuple': tuple_type,
         'BaseException': base_exception_type,
         'NoReturn': no_return_type,
