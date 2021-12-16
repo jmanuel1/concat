@@ -446,6 +446,26 @@ def infer(
         _global_constraints.add(TypeSequence(index_output), index_types)
         final_subs = _global_constraints.equalities_as_substitutions()
         return final_subs(subs), final_subs(StackEffect(input, result_types))
+    elif isinstance(program[-1], concat.level1.operators.SubtractWordNode):
+        # FIXME: We should check if the other operand supports __rsub__ if the
+        # first operand doesn't support __sub__.
+        other_operand_type_var = concat.level1.typecheck.IndividualVariable()
+        result_type_var = concat.level1.typecheck.IndividualVariable()
+        subtractable_interface = subtractable_type[
+            other_operand_type_var, result_type_var
+        ]
+        seq_var = concat.level1.typecheck.SequenceVariable()
+        _global_constraints.add(
+            TypeSequence(output),
+            TypeSequence(
+                [seq_var, subtractable_interface, other_operand_type_var]
+            ),
+        )
+        final_subs = _global_constraints.equalities_as_substitutions()
+        return (
+            final_subs(subs),
+            final_subs(StackEffect(input, [seq_var, result_type_var])),
+        )
     elif isinstance(program[-1], concat.level1.parse.FuncdefStatementNode):
         S = subs
         f = StackEffect(input, output)
