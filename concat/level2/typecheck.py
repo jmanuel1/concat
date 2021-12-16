@@ -388,9 +388,19 @@ def infer(
                 getattr(module, '@@types')[program[-1].imported_name]
             )
         except (KeyError, AttributeError):
-            # attempt instrospection to get a more specific type
+            # attempt introspection to get a more specific type
             if callable(getattr(module, program[-1].imported_name)):
-                env[imported_name] = py_function_type
+                args_var = SequenceVariable()
+                env[imported_name] = ObjectType(
+                    IndividualVariable(),
+                    {
+                        '__call__': py_function_type[
+                            TypeSequence([args_var]), object_type
+                        ],
+                    },
+                    type_parameters=[args_var],
+                    nominal=True,
+                )
         return subs, StackEffect(input, output)
     elif isinstance(program[-1], concat.level1.parse.ImportStatementNode):
         # TODO: Support all types of import correctly.
