@@ -445,7 +445,7 @@ def infer(
 
         _global_constraints.add(TypeSequence(index_output), index_types)
         final_subs = _global_constraints.equalities_as_substitutions()
-        return final_subs, final_subs(StackEffect(input, result_types))
+        return final_subs(subs), final_subs(StackEffect(input, result_types))
     elif isinstance(program[-1], concat.level1.parse.FuncdefStatementNode):
         S = subs
         f = StackEffect(input, output)
