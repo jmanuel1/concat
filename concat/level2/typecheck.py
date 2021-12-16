@@ -14,6 +14,7 @@ from concat.level1.typecheck.types import (
     SequenceVariable,
     StackEffect,
     StackItemType,
+    StackMismatchError,
     Type,
     TypeSequence,
     base_exception_type,
@@ -517,19 +518,43 @@ def infer(
         # special case for subscription words
         if isinstance(child, concat.level1.parse.SubscriptionWordNode):
             S2, (i2, o2) = concat.level1.typecheck.infer(
-                subs(env), child.children, extensions=extensions
+                subs(env),
+                child.children,
+                extensions=extensions,
+                is_top_level=False,
+                source_dir=source_dir,
+                initial_stack=output,
             )
             _global_constraints.add(S2(TypeSequence(output)), TypeSequence(i2))
             # FIXME: Should be generic
             subscriptable_interface = subscriptable_type[
-                int_type, str_type,
+                int_type, IndividualVariable(),
             ]
+
             expected_o2 = TypeSequence(
                 [rest_var, subscriptable_interface, int_type,]
             )
-            _global_constraints.add(subs(TypeSequence(o2)), expected_o2)
+            if len(o2) < 2:
+                raise StackMismatchError(TypeSequence(o2), expected_o2)
+            _global_constraints.add(o2[-1], int_type)
+            getitem_type = (
+                o2[-2]
+                .get_type_of_attribute('__getitem__')
+                .instantiate()
+                .get_type_of_attribute('__call__')
+                .instantiate()
+            )
+            if not isinstance(getitem_type, PythonFunctionType):
+                raise TypeError(
+                    '__getitem__ of type {} is not a Python function (has type {})'.format(
+                        o2[-2], getitem_type
+                    )
+                )
+            getitem_type = getitem_type.select_overload(
+                [int_type], _global_constraints
+            )
             subs = _global_constraints.equalities_as_substitutions()(S2(subs))
-            effect = subs(StackEffect(input, [rest_var, str_type]))
+            effect = subs(StackEffect(input, [rest_var, getitem_type.output]))
             return subs, effect
         else:
             raise NotImplementedError(child)
