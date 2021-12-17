@@ -11,6 +11,7 @@ from concat.level1.typecheck.types import (
     IndividualType,
     IndividualVariable,
     ObjectType,
+    PythonFunctionType,
     SequenceVariable,
     StackEffect,
     StackItemType,
@@ -558,8 +559,58 @@ def infer(
             return subs, effect
         else:
             raise NotImplementedError(child)
+    elif isinstance(
+        program[-1], concat.level1.operators.GreaterThanOrEqualToWordNode
+    ):
+        a_type, b_type = output[-2:]
+        try:
+            ge_type = a_type.get_type_of_attribute('__ge__')
+            if not isinstance(ge_type, PythonFunctionType):
+                raise TypeError(
+                    'method __ge__ of type {} should be a Python function'.format(
+                        ge_type
+                    )
+                )
+            ge_type.select_overload([b_type], _global_constraints)
+        except TypeError:
+            le_type = b_type.get_type_of_attribute('__le__')
+            if not isinstance(le_type, PythonFunctionType):
+                raise TypeError(
+                    'method __le__ of type {} should be a Python function'.format(
+                        le_type
+                    )
+                )
+            le_type.select_overload([a_type], _global_constraints)
+        subs = _global_constraints.equalities_as_substitutions()(subs)
+        return (
+            subs,
+            StackEffect(input, TypeSequence([*output[:-2], bool_type])),
+        )
+    elif isinstance(
+        program[-1],
+        (
+            concat.level1.operators.IsWordNode,
+            concat.level1.operators.AndWordNode,
+            concat.level1.operators.OrWordNode,
+            concat.level1.operators.EqualToWordNode,
+        ),
+    ):
+        # TODO: I should be more careful here, since at least __eq__ can be
+        # deleted, if I remember correctly.
+        if (
+            len(output) < 2
+            or not isinstance(output[-1], IndividualType)
+            or not isinstance(output[-2], IndividualType)
+        ):
+            raise StackMismatchError(
+                TypeSequence(output), TypeSequence([object_type, object_type])
+            )
+        return (
+            subs,
+            StackEffect(input, TypeSequence([*output[:-2], bool_type])),
+        )
     else:
-        raise NotImplementedError
+        raise NotImplementedError(program[-1])
 
 
 def _ensure_type(
