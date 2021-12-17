@@ -106,11 +106,12 @@ class TestTypeChecker(unittest.TestCase):
             True,
         )
 
-    # QUESTION: Should fail?
-    def test_pushed_subscription(self) -> None:
-        """Test that the type checker allows pushed subscription words."""
+    def test_pushed_subscription_failure(self) -> None:
+        """Test that pushed subscription words without something on the stack are disallowed."""
         tree = parse('$[0] cast (int)')
-        concat.level1.typecheck.infer(
+        self.assertRaises(
+            concat.level1.typecheck.TypeError,
+            concat.level1.typecheck.infer,
             concat.level2.typecheck.builtin_environment,
             tree.children,
             (concat.level2.typecheck.infer,),
