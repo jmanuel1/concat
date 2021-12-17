@@ -180,7 +180,7 @@ class TestTypeChecker(unittest.TestCase):
         self.assertEqual(list(effect.output), [expected_type])
 
     def test_slice_inference(self) -> None:
-        slice_prog = '[1, 2, 3, 4, 5, 6, 7, 8] [1:None:2]\n'
+        slice_prog = '[1, 2, 3, 4, 5, 6, 7, 8] $[1:None:2]\n'
         tree = parse(slice_prog)
         _, type = concat.level1.typecheck.infer(
             Environment(types), tree.children, is_top_level=True,
