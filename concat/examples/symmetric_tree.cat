@@ -1,0 +1,47 @@
+# IN: 'None'
+# OUT: 'True\n'
+
+# https://leetcode.com/problems/symmetric-tree/
+
+# Tree input format: [<left subtree>, <root>, <right subtree>]
+# None is the empty tree
+
+from builtins import eval
+from concat.level1.stdlib.pyinterop import to_str
+
+def get_input( -- result:str):
+  {} [,] $input py_call cast (str)
+
+def put_output(value:object -- ):
+  [(),] {} swap $print py_call drop
+
+def py_eval(string:str -- result:object):
+  [(),] {} swap $eval py_call cast (object)
+
+def simple_str(obj:object -- string:str):
+  None swap None swap to_str
+
+def left_subtree(tree:list[object] -- left:object):
+  $[0] cast (object)
+
+def right_subtree(tree:list[object] -- right:object):
+  $[2]
+
+def root(tree:list[object] -- value:int):
+  $[1] cast (int)
+
+def are_reflections(left:object right:object -- result:bool):
+  over None is over None is and $(left:object right:object: True) $(left:object right:object:
+    over None is over None is or $(left:object right:object: False) $(left:object right:object:
+      over cast (list[object]) root over cast (list[object]) root == $(left:object right:object:
+        over cast (list[object]) left_subtree over cast (list[object]) right_subtree are_reflections $(left:object right:object:
+            over cast (list[object]) right_subtree over cast (list[object]) left_subtree are_reflections
+        ) $(left:object right:object: False) choose
+      ) $(left:object right:object: False) choose
+    ) choose
+  ) choose nip_2
+
+def is_symmetric(tree:object -- result:bool):
+  dup None is $(tree:object: drop True) $(tree:object: cast (list[object]) dup left_subtree over right_subtree are_reflections nip) choose
+
+get_input py_eval is_symmetric put_output

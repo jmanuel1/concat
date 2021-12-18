@@ -5,7 +5,6 @@ import concat.level1.typecheck
 from concat.level1.typecheck import Environment
 from concat.level1.typecheck.types import (
     IndividualVariable,
-    _IntersectionType,
     SequenceVariable,
     StackEffect,
     ObjectType,
@@ -15,6 +14,7 @@ from concat.level1.typecheck.types import (
     object_type,
 )
 import concat.level2.typecheck
+from concat.level2.typecheck import builtin_environment
 import concat.level2.preamble_types
 import concat.level2.parse
 import concat.astutils
@@ -68,9 +68,9 @@ class TestTypeChecker(unittest.TestCase):
         tree = parse(
             dedent(
                 """\
-            def seek_file(file:file offset:int whence:int --):
-                swap [(), (),] [,] swap pick $.seek py_call drop drop
-        """
+                    def seek_file(file:file offset:int whence:int --):
+                        swap [(), (),] [,] swap pick $.seek py_call drop drop
+                """
             )
         )
         env = concat.level1.typecheck.Environment(
@@ -105,11 +105,12 @@ class TestTypeChecker(unittest.TestCase):
             True,
         )
 
-    # QUESTION: Should fail?
-    def test_pushed_subscription(self) -> None:
-        """Test that the type checker allows pushed subscription words."""
-        tree = parse('$[0] cast (int) 1 +')
-        concat.level1.typecheck.infer(
+    def test_pushed_subscription_failure(self) -> None:
+        """Test that pushed subscription words without something on the stack are disallowed."""
+        tree = parse('$[0] cast (int)')
+        self.assertRaises(
+            concat.level1.typecheck.TypeError,
+            concat.level1.typecheck.infer,
             concat.level2.typecheck.builtin_environment,
             tree.children,
             (concat.level2.typecheck.infer,),
@@ -156,7 +157,7 @@ class TestStackEffectParser(unittest.TestCase):
                     effect = build_parsers()['stack-effect-type'].parse(tokens)
                 except parsy.ParseError as e:
                     self.fail('could not parse {}\n{}'.format(example, e))
-                env = concat.level2.typecheck.builtin_environment
+                env = builtin_environment
                 self.assertEqual(
                     effect.to_type(env)[0], self.examples[example],
                 )
@@ -185,29 +186,7 @@ class TestNamedTypeNode(unittest.TestCase):
     )
     @example(
         named_type_node=concat.level2.typecheck.NamedTypeNode((0, 0), ''),
-        type=StackEffect(
-            (),
-            ((_IntersectionType(StackEffect((), ()), StackEffect((), ()),)),),
-        ),
-    )
-    @example(
-        named_type_node=concat.level2.typecheck.NamedTypeNode((0, 0), ''),
         type=IndividualVariable(),
-    )
-    @example(
-        named_type_node=concat.level2.typecheck.NamedTypeNode((0, 0), ''),
-        type=StackEffect(
-            (),
-            (
-                (
-                    IndividualVariable()
-                    & (
-                        ObjectType(IndividualVariable(), {}, (), [], False)
-                        & IndividualVariable()
-                    )
-                ),
-            ),
-        ),
     )
     def test_name_does_exist(self, named_type_node, type):
         env = concat.level1.typecheck.Environment({named_type_node.name: type})
@@ -237,5 +216,4 @@ class TestSequenceVariableTypeInference(unittest.TestCase):
             tree.children,
             (concat.level2.typecheck.infer,),
         )
-        print('actual:', type)
         self.assertEqual(type, StackEffect([in_var], [in_var, int_type]))

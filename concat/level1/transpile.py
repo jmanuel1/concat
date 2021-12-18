@@ -44,7 +44,9 @@ import astunparse  # type: ignore
 
 # This should stay in this module since it operates on level 1 types.
 def binary_operator_visitor(operator: str) -> Visitor[object, ast.expr]:
-    expression = 'lambda s,_:s.append(s.pop(-2) {} s.pop())'.format(operator)
+    expression = 'lambda s,_:s.append((lambda a,b: a {} b)(s.pop(-2), s.pop()))'.format(
+        operator
+    )
     return assert_type(concat.level1.operators.OperatorWordNode).then(
         node_to_py_string(expression)
     )
@@ -211,6 +213,25 @@ def _word_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
+    @visitors.add_alternative_to(
+        'pushed-word-special-case', 'pushed-subscription-word'
+    )
+    @assert_annotated_type
+    def pushed_subscription_word_visitor(
+        node: concat.level1.parse.SubscriptionWordNode,
+    ) -> ast.expr:
+        quotation = concat.level0.parse.QuoteWordNode(
+            node.children, node.location
+        )
+        py_index = ast.Index(pop_stack())
+        subscription = ast.Subscript(pop_stack(-2), py_index, ast.Load())
+        py_quotation = cast(ast.expr, visitors['quote-word'].visit(quotation))
+        py_node = pack_expressions(
+            [call_concat_function(py_quotation), subscription]
+        )
+        py_node.lineno, py_node.col_offset = node.location
+        return py_node
+
     @visitors.add_alternative_to('word', 'slice-word')
     @assert_annotated_type
     def slice_word_visitor(node: concat.level1.parse.SliceWordNode):
@@ -231,6 +252,26 @@ def _word_extension(
             ]
         )
         return visitors['subscription-word'].visit(subscription)
+
+    @visitors.add_alternative_to(
+        'pushed-word-special-case', 'pushed-slice-word'
+    )
+    @assert_annotated_type
+    def pushed_slice_word_visitor(
+        node: concat.level1.parse.SliceWordNode,
+    ) -> ast.expr:
+        to_slice_token = concat.level0.lex.Token()
+        to_slice_token.type, to_slice_token.value = 'NAME', 'to_slice'
+        to_slice = concat.level0.parse.NameWordNode(to_slice_token)
+        subscription = concat.level1.parse.SubscriptionWordNode(
+            [
+                *node.step_children,
+                *node.stop_children,
+                *node.start_children,
+                to_slice,
+            ]
+        )
+        return visitors['pushed-subscription-word'].visit(subscription)
 
     visitors.add_alternative_to('word', 'operator-word', fail)
 

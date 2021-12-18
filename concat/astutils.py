@@ -402,15 +402,8 @@ def parse_py_qualified_name(name: str) -> Union[ast.Name, ast.Attribute]:
 def assert_all_nodes_have_locations(tree: ast.AST) -> None:
     for node in ast.walk(tree):
         if isinstance(node, (ast.expr, ast.stmt)):
-            print(node)
             assert hasattr(node, 'lineno')
             assert hasattr(node, 'col_offset')
-            print(
-                node.lineno,
-                node.col_offset,
-                type(node.lineno),
-                type(node.col_offset),
-            )
 
 
 def flatten(list: List[Union['concat.level0.parse.WordNode', Words]]) -> Words:

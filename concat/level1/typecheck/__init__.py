@@ -84,6 +84,17 @@ class AttributeError(TypeError, builtins.AttributeError):
         self._attribute = attribute
 
 
+class StackMismatchError(TypeError):
+    def __init__(
+        self, actual: 'TypeSequence', expected: 'TypeSequence'
+    ) -> None:
+        super().__init__(
+            'The stack here is {}, but sequence type {} was expected'.format(
+                actual, expected
+            )
+        )
+
+
 class UnhandledNodeTypeError(builtins.NotImplementedError):
     pass
 
@@ -138,7 +149,6 @@ from concat.level1.typecheck.types import (
     dict_type,
     ellipsis_type,
     int_type,
-    _ftv,
     init_primitives,
     invertible_type,
     iterable_type,
@@ -152,7 +162,7 @@ from concat.level1.typecheck.types import (
 )
 
 
-class Environment(Dict[str, IndividualType]):
+class Environment(Dict[str, Type]):
     def copy(self) -> 'Environment':
         return Environment(super().copy())
 
@@ -192,9 +202,6 @@ def infer(
                     current_effect = StackEffect(i, [*o, int_type])
                 else:
                     raise UnhandledNodeTypeError
-            # there's no False word at the moment
-            elif isinstance(node, concat.level1.parse.TrueWordNode):
-                current_effect = StackEffect(i, [*o, bool_type])
             elif isinstance(node, concat.level1.operators.AddWordNode):
                 # rules:
                 # require object_type because the methods should return
@@ -212,7 +219,6 @@ def infer(
                 try_radd = False
                 try:
                     add_type = type1.get_type_of_attribute('__add__')
-                    print('add_type', add_type)
                 except AttributeError:
                     try_radd = True
                 else:
@@ -223,8 +229,6 @@ def infer(
                             )
                         )
                     if add_type.head != py_function_type:
-                        print('py_function_type', py_function_type)
-                        print('add_type.head', add_type.head)
                         raise TypeError(
                             '__add__ method of type {} is not a Python function, instead it has type {}'.format(
                                 type1, add_type
@@ -236,7 +240,6 @@ def infer(
                                 type1, add_type
                             )
                         )
-                    print(_global_constraints)
                     current_effect = StackEffect(
                         current_effect.input, [*rest, add_type.output],
                     )
@@ -248,8 +251,8 @@ def infer(
                         or [*radd_type.type_arguments[0]] != [object_type]
                     ):
                         raise TypeError(
-                            '__radd__ method of type {} does not have type (object) -> `t, instead it has type {}'.format(
-                                type2, radd_type
+                            '__radd__ method of type {} does not have type (object) -> `t, instead it has type {} (left operand is of type {})'.format(
+                                type2, radd_type, type1
                             )
                         )
                     current_effect = StackEffect(
@@ -267,9 +270,8 @@ def infer(
                             node.value, type_of_name, type_of_name
                         )
                     )
-                print(node.value, o1, '<=', type_of_name.input)
                 TypeSequence(o1).constrain(
-                    type_of_name.input, _global_constraints, polymorphic=True,
+                    type_of_name.input, _global_constraints, polymorphic=True
                 )
                 # For now, piggyback on substitutions
                 constraint_subs = (
@@ -300,22 +302,82 @@ def infer(
                     if child.value not in gamma:
                         raise NameError(child)
                     name_type = gamma[child.value].instantiate()
-                    print(child.value, name_type)
-                    print(child.value, 'uninstantiated', gamma[child.value])
                     current_subs, current_effect = (
                         S1,
                         StackEffect(i1, [*o1, S1(name_type)]),
                     )
+                elif isinstance(child, concat.level1.parse.SliceWordNode):
+                    sliceable_object_type = o[-1]
+                    # This doesn't match the evaluation order used by the
+                    # transpiler.
+                    # FIXME: Change the transpiler to fit the type checker.
+                    sub1, start_effect = infer(
+                        gamma,
+                        list(child.start_children),
+                        extensions=extensions,
+                        source_dir=source_dir,
+                        initial_stack=TypeSequence(o[:-1]),
+                    )
+                    start_type = start_effect.output[-1]
+                    o = tuple(start_effect.output[:-1])
+                    sub2, stop_effect = infer(
+                        sub1(gamma),
+                        list(child.stop_children),
+                        extensions=extensions,
+                        source_dir=source_dir,
+                        initial_stack=TypeSequence(o),
+                    )
+                    stop_type = stop_effect.output[-1]
+                    o = tuple(stop_effect.output[:-1])
+                    sub3, step_effect = infer(
+                        sub2(sub1(gamma)),
+                        list(child.step_children),
+                        extensions=extensions,
+                        source_dir=source_dir,
+                        initial_stack=TypeSequence(o),
+                    )
+                    step_type = step_effect.output[-1]
+                    o = tuple(step_effect.output[:-1])
+                    this_slice_type = slice_type[
+                        start_type, stop_type, step_type
+                    ]
+                    getitem_type = sliceable_object_type.get_type_of_attribute(
+                        '__getitem__'
+                    )
+                    getitem_type = getitem_type.get_type_of_attribute(
+                        '__call__'
+                    )
+                    getitem_type = getitem_type.instantiate()
+                    if (
+                        not isinstance(getitem_type, PythonFunctionType)
+                        or len(getitem_type.input) != 1
+                    ):
+                        raise TypeError(
+                            '__getitem__ method of {} has incorrect type {}'.format(
+                                node, getitem_type
+                            )
+                        )
+                    getitem_type = getitem_type.select_overload(
+                        (this_slice_type,), _global_constraints
+                    )
+                    result_type = getitem_type.output
+                    current_subs = _global_constraints.equalities_as_substitutions()(
+                        sub3(sub2(sub1(current_subs)))
+                    )
+                    current_effect = StackEffect(i, [*o, result_type])
                 else:
-                    if isinstance(node, concat.level0.parse.QuoteWordNode):
-                        input_stack, _ = node.input_stack_type.to_type(gamma)
+                    if (
+                        isinstance(child, concat.level0.parse.QuoteWordNode)
+                        and child.input_stack_type is not None
+                    ):
+                        input_stack, _ = child.input_stack_type.to_type(gamma)
                     else:
                         # The majority of quotations I've written don't comsume
                         # anything on the stack, so make that the default.
                         input_stack = TypeSequence([])
                     S2, fun_type = infer(
                         S1(gamma),
-                        node.children,
+                        child.children,
                         extensions=extensions,
                         source_dir=source_dir,
                         initial_stack=input_stack,
@@ -335,7 +397,6 @@ def infer(
                     _global_constraints.add(TypeSequence(o), input_stack)
                 else:
                     input_stack = TypeSequence(o)
-                print('quote-word input:', input_stack)
                 S1, (i1, o1) = infer(
                     gamma,
                     [*quotation.children],
@@ -367,7 +428,6 @@ def infer(
                     TypeSequence([a_bar, body_type, context_manager_type]),
                 )
                 actual_body_type = o[-2].get_type_of_attribute('__call__')
-                print('actual_body_type:', actual_body_type)
                 phi = _global_constraints.equalities_as_substitutions()
                 current_subs, current_effect = (
                     phi(S),
@@ -569,7 +629,6 @@ def infer(
                 )
                 current_effect = StackEffect(i, [*o, result_type])
             else:
-                fail = True
                 original_error = None
                 for extension in extensions or []:
                     try:
@@ -583,11 +642,10 @@ def infer(
                         current_subs, current_effect = extension(
                             gamma, [node], is_top_level, **kwargs
                         )
-                        fail = False
                         break
                     except UnhandledNodeTypeError as e:
                         original_error = e
-                if fail:
+                else:
                     raise UnhandledNodeTypeError(
                         "don't know how to handle '{}'".format(node)
                     ) from original_error

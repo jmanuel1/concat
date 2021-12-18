@@ -90,8 +90,8 @@ class Constraints:
         from concat.level1.typecheck import Substitutions
 
         sub = Substitutions()
-        for constraint in self._list:
-            if constraint.converse() in self._list:
+        for constraint in self._constraints:
+            if constraint.converse() in self._constraints:
                 # Applying the new mapping to the substitution should take care
                 # of transitive equality for us. More precisely, a variable
                 # will eventually be mapped to the last seen type it is equal
@@ -109,7 +109,7 @@ class Constraints:
         from concat.level1.typecheck.types import IndividualType, object_type
 
         # FIXME: We assume there is only one answer.
-        for constraint in self._list:
+        for constraint in self._constraints:
             if (
                 constraint.variable is var
                 and constraint.direction == _ConstraintDirection.SUBTYPE
@@ -123,11 +123,11 @@ class Constraints:
         return object_type
 
     def __str__(self) -> str:
-        return '[' + ', '.join(str(c) for c in self._list) + ']'
+        return '[' + ', '.join(str(c) for c in self._constraints) + ']'
 
     @property
-    def _list(self) -> List[_Constraint]:
-        return list(self._graph.edges)
+    def _constraints(self) -> Set[_Constraint]:
+        return self._graph.edges
 
 
 class _ConstraintGraph:

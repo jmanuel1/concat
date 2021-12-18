@@ -175,13 +175,12 @@ class TestTypeChecker(unittest.TestCase):
             concat.level1.parse.NoneWordNode: none_type,
             concat.level1.parse.NotImplWordNode: not_implemented_type,
             concat.level1.parse.EllipsisWordNode: ellipsis_type,
-            concat.level1.parse.TrueWordNode: bool_type,
         }
         expected_type = expected_types[type(simple_value_word)]
         self.assertEqual(list(effect.output), [expected_type])
 
     def test_slice_inference(self) -> None:
-        slice_prog = '[1, 2, 3, 4, 5, 6, 7, 8] [1:None:2]\n'
+        slice_prog = '[1, 2, 3, 4, 5, 6, 7, 8] $[1:None:2]\n'
         tree = parse(slice_prog)
         _, type = concat.level1.typecheck.infer(
             Environment(types), tree.children, is_top_level=True,
@@ -208,28 +207,7 @@ class TestTypeEquality(unittest.TestCase):
     @example(type=int_type.self_type)
     @example(type=int_type.get_type_of_attribute('__add__'))
     @example(type=int_type)
-    @example(
-        type=ObjectType(
-            IndividualVariable(),
-            {
-                '': (
-                    IndividualVariable()
-                    & StackEffect(TypeSequence([]), TypeSequence([]))
-                )
-            },
-            (),
-            (),
-            False,
-            [],
-            None,
-        )
-    )
-    @example(
-        type=IndividualVariable()
-        & StackEffect(TypeSequence([]), TypeSequence([]))
-    )
     def test_reflexive_equality(self, type):
-        # print(type)
         self.assertEqual(type, type)
 
 
@@ -244,6 +222,14 @@ class TestSubtyping(unittest.TestCase):
         fun1 = StackEffect([type1], [type2])
         fun2 = StackEffect([no_return_type], [object_type])
         self.assertLessEqual(fun1, fun2)
+
+    @given(from_type(IndividualType))
+    def test_no_return_is_bottom_type(self, type):
+        self.assertLessEqual(no_return_type, type)
+
+    @given(from_type(IndividualType))
+    def test_object_is_top_type(self, type):
+        self.assertLessEqual(type, object_type)
 
     __attributes_generator = dictionaries(
         text(max_size=25), from_type(IndividualType), max_size=5  # type: ignore

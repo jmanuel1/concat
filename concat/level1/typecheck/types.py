@@ -1,5 +1,9 @@
 import concat.level1.typecheck
-from concat.level1.typecheck import AttributeError, TypeError
+from concat.level1.typecheck import (
+    AttributeError,
+    StackMismatchError,
+    TypeError,
+)
 from concat.level1.typecheck.constraints import Constraints
 from typing import (
     Optional,
@@ -24,20 +28,12 @@ import builtins
 
 
 class Type(abc.ABC):
-    @abc.abstractmethod
-    def __init__(self):
-        pass
-
     # TODO: Fully replace with <=.
     def is_subtype_of(self, supertype: 'Type') -> bool:
         if supertype == self or supertype == object_type:
             return True
         if isinstance(supertype, IndividualVariable):
             return self.is_subtype_of(supertype.bound)
-        if isinstance(supertype, _IntersectionType):
-            return self.is_subtype_of(supertype.type_1) and self.is_subtype_of(
-                supertype.type_2
-            )
         return False
 
     def __le__(self, other: object) -> bool:
@@ -55,6 +51,14 @@ class Type(abc.ABC):
         except concat.level1.typecheck.AttributeError:
             return False
 
+    @abc.abstractproperty
+    def attributes(self) -> Mapping[str, 'Type']:
+        pass
+
+    @abc.abstractmethod
+    def free_type_variables(self) -> Set['_Variable']:
+        pass
+
     @abc.abstractmethod
     def apply_substitution(
         self, _: 'concat.level1.typecheck.Substitutions'
@@ -70,21 +74,11 @@ class Type(abc.ABC):
 
 
 class IndividualType(Type, abc.ABC):
-    @abc.abstractmethod
-    def __init__(self) -> None:
-        super().__init__()
-
-    def to_for_all(self) -> 'ForAll':
+    def to_for_all(self) -> Type:
         return ForAll([], self)
 
     def __and__(self, other: object) -> 'IndividualType':
-        if not isinstance(other, IndividualType):
-            return NotImplemented
-        elif self == object_type:
-            return other
-        elif other is object_type:
-            return self
-        return _IntersectionType(self, other)
+        raise NotImplementedError('take advantage of constraints instead')
 
     def is_subtype_of(self, supertype: Type) -> bool:
         if (
@@ -113,16 +107,15 @@ class _Variable(Type, abc.ABC):
     variables can be made simply by creating new objects. They can also be
     compared by identity."""
 
-    @abc.abstractmethod
-    def __init__(self) -> None:
-        super().__init__()
-
     def apply_substitution(
         self, sub: 'concat.level1.typecheck.Substitutions'
     ) -> Union[IndividualType, '_Variable', List['StackItemType']]:
         if self in sub:
             return sub[self]  # type: ignore
         return self
+
+    def free_type_variables(self) -> Set['_Variable']:
+        return {self}
 
 
 class IndividualVariable(_Variable, IndividualType):
@@ -174,6 +167,11 @@ class IndividualVariable(_Variable, IndividualType):
                 name
             )
 
+    @property
+    def attributes(self) -> Mapping[str, 'IndividualType']:
+        # FIXME: Constraints?
+        return cast(Mapping[str, IndividualType], self.bound.attributes)
+
     def apply_substitution(
         self, sub: 'concat.level1.typecheck.Substitutions'
     ) -> IndividualType:
@@ -198,64 +196,6 @@ class IndividualVariable(_Variable, IndividualType):
         return self.bound.collapse_bounds()
 
 
-# TODO: Reevaluate: do I really need this?
-class _IntersectionType(IndividualType):
-    def __init__(
-        self, type_1: 'IndividualType', type_2: 'IndividualType'
-    ) -> None:
-        self.type_1 = type_1
-        self.type_2 = type_2
-
-    def __repr__(self) -> str:
-        return '({!r} & {!r})'.format(self.type_1, self.type_2)
-
-    def __str__(self) -> str:
-        return '({} & {})'.format(self.type_1, self.type_2)
-
-    def is_subtype_of(self, other: Type) -> bool:
-        return (
-            super().is_subtype_of(other)
-            or self.type_1.is_subtype_of(other)
-            or self.type_2.is_subtype_of(other)
-        )
-
-    def constrain(self, supertype: Type, constraints: Constraints) -> None:
-        raise NotImplementedError('time to get rid of _IntersectionType?')
-
-    def get_type_of_attribute(self, name: str) -> 'IndividualType':
-        try:
-            return self.type_1.get_type_of_attribute(name)
-        except concat.level1.typecheck.TypeError:
-            return self.type_2.get_type_of_attribute(name)
-
-    def __eq__(self, other: object) -> bool:
-        simple_self = self.type_1 & self.type_2
-        if not isinstance(simple_self, _IntersectionType):
-            return simple_self == other
-        if not isinstance(other, _IntersectionType):
-            return super().__eq__(other)
-        result = {self.type_1, self.type_2} == {other.type_1, other.type_2}
-        print('&', result)
-        return result
-
-    def __hash__(self) -> int:
-        print('& in hash')
-        simple_self = self.type_1 & self.type_2
-        if not isinstance(simple_self, _IntersectionType):
-            return hash(simple_self)
-        return hash((self.type_1, self.type_2))
-
-    def apply_substitution(
-        self, sub: 'concat.level1.typecheck.Substitutions'
-    ) -> 'IndividualType':
-        type_1 = cast(IndividualType, sub(self.type_1))
-        type_2 = cast(IndividualType, sub(self.type_2))
-        return type_1 & type_2
-
-    def collapse_bounds(self) -> 'IndividualType':
-        return self.type_1.collapse_bounds() & self.type_2.collapse_bounds()
-
-
 class SequenceVariable(_Variable):
     def __init__(self) -> None:
         super().__init__()
@@ -276,24 +216,20 @@ class SequenceVariable(_Variable):
             'the sequence type {} does not hold attributes'.format(self)
         )
 
+    @property
+    def attributes(self) -> NoReturn:
+        raise TypeError(
+            'the sequence type {} does not hold attributes'.format(self)
+        )
+
 
 class TypeSequence(Type, Iterable['StackItemType']):
     def __init__(self, sequence: Sequence['StackItemType']) -> None:
         self._rest: Optional[SequenceVariable]
-        # FIXME: This assertion shoudn't fail, but it does.
-        assert not isinstance(sequence, TypeSequence)
-        assert all(not isinstance(i, TypeSequence) for i in sequence)
         if sequence and isinstance(sequence[0], SequenceVariable):
             self._rest = sequence[0]
             self._individual_types = sequence[1:]
         else:
-            try:
-                assert all(
-                    not isinstance(i, SequenceVariable) for i in sequence
-                )
-            except AssertionError:
-                print('invalid TypeSequence', sequence)
-                raise
             self._rest = None
             self._individual_types = sequence
 
@@ -346,22 +282,22 @@ class TypeSequence(Type, Iterable['StackItemType']):
                     and not supertype._individual_types
                 ):
                     return
-                elif self._rest and self._rest not in _ftv(supertype):
+                elif (
+                    self._rest
+                    and self._rest not in supertype.free_type_variables()
+                ):
                     self._rest.constrain(supertype, constraints)
                 elif self._is_empty() and not supertype._is_empty():
-                    raise TypeError(
-                        'The stack is empty here, but sequence type {} was expected'.format(
-                            supertype
-                        )
-                    )
+                    raise StackMismatchError(self, supertype)
                 else:
-                    # FIXME: handle case where self._rest is in supertype
-                    print(self, supertype)
-                    assert False
+                    # case where self._rest is in supertype: self._rest cannot
+                    # equal supertype because that would produce an infinite
+                    # sequence type
+                    raise StackMismatchError(self, supertype)
             elif (
                 not supertype._individual_types
                 and supertype._rest
-                and supertype._rest not in _ftv(self)
+                and supertype._rest not in self.free_type_variables()
             ):
                 supertype._rest.constrain(self, constraints)
             elif self._individual_types and supertype._individual_types:
@@ -379,15 +315,30 @@ class TypeSequence(Type, Iterable['StackItemType']):
                     supertype._individual_types[-1].constrain(
                         self._individual_types[-1], constraints
                     )
-                self[:-1].constrain(supertype[:-1], constraints, polymorphic)
+                try:
+                    self[:-1].constrain(
+                        supertype[:-1], constraints, polymorphic
+                    )
+                except StackMismatchError:
+                    raise StackMismatchError(self, supertype)
             else:
-                raise TypeError(
-                    ' {} is not a subtype of {}'.format(self, supertype)
-                )
+                raise StackMismatchError(self, supertype)
         else:
             raise TypeError(
                 '{} must be a sequence type, not {}'.format(self, supertype)
             )
+
+    def free_type_variables(self) -> Set['_Variable']:
+        ftv: Set[_Variable] = set()
+        for t in self:
+            ftv |= t.free_type_variables()
+        return ftv
+
+    @property
+    def attributes(self) -> NoReturn:
+        raise TypeError(
+            'the sequence type {} does not hold attributes'.format(self)
+        )
 
     def __bool__(self) -> bool:
         return not self._is_empty()
@@ -428,99 +379,10 @@ class TypeSequence(Type, Iterable['StackItemType']):
         return hash(tuple(self.as_sequence()))
 
 
-# FIXME: Subtyping of universal types.
-class ForAll(Type):
-    def __init__(
-        self, quantified_variables: List[_Variable], type: 'IndividualType'
-    ) -> None:
-        super().__init__()
-        self.quantified_variables = quantified_variables
-        self.type = type
-
-    def to_for_all(self) -> 'ForAll':
-        return self
-
-    def __getitem__(
-        self,
-        type_arguments: Sequence[
-            Union['StackItemType', Sequence['StackItemType']]
-        ],
-    ) -> IndividualType:
-        sub = concat.level1.typecheck.Substitutions()
-        if len(type_arguments) != len(self.quantified_variables):
-            raise concat.level1.typecheck.TypeError(
-                'type argument mismatch in forall type: arguments are {!r}, '
-                'quantified variables are {!r}'.format(
-                    type_arguments, self.quantified_variables
-                )
-            )
-        for argument, variable in zip(
-            type_arguments, self.quantified_variables
-        ):
-            if isinstance(variable, IndividualVariable) and not isinstance(
-                argument, IndividualType
-            ):
-                raise concat.level1.typecheck.TypeError(
-                    'type argument mismatch in forall type: expected '
-                    'individual type for {!r}, got {!r}'.format(
-                        variable, argument
-                    )
-                )
-            if isinstance(variable, SequenceVariable) and not isinstance(
-                argument, (SequenceVariable, collections.abc.Sequence)
-            ):
-                raise concat.level1.typecheck.TypeError(
-                    'type argument mismatch in forall type: expected sequence '
-                    'type for {!r}, got {!r}'.format(variable, argument)
-                )
-            if isinstance(argument, collections.abc.Sequence):
-                sub[variable] = [*argument]
-            else:
-                sub[variable] = argument
-        return cast(IndividualType, sub(self.type))
-
-    def __str__(self) -> str:
-        string = 'for all '
-        string += ' '.join(map(str, self.quantified_variables))
-        string += '. {}'.format(self.type)
-        return string
-
-    def __and__(self, other: object) -> 'ForAll':
-        if not isinstance(other, ForAll):
-            return NotImplemented
-        # TODO: Make variables unique
-        # FIXME: This could inadvertently capture free variables in either
-        # operand
-        return ForAll(
-            self.quantified_variables + other.quantified_variables,
-            self.type & other.type,
-        )
-
-    def apply_substitution(
-        self, sub: 'concat.level1.typecheck.Substitutions'
-    ) -> 'ForAll':
-        return ForAll(
-            self.quantified_variables,
-            cast(
-                IndividualType,
-                concat.level1.typecheck.Substitutions(
-                    {
-                        a: i
-                        for a, i in sub.items()
-                        if a not in self.quantified_variables
-                    }
-                )(self.type),
-            ),
-        )
-
-    def constrain(self, supertype: Type, constraints: Constraints) -> None:
-        raise NotImplementedError('time to get rid of ForAll')
-
-    def instantiate(self) -> 'IndividualType':
-        subs = concat.level1.typecheck.Substitutions(
-            {a: type(a)() for a in self.quantified_variables}
-        )
-        return cast(IndividualType, subs(self.type))
+# TODO: Actually get rid of ForAll uses. This is a temporary measure since I
+# don't want to do that work right now.
+def ForAll(type_parameters: Sequence['_Variable'], type: Type) -> Type:
+    return ObjectType(IndividualVariable(), type.attributes, type_parameters,)
 
 
 # TODO: Rename to StackEffect at all use sites.
@@ -537,8 +399,15 @@ class _Function(IndividualType):
     def __iter__(self) -> Iterator[Sequence['StackItemType']]:
         return iter((tuple(self.input), tuple(self.output)))
 
-    def generalized_wrt(self, gamma: Dict[str, Type]) -> ForAll:
-        return ForAll(list(_ftv(self) - _ftv(gamma)), self)
+    def generalized_wrt(self, gamma: Dict[str, Type]) -> Type:
+        return ObjectType(
+            IndividualVariable(),
+            {'__call__': self,},
+            list(
+                self.free_type_variables()
+                - _free_type_variables_of_mapping(gamma)
+            ),
+        )
 
     def can_be_complete_program(self) -> bool:
         """Returns true iff the function type is a subtype of ( -- *out)."""
@@ -668,9 +537,14 @@ class _Function(IndividualType):
             raise TypeError(
                 '{} is not a subtype of {}'.format(self, supertype)
             )
-        print(self, fun_type)
         constraints.add(self.input, fun_type.input)
         constraints.add(self.output, fun_type.output)
+
+    def free_type_variables(self) -> Set['_Variable']:
+        return (
+            self.input.free_type_variables()
+            | self.output.free_type_variables()
+        )
 
     @staticmethod
     def _rename_sequence_variable(
@@ -714,6 +588,10 @@ class _Function(IndividualType):
         if name == '__call__':
             return self
         raise concat.level1.typecheck.AttributeError(self, name)
+
+    @property
+    def attributes(self) -> Mapping[str, 'StackEffect']:
+        return {'__call__': self}
 
     def apply_substitution(
         self, sub: 'concat.level1.typecheck.Substitutions'
@@ -781,82 +659,35 @@ class QuotationType(_Function):
 def _intersect_sequences(
     seq1: Sequence['StackItemType'], seq2: Sequence['StackItemType']
 ) -> Sequence['StackItemType']:
-    if seq1 and isinstance(seq1[-1], SequenceVariable):
-        return seq2
-    elif seq2 and isinstance(seq2[-1], SequenceVariable):
-        return seq1
-    elif not seq1 and not seq2:
-        return ()
-    elif not seq1 or not seq2:
-        return (no_return_type,)
-    else:
-        return (
-            *_intersect_sequences(seq1[:-1], seq2[:-1]),
-            cast(IndividualType, seq1[-1]) & cast(IndividualType, seq2[-1]),
-        )
+    raise NotImplementedError('stop using _IntersectionType')
 
 
 # FIXME: This should be a method on types
-def inst(sigma: Union[ForAll, _Function]) -> IndividualType:
+def inst(sigma: _Function) -> IndividualType:
     """This is based on the inst function described by Kleffner."""
-    if isinstance(sigma, ForAll):
-        subs = concat.level1.typecheck.Substitutions(
-            {a: type(a)() for a in sigma.quantified_variables}
-        )
-        return cast(IndividualType, subs(sigma.type))
     if isinstance(sigma, _Function):
         input = [
-            inst(type) if isinstance(type, (ForAll, _Function)) else type
+            inst(type) if isinstance(type, _Function) else type
             for type in sigma.input
         ]
         output = [
-            inst(type) if isinstance(type, (ForAll, _Function)) else type
+            inst(type) if isinstance(type, _Function) else type
             for type in sigma.output
         ]
         return _Function(input, output)
-    if isinstance(sigma, _IntersectionType):
-        return inst(sigma.type_1) & inst(sigma.type_2)
     raise builtins.TypeError(type(sigma))
 
 
 StackItemType = Union[SequenceVariable, IndividualType]
 
 
-# FIXME: This should be a method on types.
-def _ftv(
-    f: Union[Type, Sequence[StackItemType], Mapping[str, Type]]
+def _free_type_variables_of_mapping(
+    attributes: Mapping[str, Type]
 ) -> Set[_Variable]:
-    """The ftv function described by Kleffner."""
-    ftv: Set[_Variable]
-    if isinstance(f, _Variable):
-        return {f}
-    elif isinstance(f, _Function):
-        return _ftv(list(f.input)) | _ftv(list(f.output))
-    elif isinstance(f, collections.abc.Sequence):
-        ftv = set()
-        for t in f:
-            ftv |= _ftv(t)
-        return ftv
-    elif isinstance(f, TypeSequence):
-        return _ftv(f.as_sequence())
-    elif isinstance(f, ForAll):
-        return _ftv(f.type) - set(f.quantified_variables)
-    elif isinstance(f, dict):
-        ftv = set()
-        for sigma in f.values():
-            ftv |= _ftv(sigma)
-        return ftv
-    elif isinstance(f, _IntersectionType):
-        return _ftv(f.type_1) | _ftv(f.type_2)
-    elif isinstance(f, ObjectType):
-        ftv = _ftv(f.attributes)
-        for arg in f.type_arguments:
-            ftv |= _ftv(arg)
-        # QUESTION: Include supertypes?
-        ftv -= {f.self_type, *f.type_parameters}
-        return ftv
-    else:
-        raise builtins.TypeError(f)
+    ftv: Set[_Variable] = set()
+    for sigma in attributes.values():
+        ftv |= sigma.free_type_variables()
+    return ftv
 
 
 def init_primitives():
@@ -884,27 +715,18 @@ class ObjectType(IndividualType):
         _head: Optional['ObjectType'] = None,
         **_other_kwargs,
     ) -> None:
-        from concat.level1.typecheck import Substitutions
+        # There should be no need to make the self_type variable unique because
+        # it is treated as a bound variable in apply_substitution. In other
+        # words, it is removed from any substitution received.
+        self._self_type = self_type
 
-        # make the variable unique
-        self._self_type = IndividualVariable()
-        self_sub = Substitutions({self_type: self._self_type})
-
-        self._attributes = {
-            name: self_sub(t) for name, t in attributes.items()
-        }
+        self._attributes = attributes
 
         self._type_parameters = type_parameters
-        self._nominal_supertypes = tuple(
-            self_sub(TypeSequence(nominal_supertypes))
-        )
+        self._nominal_supertypes = nominal_supertypes
         self._nominal = nominal
 
-        type_arguments = [
-            cast(Union[StackItemType, TypeSequence], self_sub(arg))
-            for arg in _type_arguments
-        ]
-        self._type_arguments: TypeArguments = type_arguments
+        self._type_arguments: TypeArguments = _type_arguments
 
         self._head = _head or self
 
@@ -916,6 +738,8 @@ class ObjectType(IndividualType):
             del self._other_kwargs['_type_arguments']
         if 'nominal' in self._other_kwargs:
             del self._other_kwargs['nominal']
+
+        self._instantiations: Dict[TypeArguments, ObjectType] = {}
 
     def collapse_bounds(self) -> 'ObjectType':
         return ObjectType(
@@ -933,17 +757,40 @@ class ObjectType(IndividualType):
         )
 
     def apply_substitution(
-        self, sub: 'concat.level1.typecheck.Substitutions'
+        self,
+        sub: 'concat.level1.typecheck.Substitutions',
+        _should_quantify_over_type_parameters=True,
     ) -> 'ObjectType':
         from concat.level1.typecheck import Substitutions
 
-        sub = Substitutions(
-            {
-                a: i
-                for a, i in sub.items()
-                if a not in self._type_parameters and a is not self._self_type
-            }
-        )
+        if _should_quantify_over_type_parameters:
+            sub = Substitutions(
+                {
+                    a: i
+                    for a, i in sub.items()
+                    # Don't include self_type in substitution, it is bound.
+                    if a not in self._type_parameters
+                    and a is not self._self_type
+                }
+            )
+            # if no free type vars will be substituted, just return self
+            if not any(
+                free_var in sub for free_var in self.free_type_variables()
+            ):
+                return self
+        else:
+            sub = Substitutions(
+                {a: i for a, i in sub.items() if a is not self._self_type}
+            )
+            # if no free type vars will be substituted, just return self
+            if not any(
+                free_var in sub
+                for free_var in {
+                    *self.free_type_variables(),
+                    *self._type_parameters,
+                }
+            ):
+                return self
         attributes = cast(
             Dict[str, IndividualType],
             {attr: sub(t) for attr, t in self._attributes.items()},
@@ -955,7 +802,7 @@ class ObjectType(IndividualType):
             cast(Union[StackItemType, TypeSequence], sub(type_argument))
             for type_argument in self._type_arguments
         ]
-        return type(self)(
+        subbed_type = type(self)(
             self._self_type,
             attributes,
             type_parameters=self._type_parameters,
@@ -967,9 +814,13 @@ class ObjectType(IndividualType):
             _head=self._head,
             **self._other_kwargs,
         )
+        if self._internal_name is not None:
+            subbed_type.set_internal_name(self._internal_name)
+        return subbed_type
 
+    # TODO: Remove is_subtype_of and replace uses with constraints
     def is_subtype_of(self, supertype: 'Type') -> bool:
-        if supertype in self._nominal_supertypes:
+        if supertype in self._nominal_supertypes or supertype == object_type:
             return True
         if isinstance(supertype, ObjectType) and supertype._nominal:
             return False
@@ -1027,13 +878,26 @@ class ObjectType(IndividualType):
                     self, supertype
                 )
             )
+        elif isinstance(supertype, StackEffect):
+            if self._arity != 0:
+                raise TypeError(
+                    'type constructor {} expected at least one argument cannot be a stack effect (expected effect {})'.format(
+                        self, supertype
+                    )
+                )
+            self.get_type_of_attribute('__call__').constrain(
+                supertype, constraints
+            )
+            return
         elif not isinstance(supertype, ObjectType):
             raise NotImplementedError(supertype)
         if self._arity != supertype._arity:
             raise TypeError(
                 '{} and {} do not have the same arity'.format(self, supertype)
             )
-
+        # every object type is a subtype of object_type
+        if supertype == object_type:
+            return
         # Don't forget that there's nominal subtyping too.
         if supertype._nominal:
             if (
@@ -1087,6 +951,14 @@ class ObjectType(IndividualType):
             None if self._head is self else self._head,
         )
 
+    def free_type_variables(self) -> Set[_Variable]:
+        ftv = _free_type_variables_of_mapping(self.attributes)
+        for arg in self.type_arguments:
+            ftv |= arg.free_type_variables()
+        # QUESTION: Include supertypes?
+        ftv -= {self.self_type, *self.type_parameters}
+        return ftv
+
     def __str__(self) -> str:
         if self._internal_name is not None:
             if len(self._type_arguments) > 0:
@@ -1098,7 +970,16 @@ class ObjectType(IndividualType):
                 )
             return self._internal_name
         assert self._internal_name is None
-        return repr(self)
+        return '{}({}, {}, {}, {}, {}, {}, {})'.format(
+            type(self).__qualname__,
+            self._self_type,
+            _mapping_to_str(self._attributes),
+            _iterable_to_str(self._type_parameters),
+            _iterable_to_str(self._nominal_supertypes),
+            self._nominal,
+            _iterable_to_str(self._type_arguments),
+            None if self._head is self else self._head,
+        )
 
     def set_internal_name(self, name: str) -> None:
         self._internal_name = name
@@ -1109,6 +990,10 @@ class ObjectType(IndividualType):
 
         if not isinstance(other, ObjectType):
             return super().__eq__(other)
+
+        if self._nominal or other._nominal:
+            return self is other
+
         sub = Substitutions({self._self_type: other._self_type})
         subbed_attributes = {
             attr: sub(t) for attr, t in self._attributes.items()
@@ -1148,8 +1033,6 @@ class ObjectType(IndividualType):
                 type1 = tuple(type1)
             if type1 != type2:
                 return False
-        if self._nominal != other._nominal:
-            return False
         return True
 
     _hash_variable = None
@@ -1178,11 +1061,27 @@ class ObjectType(IndividualType):
     ) -> 'ObjectType':
         from concat.level1.typecheck import Substitutions
 
+        if self._arity != len(type_arguments):
+            raise TypeError(
+                'type constructor {} given {} arguments, expected {} arguments'.format(
+                    self, len(type_arguments), self._arity
+                )
+            )
+
+        type_arguments = tuple(type_arguments)
+        if type_arguments in self._instantiations:
+            return self._instantiations[type_arguments]
+
         sub = Substitutions(zip(self._type_parameters, type_arguments))
-        result = sub(self)
+        result = self.apply_substitution(
+            sub, _should_quantify_over_type_parameters=False
+        )
         # HACK: We remove the parameters and add arguments through mutation.
         result._type_parameters = ()
         result._type_arguments = type_arguments
+
+        self._instantiations[type_arguments] = result
+
         return result
 
     def instantiate(self) -> 'ObjectType':
@@ -1262,9 +1161,7 @@ class PythonFunctionType(ObjectType):
             and len(self._type_arguments) == 0
         )
         if self._arity == 0:
-            # print(type(self.input), self.input)
             assert isinstance(self.input, collections.abc.Sequence)
-        # assert self._head == py_function_type
         self._args = list(args)
         self._overloads = _overloads
         if '_head' in self._kwargs:
@@ -1313,7 +1210,8 @@ class PythonFunctionType(ObjectType):
                 sub(TypeSequence(self.input)), sub(self.output)
             ]
             for overload in self._overloads:
-                type = type.with_overload(
+                # This is one of the few places where a type should be mutated.
+                type._add_overload(
                     [sub(i) for i in overload[0]], sub(overload[1])
                 )
             return type
@@ -1338,7 +1236,6 @@ class PythonFunctionType(ObjectType):
     ) -> 'PythonFunctionType':
         # FIXME: use temporary constraints
         for overload in [(self.input, self.output), *self._overloads]:
-            # print('overload:', overload[0])
             for a, b in zip(input_types, overload[0]):
                 try:
                     a.constrain(b, constraints)
@@ -1360,6 +1257,11 @@ class PythonFunctionType(ObjectType):
             _overloads=[*self._overloads, (input, output)],
             _head=py_function_type,
         )
+
+    def _add_overload(
+        self, input: Sequence[StackItemType], output: IndividualType
+    ) -> None:
+        self._overloads.append((input, output))
 
     def bind(self) -> 'PythonFunctionType':
         assert self._arity == 0
@@ -1412,21 +1314,32 @@ def _iterable_to_str(iterable: Iterable) -> str:
     return '[' + ', '.join(map(str, iterable)) + ']'
 
 
+def _mapping_to_str(mapping: Mapping) -> str:
+    return (
+        '{'
+        + ', '.join(
+            '{}: {}'.format(key, value) for key, value in mapping.items()
+        )
+        + '}'
+    )
+
+
 # expose _Function as StackEffect
 StackEffect = _Function
 
 _x = IndividualVariable()
 
-
 float_type = ObjectType(_x, {}, nominal=True)
 no_return_type = _NoReturnType()
-object_type = ObjectType(_x, {})
+object_type = ObjectType(_x, {}, nominal=True)
+object_type.set_internal_name('object_type')
 
 _arg_type_var = SequenceVariable()
 _return_type_var = IndividualVariable()
 py_function_type = PythonFunctionType(
     _x, {}, type_parameters=[_arg_type_var, _return_type_var]
 )
+py_function_type.set_internal_name('py_function_type')
 
 _invert_result_var = IndividualVariable()
 invertible_type = ObjectType(
@@ -1448,30 +1361,30 @@ subtractable_type = ObjectType(
     [_sub_operand_type, _sub_result_type],
 )
 
+bool_type = ObjectType(_x, {}, nominal=True)
+bool_type.set_internal_name('bool_type')
+
 _int_add_type = py_function_type[TypeSequence([object_type]), _x]
-# FIXME: subtractable_type are structural supertypes
-# but for now they are both explicit
+
 int_type = ObjectType(
-    _x,  # FIXME: Make unique for each type.
+    _x,
     {
         '__add__': _int_add_type,
         '__invert__': py_function_type[TypeSequence([]), _x],
+        '__sub__': _int_add_type,
+        '__invert__': py_function_type[TypeSequence([]), _x],
+        '__le__': py_function_type[TypeSequence([_x]), bool_type],
     },
-    [],
-    [subtractable_type],
     nominal=True,
 )
 int_type.set_internal_name('int_type')
-print('_x', _x)
-print('py_function_type:', repr(py_function_type))
-print('int_type.__add__:', repr(_int_add_type))
-print('int_type:', repr(int_type))
 
 # FIXME: Use an iterator interface instead of _x
 _result_type = IndividualVariable()
 iterable_type = ObjectType(
     _x, {'__iter__': py_function_type[TypeSequence([]), _x]}, [_result_type]
 )
+iterable_type.set_internal_name('iterable_type')
 
 context_manager_type = ObjectType(
     _x,
@@ -1483,12 +1396,19 @@ context_manager_type = ObjectType(
     },
 )
 optional_type = _OptionalType()
+context_manager_type.set_internal_name('context_manager_type')
+
+optional_type = _OptionalType()
+optional_type.set_internal_name('optional_type')
 
 none_type = ObjectType(_x, {})
 none_type.set_internal_name('none_type')
 
-dict_type = ObjectType(_x, {}, [], [iterable_type])
-bool_type = ObjectType(_x, {})
+dict_type = ObjectType(
+    _x, {'__iter__': py_function_type[TypeSequence([]), object_type]}
+)
+dict_type.set_internal_name('dict_type')
+
 file_type = ObjectType(
     _x,
     {
@@ -1500,7 +1420,9 @@ file_type = ObjectType(
     [],
     # context_manager_type is a structural supertype
     [iterable_type],
+    nominal=True,
 )
+file_type.set_internal_name('file_type')
 
 _start_type_var, _stop_type_var, _step_type_var = (
     IndividualVariable(),
@@ -1528,16 +1450,43 @@ list_type = ObjectType(
 )
 list_type.set_internal_name('list_type')
 
-str_type = ObjectType(
-    _x, {'__getitem__': py_function_type[TypeSequence([int_type]), _x]}
+_str_getitem_type = py_function_type[
+    TypeSequence([int_type]), _x
+].with_overload(
+    [
+        slice_type[
+            optional_type[int_type,],
+            optional_type[int_type,],
+            optional_type[int_type,],
+        ]
+    ],
+    _x,
 )
+str_type = ObjectType(
+    _x,
+    {
+        '__getitem__': _str_getitem_type,
+        '__add__': py_function_type[TypeSequence([object_type]), _x],
+        'find': py_function_type[
+            TypeSequence(
+                [_x, optional_type[int_type,], optional_type[int_type,]]
+            ),
+            int_type,
+        ],
+    },
+    nominal=True,
+)
+str_type.set_internal_name('str_type')
 
 ellipsis_type = ObjectType(_x, {})
 not_implemented_type = ObjectType(_x, {})
+
 tuple_type = ObjectType(
     _x,
     {'__getitem__': py_function_type}
     # iterable_type is a structural supertype
 )
+tuple_type.set_internal_name('tuple_type')
+
 base_exception_type = ObjectType(_x, {})
 module_type = ObjectType(_x, {})

@@ -25,11 +25,28 @@ _c_var = IndividualVariable()
 _x = IndividualVariable()
 
 types = {
-    'if_then': ObjectType(_x, {'__call__': StackEffect(
-        [_rest_var, bool_type, StackEffect([_rest_var], [_rest_var])],
+    'if_then': ObjectType(
+        _x,
+        {
+            '__call__': StackEffect(
+                [_rest_var, bool_type, StackEffect([_rest_var], [_rest_var])],
+                [_rest_var],
+            )
+        },
         [_rest_var],
-    )}, [_rest_var]),
-    'call': ObjectType(_x, {'__call__': StackEffect(
-        [_rest_var, StackEffect([_rest_var], [_seq_var])], [_seq_var],
-    )}, [_rest_var, _seq_var]),
+    ),
+    'call': ObjectType(
+        _x,
+        {
+            '__call__': StackEffect(
+                [_rest_var, StackEffect([_rest_var], [_seq_var])], [_seq_var],
+            )
+        },
+        [_rest_var, _seq_var],
+    ),
+    'True': ObjectType(
+        _a_var,
+        {'__call__': StackEffect([_rest_var], [_rest_var, bool_type])},
+        [_rest_var],
+    ),
 }

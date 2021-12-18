@@ -2,7 +2,9 @@ from concat.level1.typecheck.types import (
     IndividualVariable,
     SequenceVariable,
     ForAll,
+    ObjectType,
     StackEffect,
+    TypeSequence,
     bool_type,
     dict_type,
     file_type,
@@ -31,7 +33,7 @@ types = {
                 _rest_var,
                 iterable_type[object_type,],
                 iterable_type[object_type,],
-                py_function_type[_seq_var, _a_var],
+                py_function_type[TypeSequence([_seq_var]), _a_var],
             ],
             [_rest_var, _a_var],
         ),
@@ -50,6 +52,16 @@ types = {
     'nip': ForAll(
         [_rest_var, _a_var],
         StackEffect([_rest_var, object_type, _a_var], [_rest_var, _a_var]),
+    ),
+    'nip_2': ObjectType(
+        _a_var,
+        {
+            '__call__': StackEffect(
+                [_rest_var, object_type, object_type, _b_var],
+                [_rest_var, _b_var],
+            )
+        },
+        [_rest_var, _b_var],
     ),
     'drop': ForAll(
         [_rest_var], StackEffect([_rest_var, object_type], [_rest_var])
@@ -70,9 +82,7 @@ types = {
     ),
     'to_list': ForAll(
         [_rest_var],
-        StackEffect(
-            [_rest_var, iterable_type], [_rest_var, list_type]
-        ),
+        StackEffect([_rest_var, iterable_type], [_rest_var, list_type]),
     ),
     'False': ForAll(
         [_rest_var], StackEffect([_rest_var], [_rest_var, bool_type])
