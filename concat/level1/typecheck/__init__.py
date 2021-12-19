@@ -24,7 +24,6 @@ from typing_extensions import Protocol
 import concat.level0.parse
 import concat.level1.operators
 import concat.level1.parse
-from concat.level1.typecheck.constraints import Constraints
 
 
 if TYPE_CHECKING:
@@ -168,10 +167,6 @@ class Environment(Dict[str, Type]):
 
     def apply_substitution(self, sub: 'Substitutions') -> 'Environment':
         return Environment({name: sub(t) for name, t in self.items()})
-
-
-# FIXME: This should be reset after each type checking each program/unit.
-_global_constraints = Constraints()
 
 
 # FIXME: I'm really passing around a bunch of state here. I could create an
@@ -644,9 +639,6 @@ def infer(
         except TypeError as e:
             e.set_location_if_missing(node.location)
             raise
-    current_subs = _global_constraints.equalities_as_substitutions()(
-        current_subs
-    )
     return current_subs, current_effect
 
 

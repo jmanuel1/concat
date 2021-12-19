@@ -2,7 +2,7 @@ import concat.astutils
 import concat.level0.lex
 import concat.level0.parse
 import concat.level1.typecheck
-from concat.level1.typecheck import Environment, TypeError, _global_constraints
+from concat.level1.typecheck import Environment, TypeError
 import concat.level1.parse
 import concat.level1.operators
 import concat.level2.parse
