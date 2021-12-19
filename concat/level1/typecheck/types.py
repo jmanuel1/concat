@@ -34,11 +34,7 @@ if TYPE_CHECKING:
 class Type(abc.ABC):
     # TODO: Fully replace with <=.
     def is_subtype_of(self, supertype: 'Type') -> bool:
-        if supertype == self or supertype == object_type:
-            return True
-        if isinstance(supertype, IndividualVariable):
-            return self.is_subtype_of(supertype.bound)
-        return False
+        return supertype == self or supertype == object_type
 
     def __le__(self, other: object) -> bool:
         if not isinstance(other, Type):
@@ -113,10 +109,6 @@ class IndividualType(Type, abc.ABC):
             return False
         return super().is_subtype_of(supertype)
 
-    @abc.abstractmethod
-    def collapse_bounds(self) -> 'IndividualType':
-        pass
-
 
 class _Variable(Type, abc.ABC):
     """Objects that represent type variables.
@@ -137,24 +129,8 @@ class _Variable(Type, abc.ABC):
 
 
 class IndividualVariable(_Variable, IndividualType):
-    def __init__(self, bound: Optional[IndividualType] = None) -> None:
+    def __init__(self) -> None:
         super().__init__()
-        self._bound = bound
-
-    @property
-    def bound(self) -> 'IndividualType':
-        return self._bound or object_type
-
-    @property
-    def _never_object_type_bound(self) -> Optional[IndividualType]:
-        if self._bound == object_type:
-            return None
-        return self._bound
-
-    def is_subtype_of(self, supertype: Type):
-        return super().is_subtype_of(supertype) or self.bound.is_subtype_of(
-            supertype
-        )
 
     def constrain_and_bind_supertype_variables(
         self, supertype: Type, rigid_variables: Set['_Variable']
@@ -214,48 +190,23 @@ class IndividualVariable(_Variable, IndividualType):
     # Default __eq__ and __hash__ (equality by object identity) are used.
 
     def __str__(self) -> str:
-        bound = ''
-        if self.bound is not object_type:
-            bound = ' (bound: {})'.format(self.bound)
-        return '`t_{}'.format(id(self)) + bound
+        return '`t_{}'.format(id(self))
 
     def __repr__(self) -> str:
-        if self.bound == object_type:
-            bound = ''
-        else:
-            bound = ', bound: ' + repr(self.bound)
-        return '<individual variable {}{}>'.format(id(self), bound)
-
-    def get_type_of_attribute(self, name: str) -> 'IndividualType':
-        return self.bound.get_type_of_attribute(name)
-
-    @property
-    def attributes(self) -> Mapping[str, 'IndividualType']:
-        # FIXME: Constraints?
-        return cast(Mapping[str, IndividualType], self.bound.attributes)
+        return '<individual variable {}>'.format(id(self))
 
     def apply_substitution(
         self, sub: 'concat.level1.typecheck.Substitutions'
     ) -> IndividualType:
-        if super().apply_substitution(sub) is not self:
-            return cast(IndividualType, super().apply_substitution(sub))
-        # If our bound won't change, return the same variable. Without
-        # handling this case, other code might not work since it starts
-        # returning substitutions from type variables it wasn't originally
-        # given.
-        # TODO: I should probably just separate bounds from type variables.
-        if self._never_object_type_bound is None:
-            # This might not be correct, but I need to avoid infinite recursion.
-            bound = None
-        else:
-            bound = cast(IndividualType, sub(self._never_object_type_bound))
-        if bound == self._never_object_type_bound:
-            return self
-        # NOTE: This returns a new, distinct type variable!
-        return IndividualVariable(bound)
+        return cast(IndividualType, super().apply_substitution(sub))
 
-    def collapse_bounds(self) -> IndividualType:
-        return self.bound.collapse_bounds()
+    @property
+    def attributes(self) -> NoReturn:
+        raise TypeError(
+            '{} is an individual type variable, so its attributes are unknown'.format(
+                self
+            )
+        )
 
 
 class SequenceVariable(_Variable):
@@ -642,8 +593,7 @@ class _Function(IndividualType):
                 type2, IndividualVariable
             ):
                 # FIXME: This equality check should include alpha equivalence.
-                if type1.bound == type2.bound:
-                    subs[type2] = type1
+                subs[type2] = type1
             elif isinstance(type1, SequenceVariable) and isinstance(
                 type2, SequenceVariable
             ):
@@ -807,23 +757,6 @@ class _Function(IndividualType):
     ) -> '_Function':
         return _Function(sub(self.input), sub(self.output))
 
-    def collapse_bounds(self) -> '_Function':
-        counts: Dict[StackItemType, int] = {}
-        for type in (*self.input, *self.output):
-            counts[type] = counts.get(type, 0) + 1
-        collapsed_input, collapsed_output = [], []
-        for type in self.input:
-            if isinstance(type, SequenceVariable) or counts[type] > 1:
-                collapsed_input.append(type)
-            else:
-                collapsed_input.append(type.collapse_bounds())
-        for type in self.output:
-            if isinstance(type, SequenceVariable) or counts[type] > 1:
-                collapsed_output.append(type)
-            else:
-                collapsed_output.append(type.collapse_bounds())
-        return _Function(collapsed_input, collapsed_output)
-
     def bind(self) -> '_Function':
         return _Function(self.input[:-1], self.output)
 
@@ -975,21 +908,6 @@ class ObjectType(IndividualType):
             del self._other_kwargs['nominal']
 
         self._instantiations: Dict[TypeArguments, ObjectType] = {}
-
-    def collapse_bounds(self) -> 'ObjectType':
-        return ObjectType(
-            self._self_type,
-            {
-                attr: t.collapse_bounds()
-                for attr, t in self._attributes.items()
-            },
-            type_parameters=self._type_parameters,
-            nominal_supertypes=self._nominal_supertypes,
-            nominal=self._nominal,
-            _type_arguments=self._type_arguments,
-            _head=self if self._head is None else self._head,
-            **self._other_kwargs,
-        )
 
     def apply_substitution(
         self,
@@ -1356,8 +1274,7 @@ class ObjectType(IndividualType):
                 type2, IndividualVariable
             ):
                 # FIXME: This equality check should include alpha equivalence.
-                if type1.bound == type2.bound:
-                    subs[type2] = type1
+                subs[type2] = type1
             elif isinstance(type1, SequenceVariable) and isinstance(
                 type2, SequenceVariable
             ):
