@@ -444,7 +444,7 @@ def infer(
         subs = index_output_typeseq[-2].constrain_and_bind_supertype_variables(
             subscriptable_interface, set(),
         )(index_subs(subs))
-        subs(index_output_typeseq[-1]).new_constrain(subs(index_type_var))
+        subs(index_output_typeseq[-1]).constrain(subs(index_type_var))
 
         result_type = subs(result_type_var).get_type_of_attribute('__call__')
         if not isinstance(result_type, StackEffect):
@@ -507,7 +507,7 @@ def infer(
         # the declared outputs. Thus, inferred_type.output should be a subtype
         # declared_type.output.
         try:
-            inferred_type.output.new_constrain(declared_type.output)
+            inferred_type.output.constrain(declared_type.output)
         except TypeError:
             message = (
                 'declared function type {} is not compatible with '
@@ -540,7 +540,7 @@ def infer(
             expected_o2 = TypeSequence(
                 [rest_var, subscriptable_interface, int_type,]
             )
-            o2[-1].new_constrain(int_type)
+            o2[-1].constrain(int_type)
             getitem_type = (
                 o2[-2]
                 .get_type_of_attribute('__getitem__')

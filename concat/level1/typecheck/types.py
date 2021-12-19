@@ -81,7 +81,7 @@ class Type(abc.ABC):
     ) -> 'Substitutions':
         pass
 
-    def new_constrain(self, supertype: 'Type') -> None:
+    def constrain(self, supertype: 'Type') -> None:
         if not self.is_subtype_of(supertype):
             raise TypeError(
                 '{} is not a subtype of {}'.format(self, supertype)
