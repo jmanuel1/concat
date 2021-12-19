@@ -620,16 +620,6 @@ class _Function(IndividualType):
         out_var = SequenceVariable()
         return self.is_subtype_of(_Function([], [out_var]))
 
-    # TODO: If I don't use this anywhere, I should remove it.
-    def compose(self, other: '_Function') -> '_Function':
-        """Returns the type of applying self then other to a stack."""
-        i2, o2 = other
-        (i1, o1) = self
-        constraints = Constraints()
-        constraints.add(TypeSequence(o1), TypeSequence(i2))
-        phi = constraints.equalities_as_substitutions()
-        return phi(_Function(i1, o2))
-
     def __eq__(self, other: object) -> bool:
         """Compares function types for equality up to renaming of variables."""
         if not isinstance(other, _Function):

@@ -62,30 +62,6 @@ f = StackEffect(
 )
 
 
-class TestStackEffectAlgebra(unittest.TestCase):
-    def test_composition(self) -> None:
-        in_var = SequenceVariable()
-        in_var2 = SequenceVariable()
-        g = StackEffect([in_var, object_type], [in_var, *[object_type] * 2])
-        f_then_g = f.compose(g)
-        self.assertEqual(
-            f_then_g,
-            StackEffect(
-                [in_var2, *[object_type] * 2], [in_var2, *[object_type] * 3]
-            ),
-        )
-
-    def test_composition_with_overflow(self) -> None:
-        in_var = SequenceVariable()
-        in_var2 = SequenceVariable()
-        g = StackEffect([in_var, *[object_type] * 4], [in_var, object_type])
-        f_then_g = f.compose(g)
-        self.assertEqual(
-            f_then_g,
-            StackEffect([in_var2, *[object_type] * 4], [in_var2, object_type]),
-        )
-
-
 class TestStackEffectProperties(unittest.TestCase):
     def test_completeness_test(self) -> None:
         self.assertFalse(f.can_be_complete_program())
