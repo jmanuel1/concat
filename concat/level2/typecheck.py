@@ -554,10 +554,10 @@ def infer(
                         o2[-2], getitem_type
                     )
                 )
-            getitem_type = getitem_type.select_overload(
-                [int_type], _global_constraints
+            getitem_type, overload_subs = getitem_type.select_overload(
+                [int_type]
             )
-            subs = S2(subs)
+            subs = overload_subs(S2(subs))
             effect = subs(StackEffect(input, [*o2[:-2], getitem_type.output]))
             return subs, effect
         else:
@@ -574,7 +574,7 @@ def infer(
                         ge_type
                     )
                 )
-            ge_type.select_overload([b_type], _global_constraints)
+            _, subs = ge_type.select_overload([b_type])
         except TypeError:
             le_type = b_type.get_type_of_attribute('__le__')
             if not isinstance(le_type, PythonFunctionType):
@@ -583,8 +583,7 @@ def infer(
                         le_type
                     )
                 )
-            le_type.select_overload([a_type], _global_constraints)
-        subs = _global_constraints.equalities_as_substitutions()(subs)
+            _, subs = le_type.select_overload([a_type])
         return (
             subs,
             StackEffect(input, TypeSequence([*output[:-2], bool_type])),

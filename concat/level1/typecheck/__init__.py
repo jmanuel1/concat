@@ -364,14 +364,16 @@ def infer(
                                 node, getitem_type
                             )
                         )
-                    getitem_type = getitem_type.select_overload(
-                        (this_slice_type,), _global_constraints
+                    getitem_type, overload_subs = getitem_type.select_overload(
+                        (this_slice_type,)
                     )
                     result_type = getitem_type.output
-                    current_subs = _global_constraints.equalities_as_substitutions()(
+                    current_subs = overload_subs(
                         sub3(sub2(sub1(current_subs)))
                     )
-                    current_effect = StackEffect(i, [*o, result_type])
+                    current_effect = current_subs(
+                        StackEffect(i, [*o, result_type])
+                    )
                 else:
                     if (
                         isinstance(child, concat.level0.parse.QuoteWordNode)
@@ -610,14 +612,14 @@ def infer(
                             node, getitem_type
                         )
                     )
-                getitem_type = getitem_type.select_overload(
-                    (this_slice_type,), _global_constraints
+                getitem_type, overload_subs = getitem_type.select_overload(
+                    (this_slice_type,)
                 )
                 result_type = getitem_type.output
-                current_subs = _global_constraints.equalities_as_substitutions()(
-                    sub3(sub2(sub1(current_subs)))
+                current_subs = overload_subs(sub3(sub2(sub1(current_subs))))
+                current_effect = overload_subs(
+                    StackEffect(i, [*o, result_type])
                 )
-                current_effect = StackEffect(i, [*o, result_type])
             else:
                 original_error = None
                 for extension in extensions or []:
