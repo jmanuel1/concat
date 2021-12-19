@@ -20,11 +20,16 @@ from typing import (
     NoReturn,
     cast,
     overload,
+    TYPE_CHECKING,
 )
 from typing_extensions import Literal
 import abc
 import collections.abc
 import builtins
+
+
+if TYPE_CHECKING:
+    from concat.level1.typecheck import Substitutions
 
 
 class Type(abc.ABC):
@@ -69,6 +74,24 @@ class Type(abc.ABC):
     def constrain(self, supertype: 'Type', constraints: 'Constraints') -> None:
         pass
 
+    @abc.abstractmethod
+    def constrain_and_bind_supertype_variables(
+        self, supertype: 'Type', rigid_variables: Set['_Variable']
+    ) -> 'Substitutions':
+        pass
+
+    @abc.abstractmethod
+    def constrain_and_bind_subtype_variables(
+        self, supertype: 'Type', rigid_variables: Set['_Variable']
+    ) -> 'Substitutions':
+        pass
+
+    def new_constrain(self, supertype: 'Type') -> None:
+        if not self.is_subtype_of(supertype):
+            raise TypeError(
+                '{} is not a subtype of {}'.format(self, supertype)
+            )
+
     def instantiate(self) -> 'Type':
         return self
 
@@ -109,7 +132,7 @@ class _Variable(Type, abc.ABC):
 
     def apply_substitution(
         self, sub: 'concat.level1.typecheck.Substitutions'
-    ) -> Union[IndividualType, '_Variable', List['StackItemType']]:
+    ) -> Union[IndividualType, '_Variable', 'TypeSequence']:
         if self in sub:
             return sub[self]  # type: ignore
         return self
@@ -140,6 +163,61 @@ class IndividualVariable(_Variable, IndividualType):
 
     def constrain(self, supertype: Type, constraints: Constraints) -> None:
         constraints.add(self, supertype)
+
+    def constrain_and_bind_supertype_variables(
+        self, supertype: Type, rigid_variables: Set['_Variable']
+    ) -> 'Substitutions':
+        from concat.level1.typecheck import Substitutions
+
+        if self is supertype or supertype == object_type:
+            return Substitutions()
+        if not isinstance(supertype, IndividualType):
+            raise TypeError(
+                '{} must be an individual type: expected {}'.format(
+                    supertype, self
+                )
+            )
+        if self in rigid_variables:
+            raise TypeError(
+                '{} is considered fixed here and cannot become a subtype of {}'.format(
+                    self, supertype
+                )
+            )
+        if (
+            isinstance(supertype, IndividualVariable)
+            and supertype not in rigid_variables
+        ):
+            return Substitutions({supertype: self})
+        # Let's not support bounded quantification or inferring the types of
+        # named functions. Thus, the subtype constraint should fail here.
+        raise TypeError(
+            '{} is an individual type variable and cannot be a subtype of {}'.format(
+                self, supertype
+            )
+        )
+
+    def constrain_and_bind_subtype_variables(
+        self, supertype: Type, rigid_variables: Set['_Variable']
+    ) -> 'Substitutions':
+        from concat.level1.typecheck import Substitutions
+
+        if self is supertype:
+            return Substitutions()
+        if supertype == object_type:
+            return Substitutions({self: object_type})
+        if not isinstance(supertype, IndividualType):
+            raise TypeError(
+                '{} must be an individual type: expected {}'.format(
+                    supertype, self
+                )
+            )
+        if self in rigid_variables:
+            raise TypeError(
+                '{} is considered fixed here and cannot become a subtype of {}'.format(
+                    self, supertype
+                )
+            )
+        return Substitutions({self: supertype})
 
     # Default __eq__ and __hash__ (equality by object identity) are used.
 
@@ -210,6 +288,52 @@ class SequenceVariable(_Variable):
             )
         constraints.add(self, supertype)
         constraints.add(supertype, self)
+
+    def constrain_and_bind_supertype_variables(
+        self, supertype: Type, rigid_variables: Set['_Variable']
+    ) -> 'Substitutions':
+        from concat.level1.typecheck import Substitutions
+
+        if not isinstance(supertype, (SequenceVariable, TypeSequence)):
+            raise TypeError(
+                '{} must be a sequence type, not {}'.format(self, supertype)
+            )
+        if self in rigid_variables:
+            raise Exception('todo')
+        # occurs check
+        if self is not supertype and self in supertype.free_type_variables():
+            raise TypeError(
+                '{} cannot be a subtype of {} because it appears in {}'.format(
+                    self, supertype, supertype
+                )
+            )
+        if isinstance(supertype, SequenceVariable):
+            return Substitutions({supertype: self})
+        return Substitutions()
+
+    def constrain_and_bind_subtype_variables(
+        self, supertype: Type, rigid_variables: Set['_Variable']
+    ) -> 'Substitutions':
+        from concat.level1.typecheck import Substitutions
+
+        if not isinstance(supertype, (SequenceVariable, TypeSequence)):
+            raise TypeError(
+                '{} must be a sequence type, not {}'.format(self, supertype)
+            )
+        if self in rigid_variables:
+            raise TypeError(
+                '{} is fixed here and cannot become a subtype of another type'.format(
+                    self
+                )
+            )
+        # occurs check
+        if self is not supertype and self in supertype.free_type_variables():
+            raise TypeError(
+                '{} cannot be a subtype of {} because it appears in {}'.format(
+                    self, supertype, supertype
+                )
+            )
+        return Substitutions({self: supertype})
 
     def get_type_of_attribute(self, name: str) -> NoReturn:
         raise TypeError(
@@ -328,6 +452,190 @@ class TypeSequence(Type, Iterable['StackItemType']):
                 '{} must be a sequence type, not {}'.format(self, supertype)
             )
 
+    def constrain_and_bind_supertype_variables(
+        self, supertype: Type, rigid_variables: Set['_Variable']
+    ) -> 'Substitutions':
+        """Check that self is a subtype of supertype.
+
+        Free type variables that appear in the supertype type sequence are set
+        to be equal to their counterparts in the subtype sequence so that type
+        information can be propagated into calls of named functions.
+        """
+        from concat.level1.typecheck import Substitutions
+
+        if (
+            isinstance(supertype, SequenceVariable)
+            and supertype not in rigid_variables
+        ):
+            return Substitutions({supertype: self})
+        elif isinstance(supertype, TypeSequence):
+            if self._is_empty() and supertype._is_empty():
+                return Substitutions()
+            elif (
+                self._is_empty()
+                and supertype._rest
+                and not supertype._individual_types
+                and supertype._rest not in rigid_variables
+            ):
+                return Substitutions({supertype._rest: self})
+            elif (
+                supertype._is_empty()
+                and self._rest
+                and not self._individual_types
+            ):
+                raise StackMismatchError(self, supertype)
+            elif not self._individual_types:
+                if (
+                    self._rest
+                    and supertype._rest
+                    and not supertype._individual_types
+                    and supertype._rest not in rigid_variables
+                ):
+                    return Substitutions({supertype._rest: self._rest})
+                elif self._is_empty() and supertype._is_empty():
+                    return Substitutions()
+                elif (
+                    self._is_empty()
+                    and supertype._rest
+                    and not supertype._individual_types
+                    and supertype._rest not in rigid_variables
+                ):
+                    return Substitutions({supertype._rest: self})
+                else:
+                    raise StackMismatchError(self, supertype)
+            elif (
+                not supertype._individual_types
+                and supertype._rest
+                and supertype._rest not in self.free_type_variables()
+                and supertype._rest not in rigid_variables
+            ):
+                return Substitutions({supertype._rest: self})
+            elif self._individual_types and supertype._individual_types:
+                sub = self._individual_types[
+                    -1
+                ].constrain_and_bind_supertype_variables(
+                    supertype._individual_types[-1], rigid_variables
+                )
+                # constrain individual variables in the second sequence type to
+                # be *equal* to the corresponding type in the first sequence
+                # type.
+                is_variable = isinstance(
+                    supertype._individual_types[-1], IndividualVariable
+                )
+                if (
+                    is_variable
+                    and supertype._individual_types[-1] not in rigid_variables
+                ):
+                    sub = Substitutions(
+                        {
+                            supertype._individual_types[
+                                -1
+                            ]: self._individual_types[-1]
+                        }
+                    )(sub)
+                try:
+                    sub = sub(
+                        self[:-1]
+                    ).constrain_and_bind_supertype_variables(
+                        sub(supertype[:-1]), rigid_variables
+                    )(
+                        sub
+                    )
+                    return sub
+                except StackMismatchError:
+                    raise StackMismatchError(self, supertype)
+            else:
+                raise StackMismatchError(self, supertype)
+        else:
+            raise TypeError(
+                '{} must be a sequence type, not {}'.format(self, supertype)
+            )
+
+    def constrain_and_bind_subtype_variables(
+        self, supertype: Type, rigid_variables: Set['_Variable']
+    ) -> 'Substitutions':
+        from concat.level1.typecheck import Substitutions
+
+        if isinstance(supertype, SequenceVariable) and (
+            not self._rest or self._individual_types
+        ):
+            raise StackMismatchError(self, TypeSequence([supertype]))
+        elif isinstance(supertype, TypeSequence):
+            if self._is_empty() and supertype._is_empty():
+                return Substitutions()
+            elif (
+                self._is_empty()
+                and supertype._rest
+                and not supertype._individual_types
+                and supertype._rest not in rigid_variables
+            ):
+                raise StackMismatchError(self, supertype)
+            elif (
+                supertype._is_empty()
+                and self._rest
+                and not self._individual_types
+                and self._rest not in rigid_variables
+            ):
+                return Substitutions({self._rest: supertype})
+            elif not self._individual_types:
+                if (
+                    self._rest
+                    and self._rest not in rigid_variables
+                    and self._rest not in supertype.free_type_variables()
+                ):
+                    return Substitutions({self._rest: supertype})
+                elif self._is_empty() and supertype._is_empty():
+                    return Substitutions()
+                elif (
+                    self._is_empty()
+                    and supertype._rest
+                    and not supertype._individual_types
+                ):
+                    # QUESTION: Should this be allowed? I'm being defensive here.
+                    raise StackMismatchError(self, supertype)
+                else:
+                    raise StackMismatchError(self, supertype)
+            elif (
+                not supertype._individual_types
+                and supertype._rest
+                and supertype._rest not in self.free_type_variables()
+                and supertype._rest not in rigid_variables
+            ):
+                raise StackMismatchError(self, supertype)
+            elif self._individual_types and supertype._individual_types:
+                sub = self._individual_types[
+                    -1
+                ].constrain_and_bind_subtype_variables(
+                    supertype._individual_types[-1], rigid_variables
+                )
+                is_variable = isinstance(
+                    self._individual_types[-1], IndividualVariable
+                )
+                if (
+                    is_variable
+                    and self._individual_types[-1] not in rigid_variables
+                ):
+                    sub = Substitutions(
+                        {
+                            self._individual_types[
+                                -1
+                            ]: supertype._individual_types[-1]
+                        }
+                    )(sub)
+                try:
+                    sub = sub(self[:-1]).constrain_and_bind_subtype_variables(
+                        sub(supertype[:-1]), rigid_variables
+                    )(sub)
+                    return sub
+                except StackMismatchError:
+                    raise StackMismatchError(self, supertype)
+            else:
+                raise StackMismatchError(self, supertype)
+        else:
+            raise TypeError(
+                '{} must be a sequence type, not {}'.format(self, supertype)
+            )
+
     def free_type_variables(self) -> Set['_Variable']:
         ftv: Set[_Variable] = set()
         for t in self:
@@ -396,8 +704,8 @@ class _Function(IndividualType):
         self.input = TypeSequence(tuple(input))
         self.output = TypeSequence(tuple(output))
 
-    def __iter__(self) -> Iterator[Sequence['StackItemType']]:
-        return iter((tuple(self.input), tuple(self.output)))
+    def __iter__(self) -> Iterator['TypeSequence']:
+        return iter((self.input, self.output))
 
     def generalized_wrt(self, gamma: Dict[str, Type]) -> Type:
         return ObjectType(
@@ -411,16 +719,8 @@ class _Function(IndividualType):
 
     def can_be_complete_program(self) -> bool:
         """Returns true iff the function type is a subtype of ( -- *out)."""
-        from concat.level1.typecheck import _global_constraints
-
         out_var = SequenceVariable()
-        try:
-            # FIXME: Use a temporary constraints object.
-            _global_constraints.add(self, _Function([], [out_var]))
-        except concat.level1.typecheck.TypeError:
-            # FIXME: Undo failed constraints.
-            return False
-        return True
+        return self.is_subtype_of(_Function([], [out_var]))
 
     # TODO: If I don't use this anywhere, I should remove it.
     def compose(self, other: '_Function') -> '_Function':
@@ -540,6 +840,40 @@ class _Function(IndividualType):
         constraints.add(self.input, fun_type.input)
         constraints.add(self.output, fun_type.output)
 
+    def constrain_and_bind_supertype_variables(
+        self, supertype: Type, rigid_variables: Set['_Variable']
+    ) -> 'Substitutions':
+        if not isinstance(supertype, StackEffect):
+            raise TypeError(
+                '{} is not a subtype of {}'.format(self, supertype)
+            )
+        # Remember that the input should be contravariant!
+        # QUESTION: Constrain the supertype variables here during contravariance check?
+        sub = supertype.input.constrain_and_bind_subtype_variables(
+            self.input, rigid_variables
+        )
+        sub = sub(self.output).constrain_and_bind_supertype_variables(
+            sub(supertype.output), rigid_variables
+        )(sub)
+        return sub
+
+    def constrain_and_bind_subtype_variables(
+        self, supertype: Type, rigid_variables: Set['_Variable']
+    ) -> 'Substitutions':
+        if not isinstance(supertype, StackEffect):
+            raise TypeError(
+                '{} is not a subtype of {}'.format(self, supertype)
+            )
+        # Remember that the input should be contravariant!
+        # QUESTION: Constrain the supertype variables here during contravariance check?
+        sub = supertype.input.constrain_and_bind_supertype_variables(
+            self.input, rigid_variables
+        )
+        sub = sub(self.output).constrain_and_bind_subtype_variables(
+            sub(supertype.output), rigid_variables
+        )(sub)
+        return sub
+
     def free_type_variables(self) -> Set['_Variable']:
         return (
             self.input.free_type_variables()
@@ -649,6 +983,48 @@ class QuotationType(_Function):
             quotation_iterable_type.constrain(supertype, constraints)
             return
         super().constrain(supertype, constraints)
+
+    def constrain_and_bind_supertype_variables(
+        self, supertype: Type, rigid_variables: Set['_Variable']
+    ) -> 'Substitutions':
+        if (
+            isinstance(supertype, ObjectType)
+            and supertype.head == iterable_type
+        ):
+            # FIXME: Don't present new variables every time.
+            # FIXME: Account for the types of the elements of the quotation.
+            in_var = IndividualVariable()
+            out_var = IndividualVariable()
+            quotation_iterable_type = iterable_type[
+                _Function([in_var], [out_var]),
+            ]
+            return quotation_iterable_type.constrain_and_bind_supertype_variables(
+                supertype, rigid_variables
+            )
+        return super().constrain_and_bind_supertype_variables(
+            supertype, rigid_variables
+        )
+
+    def constrain_and_bind_subtype_variables(
+        self, supertype: Type, rigid_variables: Set['_Variable']
+    ) -> 'Substitutions':
+        if (
+            isinstance(supertype, ObjectType)
+            and supertype.head == iterable_type
+        ):
+            # FIXME: Don't present new variables every time.
+            # FIXME: Account for the types of the elements of the quotation.
+            in_var = IndividualVariable()
+            out_var = IndividualVariable()
+            quotation_iterable_type = iterable_type[
+                _Function([in_var], [out_var]),
+            ]
+            return quotation_iterable_type.constrain_and_bind_subtype_variables(
+                supertype, rigid_variables
+            )
+        return super().constrain_and_bind_subtype_variables(
+            supertype, rigid_variables
+        )
 
     def apply_substitution(
         self, sub: 'concat.level1.typecheck.Substitutions'
@@ -820,7 +1196,11 @@ class ObjectType(IndividualType):
 
     # TODO: Remove is_subtype_of and replace uses with constraints
     def is_subtype_of(self, supertype: 'Type') -> bool:
-        if supertype in self._nominal_supertypes or supertype == object_type:
+        if (
+            supertype in self._nominal_supertypes
+            or supertype == object_type
+            or self == supertype
+        ):
             return True
         if isinstance(supertype, ObjectType) and supertype._nominal:
             return False
@@ -928,6 +1308,167 @@ class ObjectType(IndividualType):
         ):
             # FIXME: Contravariance? Invariance?
             constraints.add(self_param, super_param)
+
+    def constrain_and_bind_supertype_variables(
+        self, supertype: Type, rigid_variables: Set['_Variable']
+    ) -> 'Substitutions':
+        from concat.level1.typecheck import Substitutions
+
+        if (
+            isinstance(supertype, IndividualVariable)
+            and supertype not in rigid_variables
+        ):
+            return Substitutions({supertype: self})
+        elif isinstance(supertype, (SequenceVariable, TypeSequence)):
+            raise TypeError(
+                '{} is an individual type, but {} is a sequence type'.format(
+                    self, supertype
+                )
+            )
+        elif isinstance(supertype, StackEffect):
+            if self._arity != 0:
+                raise TypeError(
+                    'type constructor {} expected at least one argument and cannot be a stack effect (expected effect {})'.format(
+                        self, supertype
+                    )
+                )
+            # We know self is not a type constructor here, so there's no need
+            # to worry about variable binding
+            return self.get_type_of_attribute(
+                '__call__'
+            ).constrain_and_bind_supertype_variables(
+                supertype, rigid_variables
+            )
+        elif not isinstance(supertype, ObjectType):
+            raise NotImplementedError(supertype)
+        if self._arity != supertype._arity:
+            raise TypeError(
+                '{} and {} do not have the same arity'.format(self, supertype)
+            )
+        # every object type with zero arity is a subtype of object_type
+        if self._arity == 0 and supertype == object_type:
+            return Substitutions()
+        # Don't forget that there's nominal subtyping too.
+        if supertype._nominal:
+            if (
+                supertype not in self._nominal_supertypes
+                and supertype != self
+                and self._head != supertype._head
+            ):
+                raise TypeError(
+                    '{} is not a subtype of {}'.format(self, supertype)
+                )
+
+        # constraining to an optional type
+        if (
+            supertype._head == optional_type
+            and supertype._arity == 0
+            and self._arity == 0
+        ):
+            try:
+                return self.constrain_and_bind_supertype_variables(
+                    none_type, rigid_variables
+                )
+            except TypeError:
+                return self.constrain_and_bind_supertype_variables(
+                    supertype._type_arguments[0], rigid_variables
+                )
+
+        # don't constrain the type arguments, constrain those based on
+        # the attributes
+        sub = Substitutions()
+        for name in supertype._attributes:
+            type = self.get_type_of_attribute(name)
+            # We must not bind any type parameters in self or supertype!
+            rigid_variables = (
+                rigid_variables
+                | set(self.type_parameters)
+                | set(supertype.type_parameters)
+            )
+            sub = type.constrain_and_bind_supertype_variables(
+                supertype.get_type_of_attribute(name), rigid_variables
+            )(sub)
+        return sub
+
+    def constrain_and_bind_subtype_variables(
+        self, supertype: Type, rigid_variables: Set['_Variable']
+    ) -> 'Substitutions':
+        from concat.level1.typecheck import Substitutions
+
+        if isinstance(supertype, IndividualVariable):
+            raise TypeError(
+                '{} is unknown here and cannot be a supertype of {}'.format(
+                    supertype, self
+                )
+            )
+        elif isinstance(supertype, (SequenceVariable, TypeSequence)):
+            raise TypeError(
+                '{} is an individual type, but {} is a sequence type'.format(
+                    self, supertype
+                )
+            )
+        elif isinstance(supertype, StackEffect):
+            if self._arity != 0:
+                raise TypeError(
+                    'type constructor {} expected at least one argument and cannot be a stack effect (expected effect {})'.format(
+                        self, supertype
+                    )
+                )
+            # We know self is not a type constructor here, so there's no need
+            # to worry about variable binding
+            return self.get_type_of_attribute(
+                '__call__'
+            ).constrain_and_bind_subtype_variables(supertype, rigid_variables)
+        elif not isinstance(supertype, ObjectType):
+            raise NotImplementedError(supertype)
+        if self._arity != supertype._arity:
+            raise TypeError(
+                '{} and {} do not have the same arity'.format(self, supertype)
+            )
+        # every object type with zero arity is a subtype of object_type
+        if self._arity == 0 and supertype == object_type:
+            return Substitutions()
+        # Don't forget that there's nominal subtyping too.
+        if supertype._nominal:
+            if (
+                supertype not in self._nominal_supertypes
+                and supertype != self
+                and self._head != supertype._head
+            ):
+                raise TypeError(
+                    '{} is not a subtype of {}'.format(self, supertype)
+                )
+
+        # constraining to an optional type
+        if (
+            supertype._head == optional_type
+            and supertype._arity == 0
+            and self._arity == 0
+        ):
+            try:
+                return self.constrain_and_bind_subtype_variables(
+                    none_type, rigid_variables
+                )
+            except TypeError:
+                return self.constrain_and_bind_subtype_variables(
+                    supertype._type_arguments[0], rigid_variables
+                )
+
+        # don't constrain the type arguments, constrain those based on
+        # the attributes
+        sub = Substitutions()
+        for name in supertype._attributes:
+            type = self.get_type_of_attribute(name)
+            # We must not bind any type parameters in self or supertype!
+            rigid_variables = (
+                rigid_variables
+                | set(self.type_parameters)
+                | set(supertype.type_parameters)
+            )
+            sub = type.constrain_and_bind_subtype_variables(
+                supertype.get_type_of_attribute(name), rigid_variables
+            )(sub)
+        return sub
 
     def get_type_of_attribute(self, attribute: str) -> IndividualType:
         if attribute not in self._attributes:
@@ -1395,7 +1936,6 @@ context_manager_type = ObjectType(
         '__exit__': py_function_type,
     },
 )
-optional_type = _OptionalType()
 context_manager_type.set_internal_name('context_manager_type')
 
 optional_type = _OptionalType()

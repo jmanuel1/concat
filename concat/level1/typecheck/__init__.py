@@ -192,10 +192,14 @@ def infer(
             [] if is_top_level else [SequenceVariable()]
         )
     current_effect = StackEffect(initial_stack, initial_stack)
+    last_rest = initial_stack._rest
 
-    for node in e:
+    for index, node, in enumerate(e):
         try:
             S, (i, o) = current_subs, current_effect
+            if o._rest != last_rest:
+                print('changed:', last_rest, o._rest, 'at', e[index - 1])
+            last_rest = o._rest
 
             if isinstance(node, concat.level0.parse.NumberWordNode):
                 if isinstance(node.value, int):
@@ -270,13 +274,16 @@ def infer(
                             node.value, type_of_name, type_of_name
                         )
                     )
-                TypeSequence(o1).constrain(
-                    type_of_name.input, _global_constraints, polymorphic=True
+                if node.value == 'choose':
+                    print('o1', o1)
+                    print('type_of_name.input', type_of_name.input)
+                constraint_subs = TypeSequence(
+                    o1
+                ).constrain_and_bind_supertype_variables(
+                    type_of_name.input, set()
                 )
-                # For now, piggyback on substitutions
-                constraint_subs = (
-                    _global_constraints.equalities_as_substitutions()
-                )
+                # print(constraint_subs)
+                # print(current_subs)
                 current_subs = constraint_subs(current_subs)
                 current_effect = current_subs(
                     StackEffect(i1, type_of_name.output)
@@ -374,7 +381,7 @@ def infer(
                     else:
                         # The majority of quotations I've written don't comsume
                         # anything on the stack, so make that the default.
-                        input_stack = TypeSequence([])
+                        input_stack = TypeSequence([SequenceVariable()])
                     S2, fun_type = infer(
                         S1(gamma),
                         child.children,
@@ -394,7 +401,9 @@ def infer(
                 # make sure any annotation matches the current stack
                 if quotation.input_stack_type is not None:
                     input_stack, _ = quotation.input_stack_type.to_type(gamma)
-                    _global_constraints.add(TypeSequence(o), input_stack)
+                    S = TypeSequence(o).constrain_and_bind_supertype_variables(
+                        input_stack, set(),
+                    )(S)
                 else:
                     input_stack = TypeSequence(o)
                 S1, (i1, o1) = infer(
@@ -414,29 +423,18 @@ def infer(
             elif isinstance(node, concat.level1.parse.WithWordNode):
                 a_bar, b_bar = SequenceVariable(), SequenceVariable()
                 body_type = StackEffect([a_bar, object_type], [b_bar])
-                # FIXME: Require the stack types to be already known, e.g.
-                # extract the context manager type from o and constrain that
-                # individually.
-                if len(o) < 2:
-                    raise TypeError(
-                        'Stack underflow, expected [..., {}, {}]'.format(
-                            body_type, context_manager_type
-                        )
-                    )
-                _global_constraints.add(
-                    TypeSequence(o),
+                phi = TypeSequence(o).constrain_and_bind_supertype_variables(
                     TypeSequence([a_bar, body_type, context_manager_type]),
+                    set(),
                 )
-                actual_body_type = o[-2].get_type_of_attribute('__call__')
-                phi = _global_constraints.equalities_as_substitutions()
+                assert b_bar in phi
                 current_subs, current_effect = (
                     phi(S),
-                    phi(StackEffect(i, actual_body_type.output)),
+                    phi(StackEffect(i, TypeSequence([b_bar]))),
                 )
             elif isinstance(node, concat.level1.parse.TryWordNode):
                 a_bar, b_bar = SequenceVariable(), SequenceVariable()
-                _global_constraints.add(
-                    TypeSequence(o),
+                phi = TypeSequence(o).constrain_and_bind_supertype_variables(
                     TypeSequence(
                         [
                             a_bar,
@@ -444,8 +442,9 @@ def infer(
                             StackEffect([a_bar], [b_bar]),
                         ]
                     ),
+                    set(),
                 )
-                phi = _global_constraints.equalities_as_substitutions()
+                assert b_bar in phi
                 current_subs, current_effect = (
                     phi(S),
                     phi(StackEffect(i, [b_bar])),
@@ -462,12 +461,7 @@ def infer(
                         source_dir=source_dir,
                         initial_stack=collected_type,
                     )
-                    _global_constraints.add(
-                        phi1(collected_type), TypeSequence(i1)
-                    )
-                    phi = _global_constraints.equalities_as_substitutions()(
-                        phi1(phi)
-                    )
+                    phi = phi1(phi)
                     collected_type = phi(TypeSequence(o1))
                     # drop the top of the stack to use as the key
                     collected_type, key_type = (
@@ -481,12 +475,7 @@ def infer(
                         source_dir=source_dir,
                         initial_stack=collected_type,
                     )
-                    _global_constraints.add(
-                        phi2(collected_type), TypeSequence(i2)
-                    )
-                    phi = _global_constraints.equalities_as_substitutions()(
-                        phi2(phi)
-                    )
+                    phi = phi2(phi)
                     collected_type = phi(TypeSequence(o2))
                     # drop the top of the stack to use as the value
                     collected_type, value_type = (
@@ -557,10 +546,11 @@ def infer(
                             node.value, attr_function_type, attr_function_type
                         )
                     )
-                _global_constraints.add(
-                    TypeSequence(out_types), attr_function_type.input,
+                R = TypeSequence(
+                    out_types
+                ).constrain_and_bind_supertype_variables(
+                    attr_function_type.input, set(),
                 )
-                R = _global_constraints.equalities_as_substitutions()
                 current_subs, current_effect = (
                     R(S),
                     R(StackEffect(i, attr_function_type.output)),

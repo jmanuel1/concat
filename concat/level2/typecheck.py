@@ -411,7 +411,6 @@ def infer(
         return subs, StackEffect(input, output)
     elif isinstance(program[-1], concat.level1.parse.ImportStatementNode):
         # TODO: Support all types of import correctly.
-        seq_var = concat.level1.typecheck.SequenceVariable()
         if program[-1].asname is not None:
             env[program[-1].asname] = subs(
                 _generate_type_of_innermost_module(
@@ -429,30 +428,38 @@ def infer(
             )
         return subs, StackEffect(input, output)
     elif isinstance(program[-1], concat.level1.parse.SubscriptionWordNode):
-        # TODO: This should be a call.
-        # FIXME: The object being indexed is not popped before computing the
-        # index.
-        seq_var = SequenceVariable()
-        seq = TypeSequence(output[:-1])
+        seq = output[:-1]
         index_type_var = IndividualVariable()
         result_type_var = IndividualVariable()
         subscriptable_interface = subscriptable_type[
             index_type_var, result_type_var
         ]
-        _global_constraints.add(output[-1], subscriptable_interface)
         (
             index_subs,
             (index_input, index_output),
-        ) = concat.level1.typecheck.infer(subs(env), program[-1].children)
-        _global_constraints.add(seq, TypeSequence(index_input))
-        seq_var_2 = concat.level1.typecheck.SequenceVariable()
+        ) = concat.level1.typecheck.infer(
+            subs(env), program[-1].children, initial_stack=output
+        )
+        index_output_typeseq = index_output
+        subs = index_output_typeseq[-2].constrain_and_bind_supertype_variables(
+            subscriptable_interface, set(),
+        )(index_subs(subs))
+        subs(index_output_typeseq[-1]).new_constrain(subs(index_type_var))
 
-        index_types = TypeSequence([seq_var_2, index_type_var])
-        result_types = TypeSequence([seq_var_2, result_type_var])
+        result_type = subs(result_type_var).get_type_of_attribute('__call__')
+        if not isinstance(result_type, StackEffect):
+            raise TypeError(
+                'result of subscription is not callable as a Concat function (has type {})'.format(
+                    result_type
+                )
+            )
+        subs = index_output_typeseq[
+            :-2
+        ].constrain_and_bind_supertype_variables(result_type.input, set())(
+            subs
+        )
 
-        _global_constraints.add(TypeSequence(index_output), index_types)
-        final_subs = _global_constraints.equalities_as_substitutions()
-        return final_subs(subs), final_subs(StackEffect(input, result_types))
+        return subs, subs(StackEffect(input, result_type.output))
     elif isinstance(program[-1], concat.level1.operators.SubtractWordNode):
         # FIXME: We should check if the other operand supports __rsub__ if the
         # first operand doesn't support __sub__.
@@ -462,13 +469,13 @@ def infer(
             other_operand_type_var, result_type_var
         ]
         seq_var = concat.level1.typecheck.SequenceVariable()
-        _global_constraints.add(
-            TypeSequence(output),
+        final_subs = output.constrain_and_bind_supertype_variables(
             TypeSequence(
                 [seq_var, subtractable_interface, other_operand_type_var]
             ),
+            set(),
         )
-        final_subs = _global_constraints.equalities_as_substitutions()
+        assert seq_var in final_subs
         return (
             final_subs(subs),
             final_subs(StackEffect(input, [seq_var, result_type_var])),
@@ -480,6 +487,7 @@ def infer(
         declared_type: Optional[StackEffect]
         if program[-1].stack_effect:
             declared_type, _ = program[-1].stack_effect.to_type(S(env))
+            declared_type = S(declared_type)
         else:
             # NOTE: To continue the "bidirectional" bent, we will require a
             # type annotation.
@@ -495,32 +503,24 @@ def infer(
             extensions=extensions,
             initial_stack=declared_type.input,
         )
-        declared_type = S(declared_type)
-        declared_type_inst = declared_type.instantiate()
-        inferred_type_inst = S(inferred_type).instantiate()
-        # We want to check that the inferred inputs are supertypes of the
-        # declared inputs, and that the inferred outputs are subtypes of
-        # the declared outputs. Thus, inferred_type should be a subtype
-        # declared_type.
-        _global_constraints.add(inferred_type_inst, declared_type_inst)
-        phi2 = _global_constraints.equalities_as_substitutions()
-        if not phi2(inferred_type_inst).is_subtype_of(
-            phi2(declared_type_inst)
-        ):
+        # We want to check that the inferred outputs are subtypes of
+        # the declared outputs. Thus, inferred_type.output should be a subtype
+        # declared_type.output.
+        try:
+            inferred_type.output.new_constrain(declared_type.output)
+        except TypeError:
             message = (
                 'declared function type {} is not compatible with '
                 'inferred type {}'
             )
-            raise TypeError(
-                message.format(phi2(declared_type), phi2(inferred_type))
-            )
-        effect = phi2(declared_type)
+            # print(phi1)
+            raise TypeError(message.format(declared_type, inferred_type))
+        effect = declared_type
         # we *mutate* the type environment
         env[name] = effect.generalized_wrt(S(env))
         return S, f
     elif isinstance(program[-1], concat.level0.parse.PushWordNode):
         child = program[-1].children[0]
-        rest_var = concat.level1.typecheck.SequenceVariable()
         # special case for subscription words
         if isinstance(child, concat.level1.parse.SubscriptionWordNode):
             S2, (i2, o2) = concat.level1.typecheck.infer(
@@ -529,20 +529,18 @@ def infer(
                 extensions=extensions,
                 is_top_level=False,
                 source_dir=source_dir,
-                initial_stack=output,
+                initial_stack=TypeSequence(output),
             )
-            _global_constraints.add(S2(TypeSequence(output)), TypeSequence(i2))
             # FIXME: Should be generic
             subscriptable_interface = subscriptable_type[
                 int_type, IndividualVariable(),
             ]
 
+            rest_var = concat.level1.typecheck.SequenceVariable()
             expected_o2 = TypeSequence(
                 [rest_var, subscriptable_interface, int_type,]
             )
-            if len(o2) < 2:
-                raise StackMismatchError(TypeSequence(o2), expected_o2)
-            _global_constraints.add(o2[-1], int_type)
+            o2[-1].new_constrain(int_type)
             getitem_type = (
                 o2[-2]
                 .get_type_of_attribute('__getitem__')
@@ -559,8 +557,8 @@ def infer(
             getitem_type = getitem_type.select_overload(
                 [int_type], _global_constraints
             )
-            subs = _global_constraints.equalities_as_substitutions()(S2(subs))
-            effect = subs(StackEffect(input, [rest_var, getitem_type.output]))
+            subs = S2(subs)
+            effect = subs(StackEffect(input, [*o2[:-2], getitem_type.output]))
             return subs, effect
         else:
             raise NotImplementedError(child)
@@ -602,10 +600,8 @@ def infer(
     ):
         # TODO: I should be more careful here, since at least __eq__ can be
         # deleted, if I remember correctly.
-        if (
-            len(output) < 2
-            or not isinstance(output[-1], IndividualType)
-            or not isinstance(output[-2], IndividualType)
+        if not isinstance(output[-1], IndividualType) or not isinstance(
+            output[-2], IndividualType
         ):
             raise StackMismatchError(
                 TypeSequence(output), TypeSequence([object_type, object_type])

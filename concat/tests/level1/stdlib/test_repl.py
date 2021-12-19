@@ -4,7 +4,7 @@ import sys
 import contextlib
 import concat.level1.parse
 import concat.level1.typecheck
-from concat.level1.typecheck.types import StackEffect
+from concat.level1.typecheck.types import SequenceVariable, StackEffect
 import concat.level1.stdlib.types
 import concat.level1.stdlib.repl
 from typing import TextIO, Iterator
@@ -24,6 +24,7 @@ def replace_stdin(input_stream: TextIO) -> Iterator[None]:
 class TestREPLFunctions(unittest.TestCase):
     def test_read_quot(self):
         stack = []
+        seq_var = SequenceVariable()
         # Like in Factor, read_quot will search its caller's scope for objects.
         some, words, here = object(), object(), object()
         with replace_stdin(io.StringIO('some words here')):
@@ -32,7 +33,7 @@ class TestREPLFunctions(unittest.TestCase):
                 [],
                 extra_env=concat.level1.typecheck.Environment(
                     {
-                        'some': StackEffect([], []),
+                        'some': StackEffect([seq_var], []),
                         'words': StackEffect([], []),
                         'here': StackEffect([], []),
                     }

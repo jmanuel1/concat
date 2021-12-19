@@ -87,7 +87,7 @@ class TestTypeChecker(unittest.TestCase):
 
     def test_string_subscription(self) -> None:
         """Test that the type checker allows subscription into strings."""
-        tree = parse('"a string" [1]')
+        tree = parse('"a string" $[1]')
         concat.level1.typecheck.infer(
             concat.level1.typecheck.Environment(),
             tree.children,
@@ -97,7 +97,7 @@ class TestTypeChecker(unittest.TestCase):
 
     def test_list_subscription(self) -> None:
         """Test that the type checker allows subscription into lists."""
-        tree = parse('["a string", "another string",] [1]')
+        tree = parse('["a string", "another string",] $[1]')
         concat.level1.typecheck.infer(
             concat.level1.typecheck.Environment(),
             tree.children,
