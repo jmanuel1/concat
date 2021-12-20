@@ -997,7 +997,7 @@ class ObjectType(IndividualType):
             return False
         if self._arity == 0 and supertype is object_type:
             return True
-        if supertype._nominal:
+        if supertype._nominal and self._head is not supertype._head:
             return False
         # instantiate these types in a way such that alpha equivalence is not
         # an issue
