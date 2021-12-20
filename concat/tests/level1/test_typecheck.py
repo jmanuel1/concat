@@ -117,7 +117,7 @@ class TestTypeChecker(unittest.TestCase):
             tree.children,
             is_top_level=True,
         )
-        note(type)
+        note(str(type))
         self.assertEqual(type, StackEffect([], [int_type]))
 
     def test_if_then_inference(self) -> None:
