@@ -183,6 +183,7 @@ class TestTypeEquality(unittest.TestCase):
     @example(type=int_type.self_type)
     @example(type=int_type.get_type_of_attribute('__add__'))
     @example(type=int_type)
+    @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_reflexive_equality(self, type):
         self.assertEqual(type, type)
 
@@ -200,10 +201,12 @@ class TestSubtyping(unittest.TestCase):
         self.assertLessEqual(fun1, fun2)
 
     @given(from_type(IndividualType))
+    @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_no_return_is_bottom_type(self, type):
         self.assertLessEqual(no_return_type, type)
 
     @given(from_type(IndividualType))
+    @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_object_is_top_type(self, type):
         self.assertLessEqual(type, object_type)
 
@@ -212,7 +215,12 @@ class TestSubtyping(unittest.TestCase):
     )
 
     @given(__attributes_generator, __attributes_generator)
-    @settings(suppress_health_check=(HealthCheck.filter_too_much,))
+    @settings(
+        suppress_health_check=(
+            HealthCheck.filter_too_much,
+            HealthCheck.too_slow,
+        )
+    )
     def test_object_structural_subtyping(self, attributes, other_attributes):
         x1, x2 = IndividualVariable(), IndividualVariable()
         object1 = ObjectType(x1, {**other_attributes, **attributes})
@@ -235,7 +243,12 @@ class TestSubtyping(unittest.TestCase):
         self.assertLessEqual(object, effect)
 
     @given(from_type(IndividualType), from_type(IndividualType))
-    @settings(suppress_health_check=(HealthCheck.filter_too_much,))
+    @settings(
+        suppress_health_check=(
+            HealthCheck.filter_too_much,
+            HealthCheck.too_slow,
+        )
+    )
     def test_object_subtype_of_py_function(self, type1, type2):
         x = IndividualVariable()
         py_function = py_function_type[TypeSequence([type1]), type2]
@@ -251,7 +264,12 @@ class TestSubtyping(unittest.TestCase):
         self.assertLessEqual(cls, effect)
 
     @given(from_type(IndividualType), from_type(IndividualType))
-    @settings(suppress_health_check=(HealthCheck.filter_too_much,))
+    @settings(
+        suppress_health_check=(
+            HealthCheck.filter_too_much,
+            HealthCheck.too_slow,
+        )
+    )
     def test_class_subtype_of_py_function(self, type1, type2):
         x = IndividualVariable()
         py_function = py_function_type[TypeSequence([type1]), type2]

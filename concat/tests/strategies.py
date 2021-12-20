@@ -8,6 +8,7 @@ from hypothesis.strategies import (
     booleans,
     composite,
     from_type,
+    iterables,
     lists,
     register_type_strategy,
     sampled_from,
@@ -26,10 +27,12 @@ def _iterable_strategy(type: Type[Iterable]) -> SearchStrategy[Iterable]:
             list = []
             if draw(booleans()):
                 list.append(draw(from_type(SequenceVariable)))
-            list += draw(lists(from_type(IndividualType)))
+            list += draw(lists(from_type(IndividualType), max_size=10))
             return list
         cls = draw(sampled_from([list, tuple, set, frozenset]))
-        return cls(draw(lists(getattr(type, '__args__', object))))
+        return cls(
+            draw(iterables(getattr(type, '__args__', object), max_size=10))
+        )
 
     return strategy()
 
