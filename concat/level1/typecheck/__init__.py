@@ -187,14 +187,10 @@ def infer(
             [] if is_top_level else [SequenceVariable()]
         )
     current_effect = StackEffect(initial_stack, initial_stack)
-    last_rest = initial_stack._rest
 
-    for index, node, in enumerate(e):
+    for node in e:
         try:
             S, (i, o) = current_subs, current_effect
-            if o._rest != last_rest:
-                print('changed:', last_rest, o._rest, 'at', e[index - 1])
-            last_rest = o._rest
 
             if isinstance(node, concat.level0.parse.NumberWordNode):
                 if isinstance(node.value, int):
@@ -269,16 +265,11 @@ def infer(
                             node.value, type_of_name, type_of_name
                         )
                     )
-                if node.value == 'choose':
-                    print('o1', o1)
-                    print('type_of_name.input', type_of_name.input)
                 constraint_subs = TypeSequence(
                     o1
                 ).constrain_and_bind_supertype_variables(
                     type_of_name.input, set()
                 )
-                # print(constraint_subs)
-                # print(current_subs)
                 current_subs = constraint_subs(current_subs)
                 current_effect = current_subs(
                     StackEffect(i1, type_of_name.output)
@@ -450,7 +441,6 @@ def infer(
                 phi = S
                 collected_type = TypeSequence(o)
                 for key, value in node.dict_children:
-                    print('collected_type', collected_type)
                     phi1, (i1, o1) = infer(
                         phi(gamma),
                         key,
@@ -588,16 +578,11 @@ def infer(
                 step_type = step_effect.output[-1]
                 o = tuple(step_effect.output[:-1])
                 this_slice_type = slice_type[start_type, stop_type, step_type]
-                print('this_slice_type', this_slice_type._type_arguments[0])
-                print('this_slice_type', this_slice_type)
                 getitem_type = sliceable_object_type.get_type_of_attribute(
                     '__getitem__'
                 )
-                # print('__getitem__', getitem_type._overloads)
                 getitem_type = getitem_type.get_type_of_attribute('__call__')
-                # print('__call__', getitem_type._overloads)
                 getitem_type = getitem_type.instantiate()
-                # print('instantiate', getitem_type._overloads)
                 if (
                     not isinstance(getitem_type, PythonFunctionType)
                     or len(getitem_type.input) != 1
