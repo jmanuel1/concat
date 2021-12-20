@@ -5,9 +5,10 @@ import concat.level1.typecheck
 from concat.level1.typecheck import Environment
 from concat.level1.typecheck.types import (
     IndividualVariable,
+    ObjectType,
     SequenceVariable,
     StackEffect,
-    ObjectType,
+    TypeSequence,
     int_type,
     dict_type,
     file_type,
@@ -158,8 +159,12 @@ class TestStackEffectParser(unittest.TestCase):
                 except parsy.ParseError as e:
                     self.fail('could not parse {}\n{}'.format(example, e))
                 env = builtin_environment
+                actual = effect.to_type(env)[0].generalized_wrt(env)
+                expected = self.examples[example].generalized_wrt(env)
+                print(actual)
+                print(expected)
                 self.assertEqual(
-                    effect.to_type(env)[0], self.examples[example],
+                    actual, expected,
                 )
 
 
@@ -215,5 +220,8 @@ class TestSequenceVariableTypeInference(unittest.TestCase):
             ),
             tree.children,
             (concat.level2.typecheck.infer,),
+            initial_stack=TypeSequence([in_var]),
         )
+        print(in_var)
+        print(type)
         self.assertEqual(type, StackEffect([in_var], [in_var, int_type]))

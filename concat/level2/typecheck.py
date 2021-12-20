@@ -233,17 +233,17 @@ class StackEffectTypeNode(IndividualTypeNode):
         b_bar = a_bar
         new_env = env.copy()
         if self.input_sequence_variable is not None:
-            if self.input_sequence_variable in env:
+            if self.input_sequence_variable in new_env:
                 a_bar = cast(
                     concat.level1.typecheck.SequenceVariable,
-                    env[self.input_sequence_variable],
+                    new_env[self.input_sequence_variable],
                 )
             new_env[self.input_sequence_variable] = a_bar
         if self.output_sequence_variable is not None:
-            if self.output_sequence_variable in env:
+            if self.output_sequence_variable in new_env:
                 b_bar = cast(
                     concat.level1.typecheck.SequenceVariable,
-                    env[self.output_sequence_variable],
+                    new_env[self.output_sequence_variable],
                 )
             else:
                 b_bar = concat.level1.typecheck.SequenceVariable()

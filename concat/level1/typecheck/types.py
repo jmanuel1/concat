@@ -1,3 +1,4 @@
+from concat.orderedset import OrderedSet
 import concat.level1.typecheck
 from concat.level1.typecheck import (
     AttributeError,
@@ -34,12 +35,23 @@ if TYPE_CHECKING:
 class Type(abc.ABC):
     # TODO: Fully replace with <=.
     def is_subtype_of(self, supertype: 'Type') -> bool:
-        return supertype == self or supertype == object_type
+        return (
+            supertype is self
+            or isinstance(self, IndividualType)
+            and supertype is object_type
+        )
 
     def __le__(self, other: object) -> bool:
         if not isinstance(other, Type):
             return NotImplemented
         return self.is_subtype_of(other)
+
+    def __eq__(self, other: object) -> bool:
+        if self is other:
+            return True
+        if not isinstance(other, Type):
+            return NotImplemented
+        return self <= other and other <= self
 
     def get_type_of_attribute(self, name: str) -> 'IndividualType':
         raise concat.level1.typecheck.AttributeError(self, name)
@@ -56,7 +68,7 @@ class Type(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def free_type_variables(self) -> Set['_Variable']:
+    def free_type_variables(self) -> OrderedSet['_Variable']:
         pass
 
     @abc.abstractmethod
@@ -95,10 +107,7 @@ class IndividualType(Type, abc.ABC):
         raise NotImplementedError('take advantage of constraints instead')
 
     def is_subtype_of(self, supertype: Type) -> bool:
-        if (
-            isinstance(supertype, ObjectType)
-            and supertype.head == optional_type
-        ):
+        if isinstance(supertype, _OptionalType):
             if (
                 self == none_type
                 or not supertype.type_arguments
@@ -124,8 +133,8 @@ class _Variable(Type, abc.ABC):
             return sub[self]  # type: ignore
         return self
 
-    def free_type_variables(self) -> Set['_Variable']:
-        return {self}
+    def free_type_variables(self) -> OrderedSet['_Variable']:
+        return OrderedSet({self})
 
 
 class IndividualVariable(_Variable, IndividualType):
@@ -187,7 +196,10 @@ class IndividualVariable(_Variable, IndividualType):
             )
         return Substitutions({self: supertype})
 
-    # Default __eq__ and __hash__ (equality by object identity) are used.
+    # __hash__ by object identity is used since that's the only way for two
+    # type variables to be ==.
+    def __hash__(self) -> int:
+        return hash(id(self))
 
     def __str__(self) -> str:
         return '`t_{}'.format(id(self))
@@ -215,6 +227,9 @@ class SequenceVariable(_Variable):
 
     def __str__(self) -> str:
         return '*t_{}'.format(id(self))
+
+    def __hash__(self) -> int:
+        return hash(id(self))
 
     def constrain_and_bind_supertype_variables(
         self, supertype: Type, rigid_variables: Set['_Variable']
@@ -300,6 +315,39 @@ class TypeSequence(Type, Iterable['StackItemType']):
             else:
                 subbed_types.append(subbed_type)
         return TypeSequence(subbed_types)
+
+    def is_subtype_of(self, supertype: Type) -> bool:
+        if (
+            isinstance(supertype, SequenceVariable)
+            and not self._individual_types
+            and self._rest is supertype
+        ):
+            return True
+        elif isinstance(supertype, TypeSequence):
+            if self._is_empty() and supertype._is_empty():
+                return True
+            elif not self._individual_types:
+                if (
+                    self._rest
+                    and supertype._rest
+                    and not supertype._individual_types
+                ):
+                    return self._rest is supertype._rest
+                else:
+                    return False
+            elif self._individual_types and supertype._individual_types:
+                if (
+                    not self._individual_types[-1]
+                    <= supertype._individual_types[-1]
+                ):
+                    return False
+                return self[:-1] <= supertype[:-1]
+            else:
+                return False
+        else:
+            raise TypeError(
+                '{} must be a sequence type, not {}'.format(self, supertype)
+            )
 
     def constrain_and_bind_supertype_variables(
         self, supertype: Type, rigid_variables: Set['_Variable']
@@ -485,8 +533,8 @@ class TypeSequence(Type, Iterable['StackItemType']):
                 '{} must be a sequence type, not {}'.format(self, supertype)
             )
 
-    def free_type_variables(self) -> Set['_Variable']:
-        ftv: Set[_Variable] = set()
+    def free_type_variables(self) -> OrderedSet['_Variable']:
+        ftv: OrderedSet[_Variable] = OrderedSet([])
         for t in self:
             ftv |= t.free_type_variables()
         return ftv
@@ -527,11 +575,6 @@ class TypeSequence(Type, Iterable['StackItemType']):
     def __iter__(self) -> Iterator['StackItemType']:
         return iter(self.as_sequence())
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, TypeSequence):
-            return super().__eq__(other)
-        return self.as_sequence() == other.as_sequence()
-
     def __hash__(self) -> int:
         return hash(tuple(self.as_sequence()))
 
@@ -570,38 +613,6 @@ class _Function(IndividualType):
         """Returns true iff the function type is a subtype of ( -- *out)."""
         out_var = SequenceVariable()
         return self.is_subtype_of(_Function([], [out_var]))
-
-    def __eq__(self, other: object) -> bool:
-        """Compares function types for equality up to renaming of variables."""
-        if not isinstance(other, _Function):
-            return NotImplemented
-        input_arity_matches = len(tuple(self.input)) == len(tuple(other.input))
-        output_arity_matches = len(tuple(self.output)) == len(
-            tuple(other.output)
-        )
-        arities_match = input_arity_matches and output_arity_matches
-        if not arities_match:
-            return False
-        # We can't use plain unification here because variables can only map to
-        # variables of the same type.
-        subs = concat.level1.typecheck.Substitutions()
-        type_pairs = zip(
-            [*self.input, *self.output], [*other.input, *other.output]
-        )
-        for type1, type2 in type_pairs:
-            if isinstance(type1, IndividualVariable) and isinstance(
-                type2, IndividualVariable
-            ):
-                # FIXME: This equality check should include alpha equivalence.
-                subs[type2] = type1
-            elif isinstance(type1, SequenceVariable) and isinstance(
-                type2, SequenceVariable
-            ):
-                subs[type2] = type1
-            type2 = subs(type2)  # type: ignore
-            if type1 != type2:
-                return False
-        return True
 
     def __hash__(self) -> int:
         # FIXME: Alpha equivalence
@@ -699,7 +710,7 @@ class _Function(IndividualType):
         )(sub)
         return sub
 
-    def free_type_variables(self) -> Set['_Variable']:
+    def free_type_variables(self) -> OrderedSet['_Variable']:
         return (
             self.input.free_type_variables()
             | self.output.free_type_variables()
@@ -851,8 +862,8 @@ StackItemType = Union[SequenceVariable, IndividualType]
 
 def _free_type_variables_of_mapping(
     attributes: Mapping[str, Type]
-) -> Set[_Variable]:
-    ftv: Set[_Variable] = set()
+) -> OrderedSet[_Variable]:
+    ftv: OrderedSet[_Variable] = OrderedSet([])
     for sigma in attributes.values():
         ftv |= sigma.free_type_variables()
     return ftv
@@ -971,57 +982,49 @@ class ObjectType(IndividualType):
             subbed_type.set_internal_name(self._internal_name)
         return subbed_type
 
-    # TODO: Remove is_subtype_of and replace uses with constraints
     def is_subtype_of(self, supertype: 'Type') -> bool:
-        if (
-            supertype in self._nominal_supertypes
-            or supertype == object_type
-            or self == supertype
-        ):
-            return True
-        if isinstance(supertype, ObjectType) and supertype._nominal:
-            return False
+        from concat.level1.typecheck import Substitutions
 
-        if (
-            isinstance(supertype, _Function)
-            or isinstance(supertype, ObjectType)
-            and supertype._head == py_function_type
-        ):
-            # TODO: I don't like making this special case. Maybe make
-            # py_function_type a special subclass of ObjectType?
-            # FIXME: Clean up this logic.
-            if self.head == py_function_type and isinstance(
-                supertype, ObjectType
-            ):
-                # TODO: Multiple argument types
-                # NOTE: make sure types are of same kind (arity)
-                if len(self._type_parameters) != len(
-                    supertype._type_parameters
-                ):
-                    return False
-                if len(self._type_parameters) == 0:
-                    return True
-                elif len(self._type_parameters) == 2:
-                    # both are py_function_type
-                    return True
-                assert isinstance(supertype._type_arguments[0], IndividualType)
-                assert isinstance(self._type_arguments[1], IndividualType)
-                return (
-                    supertype._type_arguments[0] <= self._type_arguments[0]
-                    and self._type_arguments[1] <= supertype._type_arguments[1]
-                )
+        if supertype in self._nominal_supertypes or self is supertype:
+            return True
+        if isinstance(supertype, (_Function, PythonFunctionType)):
             if '__call__' not in self._attributes:
                 return False
             return self._attributes['__call__'] <= supertype
         if not isinstance(supertype, ObjectType):
             return super().is_subtype_of(supertype)
-        for attr, type in supertype._attributes.items():
+        if self._arity != supertype._arity:
+            return False
+        if self._arity == 0 and supertype is object_type:
+            return True
+        if supertype._nominal:
+            return False
+        # instantiate these types in a way such that alpha equivalence is not
+        # an issue
+        # NOTE: I assume the parameters are in the same order, which is
+        # fragile.
+        parameter_pairs = zip(self.type_parameters, supertype.type_parameters)
+        if not all(type(a) == type(b) for a, b in parameter_pairs):
+            return False
+        self = self.instantiate()
+        supertype = supertype.instantiate()
+        parameter_sub = Substitutions(
+            {
+                **dict(zip(self.type_arguments, supertype.type_arguments)),
+                self.self_type: supertype.self_type,
+            }
+        )
+        self = parameter_sub(self)
+
+        for attr, attr_type in supertype._attributes.items():
             if attr not in self._attributes:
                 return False
             sub = concat.level1.typecheck.Substitutions(
                 {self._self_type: supertype._self_type}
             )
-            if not (cast(IndividualType, sub(self._attributes[attr])) <= type):
+            if not (
+                cast(IndividualType, sub(self._attributes[attr])) <= attr_type
+            ):
                 return False
         return True
 
@@ -1208,7 +1211,7 @@ class ObjectType(IndividualType):
             None if self._head is self else self._head,
         )
 
-    def free_type_variables(self) -> Set[_Variable]:
+    def free_type_variables(self) -> OrderedSet[_Variable]:
         ftv = _free_type_variables_of_mapping(self.attributes)
         for arg in self.type_arguments:
             ftv |= arg.free_type_variables()
@@ -1240,56 +1243,6 @@ class ObjectType(IndividualType):
 
     def set_internal_name(self, name: str) -> None:
         self._internal_name = name
-
-    # QUESTION: Define in terms of <= (a <= b and b <= a)? For all kinds of types?
-    def __eq__(self, other: object) -> bool:
-        from concat.level1.typecheck import Substitutions
-
-        if not isinstance(other, ObjectType):
-            return super().__eq__(other)
-
-        if self._nominal or other._nominal:
-            return self is other
-
-        sub = Substitutions({self._self_type: other._self_type})
-        subbed_attributes = {
-            attr: sub(t) for attr, t in self._attributes.items()
-        }
-        if subbed_attributes != other._attributes:
-            return False
-
-        if len(self._type_parameters) != len(other._type_parameters) or len(
-            self._type_arguments
-        ) != len(other._type_arguments):
-            return False
-        # We can't use plain unification here because variables can only map to
-        # variables of the same type.
-        subs = Substitutions()
-        type_pairs = zip(
-            [*self._type_parameters, *self._type_arguments],
-            [*other._type_parameters, *other._type_arguments],
-        )
-        for type1, type2 in type_pairs:
-            if isinstance(type1, IndividualVariable) and isinstance(
-                type2, IndividualVariable
-            ):
-                # FIXME: This equality check should include alpha equivalence.
-                subs[type2] = type1
-            elif isinstance(type1, SequenceVariable) and isinstance(
-                type2, SequenceVariable
-            ):
-                subs[type2] = type1
-            if isinstance(type2, collections.abc.Sequence):
-                type2 = tuple(subs(TypeSequence(type2)))
-            else:
-                type2 = subs(type2)  # type: ignore
-            # Make sure that type1 is also a tuple if it's a sequence so that
-            # it can be compared with type2
-            if isinstance(type1, collections.abc.Sequence):
-                type1 = tuple(type1)
-            if type1 != type2:
-                return False
-        return True
 
     _hash_variable = None
 
@@ -1385,7 +1338,8 @@ class ClassType(ObjectType):
             or '__init__' not in self._attributes
         ):
             return super().is_subtype_of(supertype)
-        return self._attributes['__init__'].bind() <= supertype
+        bound_init = self._attributes['__init__'].bind()
+        return bound_init <= supertype
 
 
 class PythonFunctionType(ObjectType):
@@ -1528,6 +1482,23 @@ class PythonFunctionType(ObjectType):
         inputs = self.input[1:]
         output = self.output
         return self._head[TypeSequence(inputs), output]
+
+    def is_subtype_of(self, supertype: Type) -> bool:
+        if isinstance(supertype, PythonFunctionType):
+            # NOTE: make sure types are of same kind (arity)
+            if len(self._type_parameters) != len(supertype._type_parameters):
+                return False
+            if len(self._type_parameters) == 2:
+                # both are py_function_type
+                return True
+            assert isinstance(supertype._type_arguments[0], TypeSequence)
+            assert isinstance(self._type_arguments[1], IndividualType)
+            return (
+                supertype._type_arguments[0] <= self._type_arguments[0]
+                and self._type_arguments[1] <= supertype._type_arguments[1]
+            )
+        else:
+            return super().is_subtype_of(supertype)
 
 
 class _NoReturnType(ObjectType):
