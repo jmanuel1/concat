@@ -5,7 +5,7 @@ import unittest
 import concat.visitors
 from concat.level0.stdlib.types import Quotation
 import concat.level0.stdlib.pyinterop
-import concat.level0.lex
+import concat.lex
 import concat.level0.transpile
 import concat.level0.execute
 import concat.parse
@@ -37,7 +37,7 @@ class TestIntoConcatFromPython(unittest.TestCase):
         Test that a module imported through import <name> pushes itself onto
         the stack when referred to by name (i.e. module is $module)."""
         namespace = {}
-        lexer = concat.level0.lex.Lexer()
+        lexer = concat.lex.Lexer()
         lexer.input('import sys\nsys')
         tokens = []
         while True:

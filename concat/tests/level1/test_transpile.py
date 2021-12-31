@@ -1,6 +1,6 @@
 import concat.visitors
 from concat.astutils import get_explicit_positional_function_parameters
-from concat.level0.lex import Token
+from concat.lex import Token
 import concat.parse
 import concat.level0.transpile
 import concat.parse
@@ -82,7 +82,7 @@ class TestSubVisitors(unittest.TestCase):
         )
 
     def test_slice_word_visitor_with_step(self) -> None:
-        two_token = concat.level0.lex.Token()
+        two_token = concat.lex.Token()
         two_token.type, two_token.value = 'NUMBER', '2'
         two = concat.parse.NumberWordNode(two_token)
         node = concat.parse.SliceWordNode(([], [], [two]))
@@ -95,7 +95,7 @@ class TestSubVisitors(unittest.TestCase):
 
     def test_del_statement_visitor(self) -> None:
         """Concat del statements are transpiled to Python del statements."""
-        name_token = concat.level0.lex.Token()
+        name_token = concat.lex.Token()
         name_token.value, name_token.start = 'a', (0, 0)
         name = concat.parse.NameWordNode(name_token)
         node = concat.parse.DelStatementNode([name])
@@ -103,7 +103,7 @@ class TestSubVisitors(unittest.TestCase):
 
     def test_async_funcdef_statement_visitor(self) -> None:
         """Async function definitions are transpiled to the same kind of Python statement."""
-        name_token = concat.level0.lex.Token()
+        name_token = concat.lex.Token()
         name_token.value, name_token.start = 'a', (0, 0)
         node = concat.parse.AsyncFuncdefStatementNode(
             name_token, [], [], [], (0, 0)
@@ -114,7 +114,7 @@ class TestSubVisitors(unittest.TestCase):
 
     def test_funcdef_statement_visitor(self) -> None:
         """Function definitions are transpiled to the same kind of Python statement."""
-        name_token = concat.level0.lex.Token()
+        name_token = concat.lex.Token()
         name_token.value, name_token.start = 'a', (0, 0)
         node = concat.parse.FuncdefStatementNode(
             name_token, [], [], [], (0, 0)

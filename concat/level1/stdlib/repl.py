@@ -10,7 +10,7 @@ import concat.level0.stdlib.importlib
 import concat.parse
 import concat.level0.transpile
 import concat.level1.stdlib.types
-import concat.level1.lex
+import concat.lex
 import concat.level1.transpile
 import concat.level1.execute
 import sys
@@ -24,8 +24,8 @@ from typing import List, Dict, Optional, Set, Callable, NoReturn, cast
 sys.modules[__name__].__class__ = concat.level0.stdlib.importlib.Module
 
 
-def _tokenize(code: str) -> List[concat.level0.lex.Token]:
-    lexer = concat.level1.lex.Lexer()
+def _tokenize(code: str) -> List[concat.lex.Token]:
+    lexer = concat.lex.Lexer()
     lexer.input(code)
     tokens = []
     while True:

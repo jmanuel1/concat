@@ -978,8 +978,7 @@ class _GenericTypeNode(IndividualTypeNode):
 
 class _TypeSequenceIndividualTypeNode(IndividualTypeNode):
     def __init__(
-        self,
-        args: Sequence[Union[concat.level0.lex.Token, IndividualTypeNode]],
+        self, args: Sequence[Union[concat.lex.Token, IndividualTypeNode]],
     ) -> None:
         if args[0] is None:
             location = args[1].location

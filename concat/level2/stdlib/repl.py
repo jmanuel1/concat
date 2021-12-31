@@ -10,7 +10,7 @@ import concat.parse
 import concat.level0.transpile
 import concat.level1.stdlib.types
 import concat.level1.stdlib.repl
-import concat.level1.lex
+import concat.lex
 import concat.level1.transpile
 import concat.level1.execute
 import concat.level2.stdlib.continuations

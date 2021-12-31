@@ -36,7 +36,7 @@ from hypothesis import HealthCheck, given, example, note, settings
 from hypothesis.strategies import dictionaries, from_type, integers, text
 
 
-def lex_string(string: str) -> List[concat.level0.lex.Token]:
+def lex_string(string: str) -> List[concat.lex.Token]:
     return lex.tokenize(string)
 
 

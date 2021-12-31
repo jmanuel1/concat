@@ -42,15 +42,15 @@ from typing import (
     Callable,
     TYPE_CHECKING,
 )
-import concat.level0.lex
-from concat.level0.lex import Token
+import concat.lex
 import concat.astutils
-from concat.astutils import Location, Words, WordsOrStatements, flatten
 from concat.parser_combinators import desc_cumulatively
 import parsy
 
 if TYPE_CHECKING:
+    from concat.lex import Token
     from concat.typecheck import TypeSequenceNode
+    from concat.astutils import Location, Words, WordsOrStatements
 
 
 class Node(abc.ABC):
@@ -63,7 +63,7 @@ class Node(abc.ABC):
 class TopLevelNode(Node):
     def __init__(
         self,
-        encoding: 'concat.level0.lex.Token',
+        encoding: 'concat.lex.Token',
         children: 'concat.astutils.WordsOrStatements',
     ):
         super().__init__()
@@ -87,7 +87,7 @@ class ImportStatementNode(StatementNode):
         self,
         module: str,
         asname: Optional[str] = None,
-        location: Location = (0, 0),
+        location: 'Location' = (0, 0),
     ):
         super().__init__()
         self.location = location
@@ -108,7 +108,7 @@ class WordNode(Node, abc.ABC):
 
 class CastWordNode(WordNode):
     def __init__(
-        self, type: 'concat.typecheck.IndividualTypeNode', location: Location
+        self, type: 'concat.typecheck.IndividualTypeNode', location: 'Location'
     ):
         super().__init__()
         self.location = location
@@ -135,7 +135,7 @@ class PushWordNode(WordNode):
 
 
 class NumberWordNode(WordNode):
-    def __init__(self, number: 'concat.level0.lex.Token'):
+    def __init__(self, number: 'concat.lex.Token'):
         super().__init__()
         self.location = number.start
         self.children: List[Node] = []
@@ -153,7 +153,7 @@ class NumberWordNode(WordNode):
 
 
 class StringWordNode(WordNode):
-    def __init__(self, string: 'concat.level0.lex.Token') -> None:
+    def __init__(self, string: 'concat.lex.Token') -> None:
         super().__init__()
         self.location = string.start
         self.children: List[Node] = []
@@ -187,7 +187,7 @@ class QuoteWordNode(WordNode):
 
 
 class NameWordNode(WordNode):
-    def __init__(self, name: 'concat.level0.lex.Token'):
+    def __init__(self, name: 'concat.lex.Token'):
         super().__init__()
         self.location = name.start
         self.children: List[Node] = []
@@ -198,7 +198,7 @@ class NameWordNode(WordNode):
 
 
 class AttributeWordNode(WordNode):
-    def __init__(self, attribute: 'concat.level0.lex.Token'):
+    def __init__(self, attribute: 'concat.lex.Token'):
         super().__init__()
         self.location = attribute.start
         self.children: List[Node] = []
@@ -221,9 +221,7 @@ class ParserDict(Dict[str, parsy.Parser]):
     def extend_with(self: T, extension: Callable[[T], None]) -> None:
         extension(self)
 
-    def parse(
-        self, tokens: Sequence['concat.level0.lex.Token']
-    ) -> TopLevelNode:
+    def parse(self, tokens: Sequence['concat.lex.Token']) -> TopLevelNode:
         return self['top-level'].parse(list(tokens))
 
     def token(self, typ: str) -> parsy.Parser:
@@ -258,24 +256,24 @@ parsy.ParseError = ParseError  # type: ignore
 
 class SimpleValueWordNode(WordNode, abc.ABC):
     @abc.abstractmethod
-    def __init__(self, token: Token):
+    def __init__(self, token: 'Token'):
         super().__init__()
         self.location = token.start
         self.children = []
 
 
 class NoneWordNode(SimpleValueWordNode):
-    def __init__(self, token: Token):
+    def __init__(self, token: 'Token'):
         super().__init__(token)
 
 
 class NotImplWordNode(SimpleValueWordNode):
-    def __init__(self, token: Token):
+    def __init__(self, token: 'Token'):
         super().__init__(token)
 
 
 class EllipsisWordNode(SimpleValueWordNode):
-    def __init__(self, token: Token):
+    def __init__(self, token: 'Token'):
         super().__init__(token)
 
 
@@ -301,7 +299,7 @@ class SliceWordNode(WordNode):
 
 
 class BytesWordNode(WordNode):
-    def __init__(self, bytes: concat.level0.lex.Token):
+    def __init__(self, bytes: 'concat.lex.Token'):
         super().__init__()
         self.children = []
         self.location = bytes.start
@@ -310,7 +308,7 @@ class BytesWordNode(WordNode):
 
 class IterableWordNode(WordNode, abc.ABC):
     @abc.abstractmethod
-    def __init__(self, element_words: Iterable[Words], location: Location):
+    def __init__(self, element_words: Iterable['Words'], location: 'Location'):
         super().__init__()
         self.children = []
         self.location = location
@@ -320,19 +318,19 @@ class IterableWordNode(WordNode, abc.ABC):
 
 
 class TupleWordNode(IterableWordNode):
-    def __init__(self, element_words: Iterable[Words], location: Location):
+    def __init__(self, element_words: Iterable['Words'], location: 'Location'):
         super().__init__(element_words, location)
         self.tuple_children = element_words
 
 
 class ListWordNode(IterableWordNode):
-    def __init__(self, element_words: Iterable[Words], location: Location):
+    def __init__(self, element_words: Iterable['Words'], location: 'Location'):
         super().__init__(element_words, location)
         self.list_children = element_words
 
 
 class SetWordNode(IterableWordNode):
-    def __init__(self, element_words: Iterable[Words], location: Location):
+    def __init__(self, element_words: Iterable['Words'], location: 'Location'):
         super().__init__(element_words, location)
         self.set_children = element_words
 
@@ -349,7 +347,7 @@ class DelStatementNode(StatementNode):
 
 class DictWordNode(IterableWordNode):
     def __init__(
-        self, element_words: Iterable[Iterable[Words]], location: Location
+        self, element_words: Iterable[Iterable['Words']], location: 'Location'
     ):
         flattened_pairs = self.__flatten_pairs(element_words)
         super().__init__(flattened_pairs, location)
@@ -357,15 +355,15 @@ class DictWordNode(IterableWordNode):
 
     @staticmethod
     def __flatten_pairs(
-        element_words: Iterable[Iterable[Words]],
-    ) -> Iterable[Words]:
+        element_words: Iterable[Iterable['Words']],
+    ) -> Iterable['Words']:
         for key, value in element_words:
             yield key
             yield value
 
 
 class SimpleKeywordWordNode(WordNode, abc.ABC):
-    def __init__(self, token: Token):
+    def __init__(self, token: 'Token'):
         self.location = token.start
         self.children = []
 
@@ -397,11 +395,11 @@ class WithWordNode(SimpleKeywordWordNode):
 class FuncdefStatementNode(StatementNode):
     def __init__(
         self,
-        name: Token,
+        name: 'Token',
         decorators: Iterable[WordNode],
         annotation: Optional[Iterable[WordNode]],
-        body: WordsOrStatements,
-        location: Location,
+        body: 'WordsOrStatements',
+        location: 'Location',
         stack_effect: Optional['StackEffectTypeNode'] = None,
     ):
         super().__init__()
@@ -438,14 +436,14 @@ class FromImportStatementNode(ImportStatementNode):
         relative_module: str,
         imported_name: str,
         asname: Optional[str] = None,
-        location: Location = (0, 0),
+        location: 'Location' = (0, 0),
     ):
         super().__init__(relative_module, asname, location)
         self.imported_name = imported_name
 
 
 class FromImportStarStatementNode(FromImportStatementNode):
-    def __init__(self, module: str, location: Location = (0, 0)):
+    def __init__(self, module: str, location: 'Location' = (0, 0)):
         super().__init__(module, '*', None, location)
 
 
@@ -453,10 +451,10 @@ class ClassdefStatementNode(StatementNode):
     def __init__(
         self,
         name: str,
-        body: WordsOrStatements,
-        location: Location,
-        decorators: Optional[Words] = None,
-        bases: Iterable[Words] = (),
+        body: 'WordsOrStatements',
+        location: 'Location',
+        decorators: Optional['Words'] = None,
+        bases: Iterable['Words'] = (),
         keyword_args: Iterable[Tuple[str, WordNode]] = (),
     ):
         super().__init__()
@@ -483,7 +481,7 @@ def extension(parsers: ParserDict) -> None:
         children = [
             child
             for child in children
-            if not isinstance(child, concat.level0.lex.Token)
+            if not isinstance(child, concat.lex.Token)
         ]
         yield parsers.token('ENDMARKER')
         return TopLevelNode(encoding, children)
@@ -602,7 +600,7 @@ def extension(parsers: ParserDict) -> None:
         start = yield parsers.ref_parser('word').many()
         yield parsers.token('COLON')
         stop = yield parsers.ref_parser('word').many()
-        none = concat.level0.lex.Token()
+        none = concat.lex.Token()
         none.type = 'NONE'
         step = [NoneWordNode(none)]
         if (yield parsers.token('COLON').optional()):
@@ -728,6 +726,8 @@ def extension(parsers: ParserDict) -> None:
         'target-words'
     ).map(DelStatementNode)
 
+    from concat.astutils import flatten
+
     parsers['target-words'] = (
         parsers.ref_parser('target-word').sep_by(parsers.token('COMMA'), min=1)
         << parsers.token('COMMA').optional()
@@ -752,7 +752,7 @@ def extension(parsers: ParserDict) -> None:
     def async_funcdef_statement_parser() -> Generator:
         location = (yield parsers.token('ASYNC')).start
         func: FuncdefStatementNode = (yield parsers['funcdef-statement'])
-        name = Token()
+        name = concat.lex.Token()
         name.value = func.name
         return AsyncFuncdefStatementNode(
             name,

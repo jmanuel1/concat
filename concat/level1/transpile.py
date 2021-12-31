@@ -231,7 +231,7 @@ def _word_extension(visitors: VisitorDict[concat.parse.Node, ast.AST]) -> None:
         The expression will be the Python equivalent of `[...3 ...2 ...1
         to_slice]`. This perhaps makes the evaluation order in a slice a bit
         weird."""
-        to_slice_token = concat.level0.lex.Token()
+        to_slice_token = concat.lex.Token()
         to_slice_token.type, to_slice_token.value = 'NAME', 'to_slice'
         to_slice = concat.parse.NameWordNode(to_slice_token)
         subscription = concat.parse.SubscriptionWordNode(
@@ -251,7 +251,7 @@ def _word_extension(visitors: VisitorDict[concat.parse.Node, ast.AST]) -> None:
     def pushed_slice_word_visitor(
         node: concat.parse.SliceWordNode,
     ) -> ast.expr:
-        to_slice_token = concat.level0.lex.Token()
+        to_slice_token = concat.lex.Token()
         to_slice_token.type, to_slice_token.value = 'NAME', 'to_slice'
         to_slice = concat.parse.NameWordNode(to_slice_token)
         subscription = concat.parse.SubscriptionWordNode(
@@ -440,7 +440,7 @@ def level_1_extension(
 
         @assert_annotated_type
         def slice_subvisitor(node: concat.parse.SliceWordNode):
-            to_slice_token = concat.level0.lex.Token()
+            to_slice_token = concat.lex.Token()
             to_slice_token.type, to_slice_token.value = 'NAME', 'to_slice'
             to_slice = concat.parse.NameWordNode(to_slice_token)
             subscription = concat.parse.SubscriptionWordNode(

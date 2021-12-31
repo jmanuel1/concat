@@ -1,10 +1,10 @@
-import concat.level0.lex
+import concat.lex
 import concat.parse
 import abc
 
 
 class OperatorWordNode(concat.parse.WordNode, abc.ABC):
-    def __init__(self, token: concat.level0.lex.Token):
+    def __init__(self, token: concat.lex.Token):
         super().__init__()
         self.children = []
         self.location = token.start

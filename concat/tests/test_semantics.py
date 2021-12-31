@@ -3,7 +3,7 @@ import concat.astutils
 import concat.parse
 from concat.parse import AttributeWordNode, NumberWordNode, TopLevelNode
 from concat.level0.stdlib.ski import s, k, i
-from concat.level0.lex import Token
+from concat.lex import Token
 from concat.level2.execute import execute
 import unittest
 from typing import Callable, Iterable, List, Tuple, TypeVar, Union, cast
