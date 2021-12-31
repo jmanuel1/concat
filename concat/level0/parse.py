@@ -46,7 +46,7 @@ from concat.parser_combinators import desc_cumulatively
 import parsy
 
 if TYPE_CHECKING:
-    from concat.level2.typecheck import TypeSequenceNode
+    from concat.typecheck import TypeSequenceNode
 
 
 class Node(abc.ABC):

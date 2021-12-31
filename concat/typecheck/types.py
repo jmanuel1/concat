@@ -1,10 +1,10 @@
 from concat.orderedset import OrderedSet
-import concat.level1.typecheck
-from concat.level1.typecheck import (
+from concat.typecheck import (
     AttributeError,
     StackMismatchError,
     TypeError,
 )
+import concat.typecheck
 from typing import (
     Optional,
     Dict,
@@ -29,7 +29,7 @@ import builtins
 
 
 if TYPE_CHECKING:
-    from concat.level1.typecheck import Substitutions
+    from concat.typecheck import Substitutions
 
 
 class Type(abc.ABC):
@@ -54,13 +54,13 @@ class Type(abc.ABC):
         return self <= other and other <= self
 
     def get_type_of_attribute(self, name: str) -> 'IndividualType':
-        raise concat.level1.typecheck.AttributeError(self, name)
+        raise AttributeError(self, name)
 
     def has_attribute(self, name: str) -> bool:
         try:
             self.get_type_of_attribute(name)
             return True
-        except concat.level1.typecheck.AttributeError:
+        except AttributeError:
             return False
 
     @abc.abstractproperty
@@ -73,7 +73,7 @@ class Type(abc.ABC):
 
     @abc.abstractmethod
     def apply_substitution(
-        self, _: 'concat.level1.typecheck.Substitutions'
+        self, _: 'concat.typecheck.Substitutions'
     ) -> Union['Type', Sequence['StackItemType']]:
         pass
 
@@ -127,7 +127,7 @@ class _Variable(Type, abc.ABC):
     compared by identity."""
 
     def apply_substitution(
-        self, sub: 'concat.level1.typecheck.Substitutions'
+        self, sub: 'concat.typecheck.Substitutions'
     ) -> Union[IndividualType, '_Variable', 'TypeSequence']:
         if self in sub:
             return sub[self]  # type: ignore
@@ -144,7 +144,7 @@ class IndividualVariable(_Variable, IndividualType):
     def constrain_and_bind_supertype_variables(
         self, supertype: Type, rigid_variables: Set['_Variable']
     ) -> 'Substitutions':
-        from concat.level1.typecheck import Substitutions
+        from concat.typecheck import Substitutions
 
         if self is supertype or supertype == object_type:
             return Substitutions()
@@ -176,7 +176,7 @@ class IndividualVariable(_Variable, IndividualType):
     def constrain_and_bind_subtype_variables(
         self, supertype: Type, rigid_variables: Set['_Variable']
     ) -> 'Substitutions':
-        from concat.level1.typecheck import Substitutions
+        from concat.typecheck import Substitutions
 
         if self is supertype:
             return Substitutions()
@@ -208,7 +208,7 @@ class IndividualVariable(_Variable, IndividualType):
         return '<individual variable {}>'.format(id(self))
 
     def apply_substitution(
-        self, sub: 'concat.level1.typecheck.Substitutions'
+        self, sub: 'concat.typecheck.Substitutions'
     ) -> IndividualType:
         return cast(IndividualType, super().apply_substitution(sub))
 
@@ -234,7 +234,7 @@ class SequenceVariable(_Variable):
     def constrain_and_bind_supertype_variables(
         self, supertype: Type, rigid_variables: Set['_Variable']
     ) -> 'Substitutions':
-        from concat.level1.typecheck import Substitutions
+        from concat.typecheck import Substitutions
 
         if not isinstance(supertype, (SequenceVariable, TypeSequence)):
             raise TypeError(
@@ -256,7 +256,7 @@ class SequenceVariable(_Variable):
     def constrain_and_bind_subtype_variables(
         self, supertype: Type, rigid_variables: Set['_Variable']
     ) -> 'Substitutions':
-        from concat.level1.typecheck import Substitutions
+        from concat.typecheck import Substitutions
 
         if not isinstance(supertype, (SequenceVariable, TypeSequence)):
             raise TypeError(
@@ -358,7 +358,7 @@ class TypeSequence(Type, Iterable['StackItemType']):
         to be equal to their counterparts in the subtype sequence so that type
         information can be propagated into calls of named functions.
         """
-        from concat.level1.typecheck import Substitutions
+        from concat.typecheck import Substitutions
 
         if (
             isinstance(supertype, SequenceVariable)
@@ -451,7 +451,7 @@ class TypeSequence(Type, Iterable['StackItemType']):
     def constrain_and_bind_subtype_variables(
         self, supertype: Type, rigid_variables: Set['_Variable']
     ) -> 'Substitutions':
-        from concat.level1.typecheck import Substitutions
+        from concat.typecheck import Substitutions
 
         if isinstance(supertype, SequenceVariable) and (
             not self._rest or self._individual_types
@@ -621,7 +621,7 @@ class _Function(IndividualType):
     def is_subtype_of(
         self,
         supertype: Type,
-        _sub: Optional['concat.level1.typecheck.Substitutions'] = None,
+        _sub: Optional['concat.typecheck.Substitutions'] = None,
     ) -> bool:
         if super().is_subtype_of(supertype):
             return True
@@ -632,7 +632,7 @@ class _Function(IndividualType):
                 return False
             # Sequence variables are handled through renaming.
             if _sub is None:
-                _sub = concat.level1.typecheck.Substitutions()
+                _sub = concat.typecheck.Substitutions()
             input_rename_result = self._rename_sequence_variable(
                 tuple(self.input), tuple(supertype.input), _sub
             )
@@ -720,7 +720,7 @@ class _Function(IndividualType):
     def _rename_sequence_variable(
         supertype_list: Sequence['StackItemType'],
         subtype_list: Sequence['StackItemType'],
-        sub: 'concat.level1.typecheck.Substitutions',
+        sub: 'concat.typecheck.Substitutions',
     ) -> bool:
         both_lists_nonempty = supertype_list and subtype_list
         if (
@@ -757,14 +757,14 @@ class _Function(IndividualType):
     def get_type_of_attribute(self, name: str) -> '_Function':
         if name == '__call__':
             return self
-        raise concat.level1.typecheck.AttributeError(self, name)
+        raise AttributeError(self, name)
 
     @property
     def attributes(self) -> Mapping[str, 'StackEffect']:
         return {'__call__': self}
 
     def apply_substitution(
-        self, sub: 'concat.level1.typecheck.Substitutions'
+        self, sub: 'concat.typecheck.Substitutions'
     ) -> '_Function':
         return _Function(sub(self.input), sub(self.output))
 
@@ -779,7 +779,7 @@ class QuotationType(_Function):
     def is_subtype_of(
         self,
         supertype: Type,
-        _sub: Optional['concat.level1.typecheck.Substitutions'] = None,
+        _sub: Optional['concat.typecheck.Substitutions'] = None,
     ) -> bool:
         if super().is_subtype_of(supertype, _sub):
             return True
@@ -830,7 +830,7 @@ class QuotationType(_Function):
         )
 
     def apply_substitution(
-        self, sub: 'concat.level1.typecheck.Substitutions'
+        self, sub: 'concat.typecheck.Substitutions'
     ) -> 'QuotationType':
         return QuotationType(super().apply_substitution(sub))
 
@@ -922,10 +922,10 @@ class ObjectType(IndividualType):
 
     def apply_substitution(
         self,
-        sub: 'concat.level1.typecheck.Substitutions',
+        sub: 'concat.typecheck.Substitutions',
         _should_quantify_over_type_parameters=True,
     ) -> 'ObjectType':
-        from concat.level1.typecheck import Substitutions
+        from concat.typecheck import Substitutions
 
         if _should_quantify_over_type_parameters:
             sub = Substitutions(
@@ -983,7 +983,7 @@ class ObjectType(IndividualType):
         return subbed_type
 
     def is_subtype_of(self, supertype: 'Type') -> bool:
-        from concat.level1.typecheck import Substitutions
+        from concat.typecheck import Substitutions
 
         if supertype in self._nominal_supertypes or self is supertype:
             return True
@@ -1019,7 +1019,7 @@ class ObjectType(IndividualType):
         for attr, attr_type in supertype._attributes.items():
             if attr not in self._attributes:
                 return False
-            sub = concat.level1.typecheck.Substitutions(
+            sub = concat.typecheck.Substitutions(
                 {self._self_type: supertype._self_type}
             )
             if not (
@@ -1031,7 +1031,7 @@ class ObjectType(IndividualType):
     def constrain_and_bind_supertype_variables(
         self, supertype: Type, rigid_variables: Set['_Variable']
     ) -> 'Substitutions':
-        from concat.level1.typecheck import Substitutions
+        from concat.typecheck import Substitutions
 
         if (
             isinstance(supertype, IndividualVariable)
@@ -1112,7 +1112,7 @@ class ObjectType(IndividualType):
     def constrain_and_bind_subtype_variables(
         self, supertype: Type, rigid_variables: Set['_Variable']
     ) -> 'Substitutions':
-        from concat.level1.typecheck import Substitutions
+        from concat.typecheck import Substitutions
 
         if isinstance(supertype, IndividualVariable):
             raise TypeError(
@@ -1193,9 +1193,7 @@ class ObjectType(IndividualType):
         if attribute not in self._attributes:
             raise AttributeError(self, attribute)
 
-        self_sub = concat.level1.typecheck.Substitutions(
-            {self._self_type: self}
-        )
+        self_sub = concat.typecheck.Substitutions({self._self_type: self})
 
         return self_sub(self._attributes[attribute])
 
@@ -1247,7 +1245,7 @@ class ObjectType(IndividualType):
     _hash_variable = None
 
     def __hash__(self) -> int:
-        from concat.level1.typecheck import Substitutions
+        from concat.typecheck import Substitutions
 
         if ObjectType._hash_variable is None:
             ObjectType._hash_variable = IndividualVariable()
@@ -1268,7 +1266,7 @@ class ObjectType(IndividualType):
     def __getitem__(
         self, type_arguments: Sequence[StackItemType]
     ) -> 'ObjectType':
-        from concat.level1.typecheck import Substitutions
+        from concat.typecheck import Substitutions
 
         if self._arity != len(type_arguments):
             raise TypeError(
@@ -1386,7 +1384,7 @@ class PythonFunctionType(ObjectType):
         )
 
     def get_type_of_attribute(self, attribute: str) -> IndividualType:
-        from concat.level1.typecheck import Substitutions
+        from concat.typecheck import Substitutions
 
         sub = Substitutions({self._self_type: self})
         if attribute == '__call__':
@@ -1413,7 +1411,7 @@ class PythonFunctionType(ObjectType):
         )
 
     def apply_substitution(
-        self, sub: 'concat.level1.typecheck.Substitutions'
+        self, sub: 'concat.typecheck.Substitutions'
     ) -> 'PythonFunctionType':
         if self._arity == 0:
             type = py_function_type[
@@ -1510,7 +1508,7 @@ class _NoReturnType(ObjectType):
         return True
 
     def apply_substitution(
-        self, sub: 'concat.level1.typecheck.Substitutions'
+        self, sub: 'concat.typecheck.Substitutions'
     ) -> '_NoReturnType':
         return self
 
@@ -1536,7 +1534,7 @@ class _OptionalType(ObjectType):
     # def constrain(self, supertype, )
 
     def apply_substitution(
-        self, sub: 'concat.level1.typecheck.Substitutions'
+        self, sub: 'concat.typecheck.Substitutions'
     ) -> '_OptionalType':
         return _OptionalType(tuple(sub(TypeSequence(self._type_arguments))))
 
@@ -1720,3 +1718,15 @@ tuple_type.set_internal_name('tuple_type')
 
 base_exception_type = ObjectType(_x, {})
 module_type = ObjectType(_x, {})
+
+_index_type_var = IndividualVariable()
+_result_type_var = IndividualVariable()
+subscriptable_type = ObjectType(
+    IndividualVariable(),
+    {
+        '__getitem__': py_function_type[
+            TypeSequence([_index_type_var]), _result_type_var
+        ],
+    },
+    [_index_type_var, _result_type_var],
+)

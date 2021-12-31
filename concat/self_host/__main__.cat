@@ -4,7 +4,7 @@
 from concat.transpile import transpile
 import concat.astutils
 import concat.level1.execute as execute
-import concat.level1.typecheck
+import concat.typecheck
 import concat.level1.stdlib.repl as repl
 from concat.level2.stdlib.pyinterop import to_py_function
 import argparse
@@ -63,7 +63,7 @@ $.file$[1] sys$.stdin is
 $([,] [[,], [,], over $.debug] repl$.repl py_call drop)
 $(
     [
-      [concat.level1.typecheck$.NameError, $(
+      [concat.typecheck$.NameError, $(
         [,] ['Error:\n',] $print py_call drop
         [,] [over, 'in line:',] $print py_call drop
         {'end': '\n',} [pick$.file$[1] cast (file) pick$.location get_line_at,] $print py_call drop
@@ -86,7 +86,7 @@ choose  # FIXME: We should test for interactivity instead
 # else:
 #     try:
 #         python_ast = transpile(args.file.read())
-#     except concat.level1.typecheck.NameError as e:
+#     except concat.typecheck.NameError as e:
 #         print('Error:\n')
 #         print(e, 'in line:')
 #         print(get_line_at(args.file, e.location), end='')

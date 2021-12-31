@@ -1,19 +1,29 @@
-from concat.level1.typecheck.types import (
+from concat.typecheck.types import (
     IndividualVariable,
     SequenceVariable,
     ForAll,
     ObjectType,
     StackEffect,
     TypeSequence,
+    base_exception_type,
     bool_type,
+    context_manager_type,
     dict_type,
     file_type,
+    float_type,
     init_primitives,
+    int_type,
     iterable_type,
     list_type,
+    module_type,
+    no_return_type,
     object_type,
+    optional_type,
     py_function_type,
     str_type,
+    subscriptable_type,
+    subtractable_type,
+    tuple_type,
 )
 
 init_primitives()
@@ -21,9 +31,11 @@ init_primitives()
 _rest_var = SequenceVariable()
 _seq_var = SequenceVariable()
 _stack_var = SequenceVariable()
+_stack_type_var = SequenceVariable()
 _a_var = IndividualVariable()
 _b_var = IndividualVariable()
 _c_var = IndividualVariable()
+_x = IndividualVariable()
 
 types = {
     'py_call': ForAll(
@@ -117,4 +129,51 @@ types = {
     'print': py_function_type,
     'Exception': py_function_type,
     'input': py_function_type,
+    'if_then': ObjectType(
+        _x,
+        {
+            '__call__': StackEffect(
+                [_rest_var, bool_type, StackEffect([_rest_var], [_rest_var])],
+                [_rest_var],
+            )
+        },
+        [_rest_var],
+    ),
+    'call': ObjectType(
+        _x,
+        {
+            '__call__': StackEffect(
+                [_rest_var, StackEffect([_rest_var], [_seq_var])], [_seq_var],
+            )
+        },
+        [_rest_var, _seq_var],
+    ),
+    'True': ObjectType(
+        _a_var,
+        {'__call__': StackEffect([_rest_var], [_rest_var, bool_type])},
+        [_rest_var],
+    ),
+    # TODO: Separate type-check-time environment from runtime environment.
+    # XXX: generalize to_int over the stack
+    'to_int': StackEffect(
+        TypeSequence([_stack_type_var, optional_type[int_type,], object_type]),
+        TypeSequence([_stack_type_var, int_type]),
+    ),
+    'tuple': tuple_type,
+    'BaseException': base_exception_type,
+    'NoReturn': no_return_type,
+    'subscriptable': subscriptable_type,
+    'subtractable': subtractable_type,
+    'bool': bool_type,
+    'object': object_type,
+    'context_manager': context_manager_type,
+    'dict': dict_type,
+    'module': module_type,
+    'list': list_type,
+    'str': str_type,
+    'py_function': py_function_type,
+    'Optional': optional_type,
+    'int': int_type,
+    'float': float_type,
+    'file': file_type,
 }

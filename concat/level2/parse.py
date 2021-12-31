@@ -3,7 +3,7 @@
 This parser is designed to extend the level one parser.
 """
 import concat.level0.parse
-import concat.level2.typecheck
+import concat.typecheck
 from concat.astutils import Location
 import concat.parser_combinators
 from typing import Generator
@@ -11,14 +11,18 @@ import parsy
 
 
 class CastWordNode(concat.level0.parse.WordNode):
-    def __init__(self, type: 'concat.level2.typecheck.IndividualTypeNode', location: Location):
+    def __init__(
+        self, type: 'concat.typecheck.IndividualTypeNode', location: Location
+    ):
         super().__init__()
         self.location = location
         self.children = []
         self.type = type
 
     def __repr__(self) -> str:
-        return '{}({!r}, {!r})'.format(type(self).__qualname__, self.type, self.location)
+        return '{}({!r}, {!r})'.format(
+            type(self).__qualname__, self.type, self.location
+        )
 
 
 def level_2_extension(parsers: concat.level0.parse.ParserDict) -> None:
@@ -36,4 +40,5 @@ def level_2_extension(parsers: concat.level0.parse.ParserDict) -> None:
     # none word = LPAR, type, RPAR, CAST ;
     # The grammar of 'type' is defined by the typechecker.
     parsers['cast-word'] = concat.parser_combinators.desc_cumulatively(
-        cast_word_parser, 'cast word')
+        cast_word_parser, 'cast word'
+    )

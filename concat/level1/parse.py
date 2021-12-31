@@ -15,7 +15,6 @@ from typing import (
 from concat.level0.lex import Token
 import concat.level0.parse
 from concat.level1.operators import operators
-import concat.level1.typecheck
 from concat.astutils import Words, Location, WordsOrStatements, flatten
 import concat.parser_combinators
 import abc
@@ -23,7 +22,7 @@ import operator
 import parsy
 
 if TYPE_CHECKING:
-    from concat.level2.typecheck import StackEffectTypeNode
+    from concat.typecheck import StackEffectTypeNode
 
 
 # Patches to parsy for better errors--useful for debugging

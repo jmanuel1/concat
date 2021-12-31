@@ -14,13 +14,12 @@ import concat.level1.lex
 import concat.level1.parse
 import concat.level1.transpile
 import concat.level1.execute
-import concat.level1.typecheck
 import sys
 import tokenize as tokize
 import ast
 import inspect
 import traceback
-from typing import List, Dict, Set, Callable, NoReturn, cast
+from typing import List, Dict, Optional, Set, Callable, NoReturn, cast
 
 
 sys.modules[__name__].__class__ = concat.level0.stdlib.importlib.Module
@@ -51,7 +50,8 @@ def _parse(code: str) -> concat.level0.parse.TopLevelNode:
 
 def _transpile(code: concat.level0.parse.TopLevelNode) -> ast.Module:
     transpiler = concat.level0.transpile.VisitorDict[
-        concat.level0.parse.Node, ast.AST]()
+        concat.level0.parse.Node, ast.AST
+    ]()
     transpiler.extend_with(concat.level0.transpile.level_0_extension)
     transpiler.extend_with(concat.level1.transpile.level_1_extension)
     return cast(ast.Module, transpiler.visit(code))
@@ -75,8 +75,7 @@ def _read_until_complete_line() -> str:
 
 def read_form(stack: List[object], stash: List[object]) -> None:
     caller_frame = inspect.stack()[1].frame
-    caller_globals: Dict[str, object] = {
-        **caller_frame.f_globals}
+    caller_globals: Dict[str, object] = {**caller_frame.f_globals}
     caller_locals = caller_frame.f_locals
     scope = {**caller_globals, **caller_locals, 'stack': stack, 'stash': stash}
 
@@ -85,33 +84,42 @@ def read_form(stack: List[object], stash: List[object]) -> None:
         ast = _parse('$(' + string + ')')
     except concat.level1.parse.ParseError:
         ast = _parse(string)
-        concat.typecheck.check(
-            caller_globals['@@extra_env'], ast.children)
+        concat.typecheck.check(caller_globals['@@extra_env'], ast.children)
         # I don't think it makes sense for us to get multiple children if what
         # we got was a statement, so we assert.
         assert len(ast.children) == 1
         py_ast = _transpile(ast)
 
         def statement_function(stack: List[object], stash: List[object]):
-            concat.level1.execute.execute(
-                '<stdin>', py_ast, scope, True)
+            concat.level1.execute.execute('<stdin>', py_ast, scope, True)
 
         stack.append(statement_function)
     else:
-        concat.typecheck.check(
-            caller_globals['@@extra_env'], ast.children)
+        concat.typecheck.check(caller_globals['@@extra_env'], ast.children)
         py_ast = _transpile(ast)
-        concat.level1.execute.execute(
-            '<stdin>', py_ast, scope, True)
+        concat.level1.execute.execute('<stdin>', py_ast, scope, True)
 
 
-def read_quot(stack: List[object], stash: List[object], extra_env: concat.level1.typecheck.Environment = concat.level1.typecheck.Environment()) -> None:
+def read_quot(
+    stack: List[object],
+    stash: List[object],
+    extra_env: Optional[concat.typecheck.Environment] = None,
+) -> None:
+    if not extra_env:
+        extra_env = concat.typecheck.Environment()
     caller_frame = inspect.stack()[1].frame
     caller_globals: Dict[str, object] = {
-        **caller_frame.f_globals, 'stack': stack, 'stash': stash, '@@extra_env': extra_env}
+        **caller_frame.f_globals,
+        'stack': stack,
+        'stash': stash,
+        '@@extra_env': extra_env,
+    }
     caller_locals = caller_frame.f_locals
-    exec('concat.level1.stdlib.repl.read_form(stack, stash)',
-         caller_globals, caller_locals)
+    exec(
+        'concat.level1.stdlib.repl.read_form(stack, stash)',
+        caller_globals,
+        caller_locals,
+    )
     if not isinstance(stack[-1], concat.level1.stdlib.types.Quotation):
         stack.pop()
         raise Exception('did not receive a quotation from standard input')
@@ -127,7 +135,9 @@ def print_exit_message() -> None:
     print('Bye!')
 
 
-def repl(stack: List[object], stash: List[object], debug=False, initial_globals={}) -> None:
+def repl(
+    stack: List[object], stash: List[object], debug=False, initial_globals={}
+) -> None:
     def show_var(stack: List[object], stash: List[object]):
         cast(Set[str], globals['visible_vars']).add(cast(str, stack.pop()))
 
@@ -135,13 +145,14 @@ def repl(stack: List[object], stash: List[object], debug=False, initial_globals=
         'visible_vars': set(),
         'show_var': show_var,
         'concat': concat,
-        '@@extra_env': concat.level1.typecheck.Environment(),
-        **initial_globals
+        '@@extra_env': concat.typecheck.Environment(),
+        **initial_globals,
     }
     locals: Dict[str, object] = {}
 
-    intro_message = "Concat REPL (level 1, version {} on Python {}).".format(
-        concat.version, sys.version)
+    intro_message = 'Concat REPL (level 1, version {} on Python {}).'.format(
+        concat.version, sys.version
+    )
 
     print(intro_message)
 
@@ -154,14 +165,18 @@ def repl(stack: List[object], stash: List[object], debug=False, initial_globals=
         print('No startup initialization file found.')
     else:
         concat.level1.execute.execute(
-            init_file_name, python_ast, globals, True, locals)
+            init_file_name, python_ast, globals, True, locals
+        )
     prompt = '>>> '
     try:
         while True:
             print(prompt, end='', flush=True)
             try:
-                eval('concat.level1.stdlib.repl.read_form(stack, [])',
-                     globals, locals)
+                eval(
+                    'concat.level1.stdlib.repl.read_form(stack, [])',
+                    globals,
+                    locals,
+                )
             except concat.level1.parse.ParseError as e:
                 print('Syntax error:\n')
                 print(e)
@@ -173,8 +188,7 @@ def repl(stack: List[object], stash: List[object], debug=False, initial_globals=
             else:
                 stack = cast(List[object], globals['stack'])
                 quotation = cast(
-                    Callable[[List[object], List[object]], None],
-                    stack.pop()
+                    Callable[[List[object], List[object]], None], stack.pop()
                 )
                 try:
                     quotation(stack, cast(List[object], globals['stash']))

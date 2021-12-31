@@ -3,7 +3,7 @@
 
 from concat.transpile import transpile
 import concat.astutils
-import concat.level1.typecheck
+import concat.typecheck
 import concat.level2.stdlib.repl
 import concat.level2.execute
 import argparse
@@ -60,7 +60,7 @@ if args.file.isatty():
 else:
     try:
         python_ast = transpile(args.file.read(), os.path.dirname(filename))
-    except concat.level1.typecheck.StaticAnalysisError as e:
+    except concat.typecheck.StaticAnalysisError as e:
         print('Static Analysis Error:\n')
         print(e, 'in line:')
         if e.location:
@@ -74,6 +74,8 @@ else:
         print('This is a bug in Concat.')
         raise
     else:
-        concat.level2.execute.execute(filename, python_ast, {}, should_log_stacks=args.debug)
+        concat.level2.execute.execute(
+            filename, python_ast, {}, should_log_stacks=args.debug
+        )
     finally:
         args.file.close()

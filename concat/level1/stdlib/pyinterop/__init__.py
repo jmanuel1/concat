@@ -18,7 +18,7 @@ import builtins
 import importlib
 import os
 import concat.level0.stdlib.ski
-from concat.level1.typecheck.types import (
+from concat.typecheck.types import (
     SequenceVariable,
     StackEffect,
     TypeSequence,

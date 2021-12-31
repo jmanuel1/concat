@@ -1,4 +1,4 @@
-from concat.level1.typecheck.types import (
+from concat.typecheck.types import (
     IndividualType,
     SequenceVariable,
     StackItemType,
