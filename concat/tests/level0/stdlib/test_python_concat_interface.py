@@ -8,7 +8,7 @@ import concat.level0.stdlib.pyinterop
 import concat.level0.lex
 import concat.level0.transpile
 import concat.level0.execute
-import concat.level0.parse
+import concat.parse
 import ast
 from typing import List, cast
 
@@ -31,7 +31,7 @@ class TestIntoPythonFromConcat(unittest.TestCase):
 class TestIntoConcatFromPython(unittest.TestCase):
     """Test the Python-Concat interface going into Concat from Python."""
 
-    def test_modules_are_callable(self):
+    def test_modules_are_callable(self) -> None:
         """Test that imported modules become callable.
 
         Test that a module imported through import <name> pushes itself onto
@@ -45,11 +45,15 @@ class TestIntoConcatFromPython(unittest.TestCase):
             if token is None:
                 break
             tokens.append(token)
-        parser = concat.level0.parse.ParserDict()
-        parser.extend_with(concat.level0.parse.level_0_extension)
+        parser = concat.parse.ParserDict()
+        parser.extend_with(concat.parse.extension)
         concat_ast = parser.parse(tokens)
-        transpiler = concat.visitors.VisitorDict[concat.level0.parse.Node, ast.AST]()
+        transpiler = concat.visitors.VisitorDict[concat.parse.Node, ast.AST]()
         transpiler.extend_with(concat.level0.transpile.level_0_extension)
         prog = cast(ast.Module, transpiler.visit(concat_ast))
         concat.level0.execute.execute('<test>', prog, namespace)
-        self.assertIs(namespace['stack'][-1], namespace['sys'], msg='module is not self-pushing')
+        self.assertIs(
+            namespace['stack'][-1],
+            namespace['sys'],
+            msg='module is not self-pushing',
+        )

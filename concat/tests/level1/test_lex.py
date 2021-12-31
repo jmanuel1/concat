@@ -1,5 +1,5 @@
 import concat.level1.lex as lex
-from concat.tests.level1.small_example_programs import examples
+from concat.tests.small_example_programs import examples
 import unittest
 
 

@@ -1,7 +1,7 @@
 import concat.lex as lex
-import concat.level0.parse
+import concat.parse
 import concat.typecheck
-import concat.level1.parse
+import concat.parse
 from concat.typecheck import Environment
 from concat.typecheck.types import (
     ClassType,
@@ -25,7 +25,7 @@ from concat.typecheck.types import (
     py_function_type,
 )
 import concat.typecheck.preamble_types
-import concat.level2.parse
+import concat.parse
 import concat.astutils
 import concat.tests.strategies  # for side-effects
 import unittest
@@ -40,19 +40,17 @@ def lex_string(string: str) -> List[concat.level0.lex.Token]:
     return lex.tokenize(string)
 
 
-def parse(string: str) -> concat.level0.parse.TopLevelNode:
+def parse(string: str) -> concat.parse.TopLevelNode:
     tokens = lex_string(string)
     parsers = build_parsers()
-    tree = cast(concat.level0.parse.TopLevelNode, parsers.parse(tokens))
+    tree = cast(concat.parse.TopLevelNode, parsers.parse(tokens))
     return tree
 
 
-def build_parsers() -> concat.level0.parse.ParserDict:
-    parsers = concat.level0.parse.ParserDict()
-    parsers.extend_with(concat.level0.parse.level_0_extension)
-    parsers.extend_with(concat.level1.parse.level_1_extension)
+def build_parsers() -> concat.parse.ParserDict:
+    parsers = concat.parse.ParserDict()
+    parsers.extend_with(concat.parse.extension)
     parsers.extend_with(concat.typecheck.typecheck_extension)
-    parsers.extend_with(concat.level2.parse.level_2_extension)
     return parsers
 
 
@@ -79,7 +77,7 @@ class TestTypeChecker(unittest.TestCase):
         tree = parse(try_prog)
         concat.typecheck.infer(concat.typecheck.Environment(), tree.children)
 
-    @given(from_type(concat.level0.parse.AttributeWordNode))
+    @given(from_type(concat.parse.AttributeWordNode))
     def test_attribute_word(self, attr_word) -> None:
         _, type = concat.typecheck.infer(
             concat.typecheck.Environment(),
@@ -129,7 +127,7 @@ class TestTypeChecker(unittest.TestCase):
         )
         self.assertEqual(type, StackEffect([], [int_type]))
 
-    @given(from_type(concat.level1.parse.SimpleValueWordNode))
+    @given(from_type(concat.parse.SimpleValueWordNode))
     def test_simple_value_word(self, simple_value_word) -> None:
         _, effect = concat.typecheck.infer(
             concat.typecheck.Environment(),
@@ -137,9 +135,9 @@ class TestTypeChecker(unittest.TestCase):
             initial_stack=TypeSequence([]),
         )
         expected_types = {
-            concat.level1.parse.NoneWordNode: none_type,
-            concat.level1.parse.NotImplWordNode: not_implemented_type,
-            concat.level1.parse.EllipsisWordNode: ellipsis_type,
+            concat.parse.NoneWordNode: none_type,
+            concat.parse.NotImplWordNode: not_implemented_type,
+            concat.parse.EllipsisWordNode: ellipsis_type,
         }
         expected_type = expected_types[type(simple_value_word)]
         self.assertEqual(list(effect.output), [expected_type])

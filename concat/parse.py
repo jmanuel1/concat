@@ -1,25 +1,242 @@
-"""The level one Concat parser.
+"""The Concat parser.
 
-This parser is designed to extend the level zero parser.
+On Extensibility:
+
+The parser uses parsy, a parser combinator library. A custom parser
+primitive is used to call the lexer.
+
+- The extension mechanism:
+Assume there is a level 0 word parser. In level 1:
+
+# import * level 0 parser module
+
+def word_ext(parsers):
+    parsers['word'] |= extensionParser
+
+extendedParsers = level0Parsers.extend_with(word_ext)
+
+The parsers object is a dictionary with a few methods:
+extend_with(extension) -- returns a new object that adds the extension
+
+- Other possible approaches:
+Hand-written recursive descent parser that tries extensions when throwing an
+exception: I would have to implement indefinte backtracking myself to have
+well-defined extension points. Libraries like pyparsing would do that for me.
+
+parsy is used instead of pyparsing since it supports having a separate
+tokenization phase.
 """
-from typing import (
-    Iterable,
-    List,
-    Tuple,
-    Sequence,
-    Optional,
-    Generator,
-    Type,
-    TYPE_CHECKING,
-)
-from concat.level0.lex import Token
-import concat.level0.parse
-from concat.level1.operators import operators
-from concat.astutils import Words, Location, WordsOrStatements, flatten
-import concat.parser_combinators
 import abc
 import operator
+from typing import (
+    Iterable,
+    Optional,
+    Type,
+    TypeVar,
+    Any,
+    Sequence,
+    Tuple,
+    Dict,
+    Generator,
+    List,
+    Callable,
+    TYPE_CHECKING,
+)
+import concat.level0.lex
+from concat.level0.lex import Token
+import concat.astutils
+from concat.astutils import Location, Words, WordsOrStatements, flatten
+from concat.parser_combinators import desc_cumulatively
 import parsy
+
+if TYPE_CHECKING:
+    from concat.typecheck import TypeSequenceNode
+
+
+class Node(abc.ABC):
+    @abc.abstractmethod
+    def __init__(self):
+        self.location = (0, 0)
+        self.children: Iterable[Node]
+
+
+class TopLevelNode(Node):
+    def __init__(
+        self,
+        encoding: 'concat.level0.lex.Token',
+        children: 'concat.astutils.WordsOrStatements',
+    ):
+        super().__init__()
+        self.encoding = encoding.value
+        self.location = encoding.start
+        self.children: concat.astutils.WordsOrStatements = children
+
+    def __repr__(self) -> str:
+        return 'TopLevelNode(Token("ENCODING", {!r}, {!r}), {!r})'.format(
+            self.encoding, self.location, self.children
+        )
+
+
+class StatementNode(Node, abc.ABC):
+    pass
+
+
+# TODO: Remove in favor of level 1 import statement
+class ImportStatementNode(StatementNode):
+    def __init__(
+        self,
+        module: str,
+        asname: Optional[str] = None,
+        location: Location = (0, 0),
+    ):
+        super().__init__()
+        self.location = location
+        self.children = []
+        self.value = module
+        self.asname = asname
+
+    def __str__(self) -> str:
+        string = 'import {}'.format(self.value)
+        if self.asname is not None:
+            string += ' as {}'.format(self.asname)
+        return string
+
+
+class WordNode(Node, abc.ABC):
+    pass
+
+
+class CastWordNode(WordNode):
+    def __init__(
+        self, type: 'concat.typecheck.IndividualTypeNode', location: Location
+    ):
+        super().__init__()
+        self.location = location
+        self.children = []
+        self.type = type
+
+    def __repr__(self) -> str:
+        return '{}({!r}, {!r})'.format(
+            type(self).__qualname__, self.type, self.location
+        )
+
+
+class PushWordNode(WordNode):
+    def __init__(self, child: WordNode):
+        super().__init__()
+        self.location = child.location
+        self.children: List[WordNode] = [child]
+
+    def __str__(self) -> str:
+        return '$' + str(self.children[0])
+
+    def __repr__(self) -> str:
+        return 'PushWordNode({!r})'.format(self.children[0])
+
+
+class NumberWordNode(WordNode):
+    def __init__(self, number: 'concat.level0.lex.Token'):
+        super().__init__()
+        self.location = number.start
+        self.children: List[Node] = []
+        try:
+            self.value = eval(number.value)
+        except SyntaxError:
+            raise ValueError(
+                '{!r} cannot eval to a number'.format(number.value)
+            )
+
+    def __repr__(self) -> str:
+        return 'NumberWordNode(Token("NUMBER", {!r}, {!r}))'.format(
+            str(self.value), self.location
+        )
+
+
+class StringWordNode(WordNode):
+    def __init__(self, string: 'concat.level0.lex.Token') -> None:
+        super().__init__()
+        self.location = string.start
+        self.children: List[Node] = []
+        try:
+            self.value = eval(string.value)
+        except SyntaxError:
+            raise ValueError(
+                '{!r} cannot eval to a string'.format(string.value)
+            )
+
+
+class QuoteWordNode(WordNode):
+    def __init__(
+        self,
+        children: Sequence[WordNode],
+        location: Tuple[int, int],
+        input_stack_type: Optional['TypeSequenceNode'] = None,
+    ):
+        super().__init__()
+        self.location = location
+        self.children: Sequence[WordNode] = children
+        self.input_stack_type = input_stack_type
+
+    def __str__(self) -> str:
+        input_stack_type = (
+            ''
+            if self.input_stack_type is None
+            else str(self.input_stack_type) + ': '
+        )
+        return '(' + input_stack_type + ' '.join(map(str, self.children)) + ')'
+
+
+class NameWordNode(WordNode):
+    def __init__(self, name: 'concat.level0.lex.Token'):
+        super().__init__()
+        self.location = name.start
+        self.children: List[Node] = []
+        self.value = name.value
+
+    def __str__(self) -> str:
+        return self.value
+
+
+class AttributeWordNode(WordNode):
+    def __init__(self, attribute: 'concat.level0.lex.Token'):
+        super().__init__()
+        self.location = attribute.start
+        self.children: List[Node] = []
+        self.value = attribute.value
+
+    def __repr__(self) -> str:
+        return 'AttributeWordNode(Token("NAME", {!r}, {!r}))'.format(
+            self.value, self.location
+        )
+
+
+T = TypeVar('T')
+
+
+class ParserDict(Dict[str, parsy.Parser]):
+    def __init__(self) -> None:
+        # These parsers act on lists of tokens.
+        pass
+
+    def extend_with(self: T, extension: Callable[[T], None]) -> None:
+        extension(self)
+
+    def parse(
+        self, tokens: Sequence['concat.level0.lex.Token']
+    ) -> TopLevelNode:
+        return self['top-level'].parse(list(tokens))
+
+    def token(self, typ: str) -> parsy.Parser:
+        description = '{} token'.format(typ)
+        return parsy.test_item(lambda token: token.type == typ, description)
+
+    def ref_parser(self, name: str) -> parsy.Parser:
+        @parsy.generate
+        def parser():
+            return (yield self[name])
+
+        return parser
+
 
 if TYPE_CHECKING:
     from concat.typecheck import StackEffectTypeNode
@@ -39,7 +256,7 @@ class ParseError(parsy.ParseError):
 parsy.ParseError = ParseError  # type: ignore
 
 
-class SimpleValueWordNode(concat.level0.parse.WordNode, abc.ABC):
+class SimpleValueWordNode(WordNode, abc.ABC):
     @abc.abstractmethod
     def __init__(self, token: Token):
         super().__init__()
@@ -62,18 +279,16 @@ class EllipsisWordNode(SimpleValueWordNode):
         super().__init__(token)
 
 
-class SubscriptionWordNode(concat.level0.parse.WordNode):
-    def __init__(self, children: Iterable[concat.level0.parse.WordNode]):
+class SubscriptionWordNode(WordNode):
+    def __init__(self, children: Iterable[WordNode]):
         super().__init__()
-        self.children: List[concat.level0.parse.WordNode] = list(children)
+        self.children: List[WordNode] = list(children)
         if self.children:
             self.location = self.children[0].location
 
 
-class SliceWordNode(concat.level0.parse.WordNode):
-    def __init__(
-        self, children: Iterable[Iterable[concat.level0.parse.WordNode]]
-    ):
+class SliceWordNode(WordNode):
+    def __init__(self, children: Iterable[Iterable[WordNode]]):
         super().__init__()
         self.start_children, self.stop_children, self.step_children = children
         self.children = [
@@ -85,7 +300,7 @@ class SliceWordNode(concat.level0.parse.WordNode):
             self.location = self.children[0].location
 
 
-class BytesWordNode(concat.level0.parse.WordNode):
+class BytesWordNode(WordNode):
     def __init__(self, bytes: concat.level0.lex.Token):
         super().__init__()
         self.children = []
@@ -93,7 +308,7 @@ class BytesWordNode(concat.level0.parse.WordNode):
         self.value = eval(bytes.value)
 
 
-class IterableWordNode(concat.level0.parse.WordNode, abc.ABC):
+class IterableWordNode(WordNode, abc.ABC):
     @abc.abstractmethod
     def __init__(self, element_words: Iterable[Words], location: Location):
         super().__init__()
@@ -122,8 +337,8 @@ class SetWordNode(IterableWordNode):
         self.set_children = element_words
 
 
-class DelStatementNode(concat.level0.parse.StatementNode):
-    def __init__(self, targets: Sequence[concat.level0.parse.WordNode]):
+class DelStatementNode(StatementNode):
+    def __init__(self, targets: Sequence[WordNode]):
         super().__init__()
         self.children = targets
         try:
@@ -149,7 +364,7 @@ class DictWordNode(IterableWordNode):
             yield value
 
 
-class SimpleKeywordWordNode(concat.level0.parse.WordNode, abc.ABC):
+class SimpleKeywordWordNode(WordNode, abc.ABC):
     def __init__(self, token: Token):
         self.location = token.start
         self.children = []
@@ -179,12 +394,12 @@ class WithWordNode(SimpleKeywordWordNode):
     pass
 
 
-class FuncdefStatementNode(concat.level0.parse.StatementNode):
+class FuncdefStatementNode(StatementNode):
     def __init__(
         self,
         name: Token,
-        decorators: Iterable[concat.level0.parse.WordNode],
-        annotation: Optional[Iterable[concat.level0.parse.WordNode]],
+        decorators: Iterable[WordNode],
+        annotation: Optional[Iterable[WordNode]],
         body: WordsOrStatements,
         location: Location,
         stack_effect: Optional['StackEffectTypeNode'] = None,
@@ -217,25 +432,6 @@ class AsyncFuncdefStatementNode(FuncdefStatementNode):
     pass
 
 
-class ImportStatementNode(concat.level0.parse.ImportStatementNode):
-    def __init__(
-        self,
-        module: str,
-        asname: Optional[str] = None,
-        location: Location = (0, 0),
-    ):
-        token = Token()
-        token.value = module
-        super().__init__(token, location)
-        self.asname = asname
-
-    def __str__(self) -> str:
-        string = 'import {}'.format(self.value)
-        if self.asname is not None:
-            string += ' as {}'.format(self.asname)
-        return string
-
-
 class FromImportStatementNode(ImportStatementNode):
     def __init__(
         self,
@@ -253,7 +449,7 @@ class FromImportStarStatementNode(FromImportStatementNode):
         super().__init__(module, '*', None, location)
 
 
-class ClassdefStatementNode(concat.level0.parse.StatementNode):
+class ClassdefStatementNode(StatementNode):
     def __init__(
         self,
         name: str,
@@ -261,7 +457,7 @@ class ClassdefStatementNode(concat.level0.parse.StatementNode):
         location: Location,
         decorators: Optional[Words] = None,
         bases: Iterable[Words] = (),
-        keyword_args: Iterable[Tuple[str, concat.level0.parse.WordNode]] = (),
+        keyword_args: Iterable[Tuple[str, WordNode]] = (),
     ):
         super().__init__()
         self.location = location
@@ -272,7 +468,89 @@ class ClassdefStatementNode(concat.level0.parse.StatementNode):
         self.keyword_args = keyword_args
 
 
-def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
+def extension(parsers: ParserDict) -> None:
+    # This parses the top level of a file.
+    # top level =
+    #   ENCODING, (word | statement | NEWLINE)*, [ NEWLINE ],
+    #   ENDMARKER ;
+    @parsy.generate
+    def top_level_parser() -> Generator[parsy.Parser, Any, TopLevelNode]:
+        encoding = yield parsers.token('ENCODING')
+        newline = parsers.token('NEWLINE')
+        statement = parsers['statement']
+        word = parsers['word']
+        children = yield (word | statement | newline).many()
+        children = [
+            child
+            for child in children
+            if not isinstance(child, concat.level0.lex.Token)
+        ]
+        yield parsers.token('ENDMARKER')
+        return TopLevelNode(encoding, children)
+
+    parsers['top-level'] = desc_cumulatively(top_level_parser, 'top level')
+
+    # This parses one of many types of statement.
+    # The specific statement node is returned.
+    # statement = import statement ;
+    parsers['statement'] = parsers.ref_parser('import-statement')
+
+    ImportStatementParserGenerator = Generator[
+        parsy.Parser, Any, ImportStatementNode
+    ]
+
+    # This parses one of many types of word.
+    # The specific word node is returned.
+    # word =
+    #   push word | literal word | name word | attribute word | quote word ;
+    # literal word = number word | string word ;
+    parsers['word'] = parsy.alt(
+        parsers.ref_parser('push-word'),
+        parsers.ref_parser('quote-word'),
+        parsers.ref_parser('literal-word'),
+        parsers.ref_parser('name-word'),
+        parsers.ref_parser('attribute-word'),
+    )
+    parsers['literal-word'] = parsers.ref_parser(
+        'number-word'
+    ) | parsers.ref_parser('string-word')
+
+    parsers['name-word'] = parsers.token('NAME').map(NameWordNode)
+
+    parsers['number-word'] = parsers.token('NUMBER').map(NumberWordNode)
+
+    parsers['string-word'] = parsers.token('STRING').map(StringWordNode)
+
+    # This parses a quotation.
+    # quote word = LPAR, word*, RPAR ;
+    @parsy.generate('quote word')
+    def quote_word_parser() -> Generator[parsy.Parser, Any, QuoteWordNode]:
+        lpar = yield parsers.token('LPAR')
+        if 'type-sequence' in parsers:
+            input_stack_type_parser = parsers[
+                'type-sequence'
+            ] << parsers.token('COLON')
+            input_stack_type = yield input_stack_type_parser.optional()
+        else:
+            input_stack_type = None
+        children = yield parsers['word'].many()
+        yield parsers.token('RPAR')
+        return QuoteWordNode(children, lpar.start, input_stack_type)
+
+    parsers['quote-word'] = quote_word_parser
+
+    # This parses a push word into a node.
+    # push word = DOLLARSIGN, word ;
+    word = parsers.ref_parser('word')
+    dollarSign = parsers.token('DOLLARSIGN')
+    parsers['push-word'] = dollarSign >> word.map(PushWordNode)
+
+    # Parsers an attribute word.
+    # attribute word = DOT, NAME ;
+    dot = parsers.token('DOT')
+    name = parsers.token('NAME')
+    parsers['attribute-word'] = dot >> name.map(AttributeWordNode)
+
     parsers['literal-word'] |= parsy.alt(
         parsers.ref_parser('none-word'),
         parsers.ref_parser('not-impl-word'),
@@ -335,6 +613,8 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
     parsers['slice-word'] = slice_word_parser
 
     parsers['operator-word'] = parsy.fail('operator')
+
+    from concat.operators import operators
 
     for operator_name, token_type, node_type, _ in operators:
         parser_name = operator_name + '-word'
@@ -623,4 +903,21 @@ def level_1_extension(parsers: concat.level0.parse.ParserDict) -> None:
         parsers.token('NAME').map(operator.attrgetter('value'))
         << parsers.token('EQUAL'),
         parsers.ref_parser('word'),
+    )
+
+    parsers['word'] |= parsers.ref_parser('cast-word')
+
+    @parsy.generate
+    def cast_word_parser() -> Generator:
+        location = (yield parsers.token('CAST')).start
+        yield parsers.token('LPAR')
+        type_ast = yield parsers['type']
+        yield parsers.token('RPAR')
+        return CastWordNode(type_ast, location)
+
+    # This parses a cast word.
+    # none word = LPAR, type, RPAR, CAST ;
+    # The grammar of 'type' is defined by the typechecker.
+    parsers['cast-word'] = concat.parser_combinators.desc_cumulatively(
+        cast_word_parser, 'cast word'
     )

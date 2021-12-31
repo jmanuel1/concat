@@ -1,7 +1,7 @@
 import concat.transpile
 import concat.astutils
-import concat.level0.parse
-from concat.level0.parse import AttributeWordNode, NumberWordNode, TopLevelNode
+import concat.parse
+from concat.parse import AttributeWordNode, NumberWordNode, TopLevelNode
 from concat.level0.stdlib.ski import s, k, i
 from concat.level0.lex import Token
 from concat.level2.execute import execute
@@ -23,11 +23,9 @@ ProgramFragmentAndEffect = Tuple[ProgramFragment, List[object], List[object]]
 
 
 @composite
-def program(
-    draw,
-) -> ProgramFragmentAndEffect[concat.level0.parse.TopLevelNode]:
+def program(draw,) -> ProgramFragmentAndEffect[concat.parse.TopLevelNode]:
     children, stack, stash = draw(suite([], []))
-    return concat.level0.parse.TopLevelNode(Token(), children), stack, stash
+    return concat.parse.TopLevelNode(Token(), children), stack, stash
 
 
 @composite
@@ -48,7 +46,7 @@ def suite(
 @composite
 def word(
     draw, init_stack, init_stash
-) -> ProgramFragmentAndEffect[concat.level0.parse.WordNode]:
+) -> ProgramFragmentAndEffect[concat.parse.WordNode]:
     def f(strategy: Callable[..., object]) -> SearchStrategy[object]:
         return cast(SearchStrategy[object], strategy(init_stack, init_stash))
 
@@ -72,11 +70,11 @@ def word(
 @composite
 def number_word(
     draw, init_stack, init_stash
-) -> ProgramFragmentAndEffect[concat.level0.parse.NumberWordNode]:
+) -> ProgramFragmentAndEffect[concat.parse.NumberWordNode]:
     number = draw(integers(min_value=-100, max_value=100))
     number_token = Token('NUMBER', repr(number))
     return (
-        concat.level0.parse.NumberWordNode(number_token),
+        concat.parse.NumberWordNode(number_token),
         init_stack + [number],
         init_stash,
     )
@@ -85,11 +83,11 @@ def number_word(
 @composite
 def string_word(
     draw, init_stack, init_stash
-) -> ProgramFragmentAndEffect[concat.level0.parse.StringWordNode]:
+) -> ProgramFragmentAndEffect[concat.parse.StringWordNode]:
     string = draw(text(max_size=100))
     string_token = Token('STRING', repr(string))
     return (
-        concat.level0.parse.StringWordNode(string_token),
+        concat.parse.StringWordNode(string_token),
         init_stack + [string],
         init_stash,
     )
@@ -98,24 +96,24 @@ def string_word(
 @composite
 def quote_word(
     draw, init_stack, init_stash
-) -> ProgramFragmentAndEffect[concat.level0.parse.QuoteWordNode]:
+) -> ProgramFragmentAndEffect[concat.parse.QuoteWordNode]:
     sub_words = []
     length = draw(integers(min_value=0, max_value=100))
     stack, stash = init_stack, init_stash
     for _ in range(length):
         sub_word, stack, stash = draw(word(stack, stash))
         sub_words.append(sub_word)
-    return concat.level0.parse.QuoteWordNode(sub_words, (0, 0)), stack, stash
+    return concat.parse.QuoteWordNode(sub_words, (0, 0)), stack, stash
 
 
 @composite
 def name_word(
     draw, init_stack, init_stash
-) -> ProgramFragmentAndEffect[concat.level0.parse.NameWordNode]:
+) -> ProgramFragmentAndEffect[concat.parse.NameWordNode]:
     name = draw(sampled_from('iks'))
     name_token = Token('NAME', name)
     return (
-        concat.level0.parse.NameWordNode(name_token),
+        concat.parse.NameWordNode(name_token),
         *static_call(name, init_stack, init_stash),
     )
 
@@ -123,7 +121,7 @@ def name_word(
 @composite
 def attribute_word(
     draw, init_stack, init_stash
-) -> ProgramFragmentAndEffect[concat.level0.parse.AttributeWordNode]:
+) -> ProgramFragmentAndEffect[concat.parse.AttributeWordNode]:
     assume(init_stack)
     *stack, obj = init_stack
     stash = init_stash[:]
@@ -140,15 +138,15 @@ def attribute_word(
 
     attribute_token = Token('NAME', attribute)
 
-    return concat.level0.parse.AttributeWordNode(attribute_token), stack, stash
+    return concat.parse.AttributeWordNode(attribute_token), stack, stash
 
 
 @composite
 def push_word(
     draw, init_stack, init_stash
-) -> ProgramFragmentAndEffect[concat.level0.parse.PushWordNode]:
+) -> ProgramFragmentAndEffect[concat.parse.PushWordNode]:
     sub_word, stack, stash = draw(word([], []))
-    push_word = concat.level0.parse.PushWordNode(sub_word)
+    push_word = concat.parse.PushWordNode(sub_word)
     return (
         push_word,
         *static_push(sub_word, stack, stash, init_stack, init_stash),
@@ -156,24 +154,17 @@ def push_word(
 
 
 def static_push(
-    word: concat.level0.parse.WordNode,
+    word: concat.parse.WordNode,
     stack: List[object],
     stash: List[object],
     init_stack: List[object],
     init_stash: List[object],
 ) -> Tuple[List[object], List[object]]:
     if isinstance(
-        word,
-        (
-            concat.level0.parse.NumberWordNode,
-            concat.level0.parse.StringWordNode,
-        ),
+        word, (concat.parse.NumberWordNode, concat.parse.StringWordNode,),
     ):
         literal_node = cast(
-            Union[
-                concat.level0.parse.NumberWordNode,
-                concat.level0.parse.StringWordNode,
-            ],
+            Union[concat.parse.NumberWordNode, concat.parse.StringWordNode,],
             word,
         )
         return (
@@ -181,7 +172,7 @@ def static_push(
             + [lambda stack, stash: stack.append(literal_node.value)],
             init_stash,
         )
-    if isinstance(word, concat.level0.parse.QuoteWordNode):
+    if isinstance(word, concat.parse.QuoteWordNode):
 
         def pushed_quote(stack_, stash_):
             return (
@@ -190,9 +181,9 @@ def static_push(
             )
 
         return init_stack + [pushed_quote], init_stash
-    if isinstance(word, concat.level0.parse.NameWordNode):
+    if isinstance(word, concat.parse.NameWordNode):
         return init_stack + [{'s': s, 'k': k, 'i': i}[word.value]], init_stash
-    if isinstance(word, concat.level0.parse.AttributeWordNode):
+    if isinstance(word, concat.parse.AttributeWordNode):
         assume(init_stack)
         assume(hasattr(init_stack[-1], word.value))
         return (
@@ -200,7 +191,7 @@ def static_push(
             init_stash,
         )
     # I'm not sure how to deal with pushed pushed quotations
-    assume(not isinstance(word, concat.level0.parse.PushWordNode))
+    assume(not isinstance(word, concat.parse.PushWordNode))
     raise TypeError(word)
 
 

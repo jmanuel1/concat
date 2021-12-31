@@ -23,16 +23,14 @@ from concat.visitors import (
     assert_annotated_type,
     fail,
 )
-import concat.level0.parse
+import concat.parse
 
 
 def level_0_extension(
-    visitors: VisitorDict['concat.level0.parse.Node', ast.AST]
+    visitors: VisitorDict['concat.parse.Node', ast.AST]
 ) -> None:
     @FunctionalVisitor
-    def top_level_visitor(
-        node: concat.level0.parse.TopLevelNode,
-    ) -> ast.Module:
+    def top_level_visitor(node: concat.parse.TopLevelNode,) -> ast.Module:
         """Converts a TopLevelNode to the top level of a Python module."""
         statement = visitors.ref_visitor('statement')
         word = visitors.ref_visitor('word')
@@ -55,7 +53,7 @@ def level_0_extension(
         return module
 
     visitors['top-level'] = cast(
-        Visitor[concat.level0.parse.Node, ast.AST], top_level_visitor
+        Visitor[concat.parse.Node, ast.AST], top_level_visitor
     )
 
     visitors['statement'] = visitors.ref_visitor('import-statement')
@@ -63,7 +61,7 @@ def level_0_extension(
     # Converts an ImportStatementNode to a Python import statement node
     @assert_annotated_type
     def import_statement_visitor(
-        node: concat.level0.parse.ImportStatementNode,
+        node: concat.parse.ImportStatementNode,
     ) -> ast.stmt:
         import_node = ast.Import([ast.alias(node.value, None)])
         # reassign the import to a module type that is self-pushing
@@ -87,9 +85,7 @@ def level_0_extension(
 
     @visitors.add_alternative_to('word', 'quote-word')
     @assert_annotated_type
-    def quote_word_visitor(
-        node: concat.level0.parse.QuoteWordNode,
-    ) -> ast.Call:
+    def quote_word_visitor(node: concat.parse.QuoteWordNode,) -> ast.Call:
         """Converts a QuoteWordNode to a Python expression.
 
         This Python expression will be both a sequence and callable."""
@@ -109,7 +105,7 @@ def level_0_extension(
 
     @assert_annotated_type
     def pushed_attribute_visitor(
-        node: concat.level0.parse.AttributeWordNode,
+        node: concat.parse.AttributeWordNode,
     ) -> ast.expr:
         top = cast(ast.Expression, ast.parse('stack.pop()', mode='eval')).body
         load = ast.Load()
@@ -121,7 +117,7 @@ def level_0_extension(
 
     @visitors.add_alternative_to('word', 'push-word')
     @assert_annotated_type
-    def push_word_visitor(node: concat.level0.parse.PushWordNode) -> ast.expr:
+    def push_word_visitor(node: concat.parse.PushWordNode) -> ast.expr:
         """Converts a PushWordNode to a Python lambda abstraction."""
         child = Choice(
             visitors['pushed-word-special-case'], visitors['word']
@@ -146,9 +142,7 @@ def level_0_extension(
 
     @visitors.add_alternative_to('literal-word', 'number-word')
     @assert_annotated_type
-    def number_word_visitor(
-        node: concat.level0.parse.NumberWordNode,
-    ) -> ast.expr:
+    def number_word_visitor(node: concat.parse.NumberWordNode,) -> ast.expr:
         """Converts a NumberWordNode to an ast.expr."""
         num = ast.Num(n=node.value)
         py_node = ast.Call(
@@ -159,9 +153,7 @@ def level_0_extension(
 
     @visitors.add_alternative_to('literal-word', 'string-word')
     @assert_annotated_type
-    def string_word_visitor(
-        node: concat.level0.parse.StringWordNode,
-    ) -> ast.expr:
+    def string_word_visitor(node: concat.parse.StringWordNode,) -> ast.expr:
         """Converts a StringWordNode to an ast.expr."""
         string = ast.Str(s=node.value)
         py_node = ast.Call(
@@ -173,7 +165,7 @@ def level_0_extension(
     @visitors.add_alternative_to('word', 'attribute-word')
     @assert_annotated_type
     def attribute_word_visitor(
-        node: concat.level0.parse.AttributeWordNode,
+        node: concat.parse.AttributeWordNode,
     ) -> ast.expr:
         """Converts a AttributeWordNode to be an attribute lookup.
 
@@ -188,7 +180,7 @@ def level_0_extension(
 
     @visitors.add_alternative_to('word', 'name-word')
     @assert_annotated_type
-    def name_word_visitor(node: concat.level0.parse.NameWordNode) -> ast.Name:
+    def name_word_visitor(node: concat.parse.NameWordNode) -> ast.Name:
         """Converts a NameWordNode to a Python expression which is the name."""
         name = node.value
         return ast.Name(id=name, ctx=ast.Load())

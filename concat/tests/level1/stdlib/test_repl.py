@@ -2,7 +2,7 @@ import unittest
 import io
 import sys
 import contextlib
-import concat.level1.parse
+import concat.parse
 import concat.typecheck
 from concat.typecheck.types import SequenceVariable, StackEffect
 import concat.level1.stdlib.types
@@ -56,5 +56,5 @@ class TestREPLFunctions(unittest.TestCase):
         with replace_stdin(io.StringIO('drg nytu y,i.')):
             try:
                 concat.level1.stdlib.repl.repl([], [])
-            except concat.level1.parse.ParseError:
+            except concat.parse.ParseError:
                 self.fail('repl must recover from parser failures')

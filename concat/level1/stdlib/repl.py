@@ -7,11 +7,10 @@ import concat
 import concat.astutils
 import concat.typecheck
 import concat.level0.stdlib.importlib
-import concat.level0.parse
+import concat.parse
 import concat.level0.transpile
 import concat.level1.stdlib.types
 import concat.level1.lex
-import concat.level1.parse
 import concat.level1.transpile
 import concat.level1.execute
 import sys
@@ -37,20 +36,18 @@ def _tokenize(code: str) -> List[concat.level0.lex.Token]:
     return tokens
 
 
-def _parse(code: str) -> concat.level0.parse.TopLevelNode:
+def _parse(code: str) -> concat.parse.TopLevelNode:
     tokens = _tokenize(code)
-    parser = concat.level0.parse.ParserDict()
-    parser.extend_with(concat.level0.parse.level_0_extension)
-    parser.extend_with(concat.level1.parse.level_1_extension)
-    # FIXME: Level 2 parser extension and typechecker extensions should be
-    # here.
+    parser = concat.parse.ParserDict()
+    parser.extend_with(concat.parse.extension)
+    # FIXME: Typechecker extensions should be here.
     concat_ast = parser.parse(tokens)
     return concat_ast
 
 
-def _transpile(code: concat.level0.parse.TopLevelNode) -> ast.Module:
+def _transpile(code: concat.parse.TopLevelNode) -> ast.Module:
     transpiler = concat.level0.transpile.VisitorDict[
-        concat.level0.parse.Node, ast.AST
+        concat.parse.Node, ast.AST
     ]()
     transpiler.extend_with(concat.level0.transpile.level_0_extension)
     transpiler.extend_with(concat.level1.transpile.level_1_extension)
@@ -82,7 +79,7 @@ def read_form(stack: List[object], stash: List[object]) -> None:
     string = _read_until_complete_line()
     try:
         ast = _parse('$(' + string + ')')
-    except concat.level1.parse.ParseError:
+    except concat.parse.ParseError:
         ast = _parse(string)
         concat.typecheck.check(caller_globals['@@extra_env'], ast.children)
         # I don't think it makes sense for us to get multiple children if what
@@ -177,7 +174,7 @@ def repl(
                     globals,
                     locals,
                 )
-            except concat.level1.parse.ParseError as e:
+            except concat.parse.ParseError as e:
                 print('Syntax error:\n')
                 print(e)
             except concat.level0.execute.ConcatRuntimeError as e:

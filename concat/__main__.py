@@ -66,7 +66,7 @@ else:
         if e.location:
             print(get_line_at(args.file, e.location), end='')
             print(' ' * e.location[1] + '^')
-    except concat.level1.parse.ParseError as e:
+    except concat.parse.ParseError as e:
         print('Parse Error:')
         print(e)
     except Exception:

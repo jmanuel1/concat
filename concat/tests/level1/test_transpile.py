@@ -1,9 +1,9 @@
 import concat.visitors
 from concat.astutils import get_explicit_positional_function_parameters
 from concat.level0.lex import Token
-import concat.level0.parse
+import concat.parse
 import concat.level0.transpile
-import concat.level1.parse
+import concat.parse
 import concat.level1.transpile
 import unittest
 import ast
@@ -14,14 +14,14 @@ import astunparse  # type: ignore
 class TestSubVisitors(unittest.TestCase):
     def setUp(self) -> None:
         self.__visitors = concat.visitors.VisitorDict[
-            concat.level0.parse.Node, ast.AST
+            concat.parse.Node, ast.AST
         ]()
         self.__visitors.extend_with(concat.level0.transpile.level_0_extension)
         self.__visitors.extend_with(concat.level1.transpile.level_1_extension)
 
     def _test_visitor(
         self,
-        node: concat.level0.parse.Node,
+        node: concat.parse.Node,
         visitor: str,
         py_node_type: Type[ast.AST],
     ) -> ast.AST:
@@ -37,7 +37,7 @@ class TestSubVisitors(unittest.TestCase):
 
     def _test_visitors(
         self,
-        node: concat.level0.parse.Node,
+        node: concat.parse.Node,
         visitors: Iterable[str],
         py_node_type: Type[ast.AST],
     ) -> Iterator[ast.AST]:
@@ -45,7 +45,7 @@ class TestSubVisitors(unittest.TestCase):
             yield self._test_visitor(node, visitor, py_node_type)
 
     def _test_visitor_basic(
-        self, node: concat.level0.parse.Node, visitor: str
+        self, node: concat.parse.Node, visitor: str
     ) -> ast.AST:
         return self._test_visitor(node, visitor, ast.Call)
 
@@ -53,7 +53,7 @@ class TestSubVisitors(unittest.TestCase):
         """Tests that none words are transpiled to calls which contain None."""
         none = Token()
         none.start = (0, 0)
-        node = concat.level1.parse.NoneWordNode(none)
+        node = concat.parse.NoneWordNode(none)
         py_node = self._test_visitor_basic(node, 'none-word')
         value = cast(ast.NameConstant, cast(ast.Call, py_node).args[0]).value
         self.assertIs(
@@ -64,7 +64,7 @@ class TestSubVisitors(unittest.TestCase):
         """Not-impl words are transpiled to calls containing NotImplemented."""
         not_impl = Token()
         not_impl.start = (0, 0)
-        node = concat.level1.parse.NotImplWordNode(not_impl)
+        node = concat.parse.NotImplWordNode(not_impl)
         py_node = self._test_visitor_basic(node, 'not-impl-word')
         identifier = cast(ast.Name, cast(ast.Call, py_node).args[0]).id
         message = 'Python Name node does not contain "NotImplemented"'
@@ -74,7 +74,7 @@ class TestSubVisitors(unittest.TestCase):
         """Ellipsis words are transpiled to calls which contain '...'."""
         ellipsis = Token()
         ellipsis.start = (0, 0)
-        node = concat.level1.parse.EllipsisWordNode(ellipsis)
+        node = concat.parse.EllipsisWordNode(ellipsis)
         py_node = self._test_visitor_basic(node, 'ellipsis-word')
         message = 'The Python node within the call is not an Ellipsis'
         self.assertIsInstance(
@@ -84,8 +84,8 @@ class TestSubVisitors(unittest.TestCase):
     def test_slice_word_visitor_with_step(self) -> None:
         two_token = concat.level0.lex.Token()
         two_token.type, two_token.value = 'NUMBER', '2'
-        two = concat.level0.parse.NumberWordNode(two_token)
-        node = concat.level1.parse.SliceWordNode(([], [], [two]))
+        two = concat.parse.NumberWordNode(two_token)
+        node = concat.parse.SliceWordNode(([], [], [two]))
         py_node = self._test_visitor(node, 'slice-word', ast.expr)
         self.assertIn(
             '2',
@@ -97,15 +97,15 @@ class TestSubVisitors(unittest.TestCase):
         """Concat del statements are transpiled to Python del statements."""
         name_token = concat.level0.lex.Token()
         name_token.value, name_token.start = 'a', (0, 0)
-        name = concat.level0.parse.NameWordNode(name_token)
-        node = concat.level1.parse.DelStatementNode([name])
+        name = concat.parse.NameWordNode(name_token)
+        node = concat.parse.DelStatementNode([name])
         self._test_visitors(node, {'del-statement', 'statement'}, ast.Delete)
 
     def test_async_funcdef_statement_visitor(self) -> None:
         """Async function definitions are transpiled to the same kind of Python statement."""
         name_token = concat.level0.lex.Token()
         name_token.value, name_token.start = 'a', (0, 0)
-        node = concat.level1.parse.AsyncFuncdefStatementNode(
+        node = concat.parse.AsyncFuncdefStatementNode(
             name_token, [], [], [], (0, 0)
         )
 
@@ -116,7 +116,7 @@ class TestSubVisitors(unittest.TestCase):
         """Function definitions are transpiled to the same kind of Python statement."""
         name_token = concat.level0.lex.Token()
         name_token.value, name_token.start = 'a', (0, 0)
-        node = concat.level1.parse.FuncdefStatementNode(
+        node = concat.parse.FuncdefStatementNode(
             name_token, [], [], [], (0, 0)
         )
 
@@ -129,7 +129,7 @@ class TestSubVisitors(unittest.TestCase):
 
         The as-clause will be present in the resulting Python AST."""
 
-        node = concat.level1.parse.ImportStatementNode('a.submodule', 'b')
+        node = concat.parse.ImportStatementNode('a.submodule', 'b')
 
         for py_node in self._test_visitors(
             node, {'import-statement', 'statement'}, ast.stmt
@@ -141,7 +141,7 @@ class TestSubVisitors(unittest.TestCase):
             )
 
     def test_import_statement_visitor_with_from(self) -> None:
-        node = concat.level1.parse.FromImportStatementNode('a.submodule', 'b')
+        node = concat.parse.FromImportStatementNode('a.submodule', 'b')
 
         for py_node in self._test_visitors(
             node, {'import-statement', 'statement'}, ast.stmt
@@ -153,9 +153,7 @@ class TestSubVisitors(unittest.TestCase):
             )
 
     def test_import_statement_visitor_with_from_and_as(self) -> None:
-        node = concat.level1.parse.FromImportStatementNode(
-            'a.submodule', 'b', 'c'
-        )
+        node = concat.parse.FromImportStatementNode('a.submodule', 'b', 'c')
 
         for py_node in self._test_visitors(
             node, {'import-statement', 'statement'}, ast.stmt
@@ -172,7 +170,7 @@ class TestSubVisitors(unittest.TestCase):
             )
 
     def test_import_statement_visitor_with_from_and_star(self) -> None:
-        node = concat.level1.parse.FromImportStarStatementNode('a')
+        node = concat.parse.FromImportStarStatementNode('a')
 
         for py_node in self._test_visitors(
             node, {'import-statement', 'statement'}, ast.stmt
@@ -189,7 +187,7 @@ class TestSubVisitors(unittest.TestCase):
             )
 
     def test_classdef_statement_visitor(self) -> None:
-        node = concat.level1.parse.ClassdefStatementNode('A', [], (0, 0))
+        node = concat.parse.ClassdefStatementNode('A', [], (0, 0))
 
         self._test_visitors(
             node, {'classdef-statement', 'statement'}, ast.ClassDef
@@ -198,10 +196,8 @@ class TestSubVisitors(unittest.TestCase):
     def test_classdef_statement_visitor_with_decorators(self) -> None:
         name = Token()
         name.start, name.value = (0, 0), 'decorator'
-        decorator = concat.level0.parse.NameWordNode(name)
-        node = concat.level1.parse.ClassdefStatementNode(
-            'A', [], (0, 0), [decorator]
-        )
+        decorator = concat.parse.NameWordNode(name)
+        node = concat.parse.ClassdefStatementNode('A', [], (0, 0), [decorator])
 
         for py_node in self._test_visitors(
             node, {'classdef-statement', 'statement'}, ast.ClassDef
@@ -215,8 +211,8 @@ class TestSubVisitors(unittest.TestCase):
     def test_classdef_statement_visitor_with_bases(self) -> None:
         name = Token()
         name.start, name.value = (0, 0), 'base'
-        base = concat.level0.parse.NameWordNode(name)
-        node = concat.level1.parse.ClassdefStatementNode(
+        base = concat.parse.NameWordNode(name)
+        node = concat.parse.ClassdefStatementNode(
             'A', [], (0, 0), [], [[base]]
         )
 
@@ -237,8 +233,8 @@ class TestSubVisitors(unittest.TestCase):
     def test_classdef_statement_visitor_with_keyword_args(self) -> None:
         name = Token()
         name.start, name.value = (0, 0), 'meta'
-        word = concat.level0.parse.NameWordNode(name)
-        node = concat.level1.parse.ClassdefStatementNode(
+        word = concat.parse.NameWordNode(name)
+        node = concat.parse.ClassdefStatementNode(
             'A', [], (0, 0), [], [], [('metaclass', word)]
         )
 
@@ -259,7 +255,7 @@ class TestSubVisitors(unittest.TestCase):
     def test_subtract_word(self) -> None:
         """Tests that subtract words are successfuly transpiled."""
         minus = Token('MINUS', '-')
-        word = concat.level1.operators.SubtractWordNode(minus)
+        word = concat.operators.SubtractWordNode(minus)
 
         for py_node in self._test_visitors(
             word, {'word', 'operator-word', 'subtract-word'}, ast.expr
@@ -284,7 +280,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
 
     def setUp(self) -> None:
         self.__visitors = concat.visitors.VisitorDict[
-            concat.level0.parse.Node, ast.AST
+            concat.parse.Node, ast.AST
         ]()
         self.__visitors.extend_with(concat.level0.transpile.level_0_extension)
         self.__visitors.extend_with(concat.level1.transpile.level_1_extension)
@@ -294,10 +290,10 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
     ) -> ast.FunctionDef:
         name = Token()
         name.start, name.value = (0, 0), '__{}__'.format(method_name)
-        definition = concat.level1.parse.FuncdefStatementNode(
+        definition = concat.parse.FuncdefStatementNode(
             name, [], None, [], (0, 0)
         )
-        node = concat.level1.parse.ClassdefStatementNode(
+        node = concat.parse.ClassdefStatementNode(
             'A', [definition], (0, 0), [], []
         )
         py_node = cast(

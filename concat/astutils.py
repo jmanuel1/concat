@@ -10,19 +10,17 @@ from typing import (
 )
 import ast
 import concat.visitors
-import concat.level0.parse
+import concat.parse
 
 
 # Typedefs
 
 WordsOrStatements = Sequence[
-    Union['concat.level0.parse.WordNode', 'concat.level0.parse.StatementNode']
+    Union['concat.parse.WordNode', 'concat.parse.StatementNode']
 ]
-Words = List['concat.level0.parse.WordNode']
+Words = List['concat.parse.WordNode']
 Location = Tuple[int, int]
-_TranspilerDict = concat.visitors.VisitorDict[
-    'concat.level0.parse.Node', ast.AST
-]
+_TranspilerDict = concat.visitors.VisitorDict['concat.parse.Node', ast.AST]
 
 
 # AST Manipulation utilities
@@ -39,7 +37,7 @@ def pop_stack(index: int = -1) -> ast.Call:
 def to_transpiled_quotation(
     words: Words, default_location: Tuple[int, int], visitors: _TranspilerDict
 ) -> ast.expr:
-    quote = concat.level0.parse.QuoteWordNode(
+    quote = concat.parse.QuoteWordNode(
         list(words), list(words)[0].location if words else default_location
     )
     py_quote = visitors['quote-word'].visit(quote)
@@ -55,7 +53,7 @@ def pack_expressions(expressions: Iterable[ast.expr]) -> ast.Subscript:
 
 
 def to_python_decorator(
-    word: 'concat.level0.parse.WordNode', visitors: _TranspilerDict
+    word: 'concat.parse.WordNode', visitors: _TranspilerDict
 ) -> ast.Lambda:
     push_func = cast(
         ast.Expression, ast.parse('stack.append(func)', mode='eval')
@@ -406,10 +404,10 @@ def assert_all_nodes_have_locations(tree: ast.AST) -> None:
             assert hasattr(node, 'col_offset')
 
 
-def flatten(list: List[Union['concat.level0.parse.WordNode', Words]]) -> Words:
-    flat_list: List[concat.level0.parse.WordNode] = []
+def flatten(list: List[Union['concat.parse.WordNode', Words]]) -> Words:
+    flat_list: List[concat.parse.WordNode] = []
     for el in list:
-        if isinstance(el, concat.level0.parse.WordNode):
+        if isinstance(el, concat.parse.WordNode):
             flat_list.append(el)
         else:
             flat_list.extend(el)

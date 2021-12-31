@@ -1,9 +1,9 @@
 import concat.level0.lex
-import concat.level0.parse
+import concat.parse
 import abc
 
 
-class OperatorWordNode(concat.level0.parse.WordNode, abc.ABC):
+class OperatorWordNode(concat.parse.WordNode, abc.ABC):
     def __init__(self, token: concat.level0.lex.Token):
         super().__init__()
         self.children = []
@@ -112,7 +112,7 @@ class NotWordNode(OperatorWordNode):
 
 unary_operators = {
     ('invert', 'TILDE', InvertWordNode, '~'),
-    ('not', 'NOT', NotWordNode, 'not')
+    ('not', 'NOT', NotWordNode, 'not'),
 }
 
 binary_operators = {
@@ -136,7 +136,7 @@ binary_operators = {
         'greater-than-or-equal-to',
         'GREATEREQUAL',
         GreaterThanOrEqualToWordNode,
-        '>='
+        '>=',
     ),
     ('less-than-or-equal-to', 'LESSEQUAL', LessThanOrEqualToWordNode, '<='),
     ('not-equal-to', 'NOTEQUAL', NotEqualToWordNode, '!='),
@@ -145,7 +145,7 @@ binary_operators = {
     ('in', 'IN', InWordNode, 'in'),
     # there is not 'not in'; instead we have 'in' and 'not'
     ('or', 'OR', OrWordNode, 'or'),
-    ('and', 'AND', AndWordNode, 'and')
+    ('and', 'AND', AndWordNode, 'and'),
 }
 
 operators = unary_operators | binary_operators

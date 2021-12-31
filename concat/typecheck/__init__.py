@@ -27,10 +27,8 @@ from typing import (
 )
 from typing_extensions import Protocol
 import parsy
-import concat.level0.parse
-import concat.level1.operators
-import concat.level1.parse
-import concat.level2.parse
+import concat.parse
+import concat.operators
 
 
 if TYPE_CHECKING:
@@ -60,10 +58,10 @@ class TypeError(StaticAnalysisError, builtins.TypeError):
 class NameError(StaticAnalysisError, builtins.NameError):
     def __init__(
         self,
-        name: Union[concat.level0.parse.NameWordNode, str],
+        name: Union[concat.parse.NameWordNode, str],
         location: Optional[concat.astutils.Location] = None,
     ) -> None:
-        if isinstance(name, concat.level0.parse.NameWordNode):
+        if isinstance(name, concat.parse.NameWordNode):
             location = name.location
             name = name.value
         super().__init__(name)
@@ -216,7 +214,7 @@ def infer(
         try:
             S, (i, o) = current_subs, current_effect
 
-            if isinstance(node, concat.level1.operators.AddWordNode):
+            if isinstance(node, concat.operators.AddWordNode):
                 # rules:
                 # require object_type because the methods should return
                 # NotImplemented for most types
@@ -274,11 +272,11 @@ def infer(
                     )
             # TODO: Split this up based on level, somehow. Maybe, use methods
             # instead of dispatch using isinstance.
-            elif isinstance(node, concat.level0.parse.PushWordNode):
+            elif isinstance(node, concat.parse.PushWordNode):
                 S1, (i1, o1) = S, (i, o)
                 # special case for pushing an attribute accessor
                 child = node.children[0]
-                if isinstance(child, concat.level0.parse.AttributeWordNode):
+                if isinstance(child, concat.parse.AttributeWordNode):
                     top = o1[-1]
                     attr_type = top.get_type_of_attribute(child.value)
                     rest_types = o1[:-1]
@@ -287,7 +285,7 @@ def infer(
                         StackEffect(i1, [*rest_types, attr_type]),
                     )
                 # special case for name words
-                elif isinstance(child, concat.level0.parse.NameWordNode):
+                elif isinstance(child, concat.parse.NameWordNode):
                     if child.value not in gamma:
                         raise NameError(child)
                     name_type = gamma[child.value].instantiate()
@@ -295,7 +293,7 @@ def infer(
                         current_effect.input,
                         [*current_effect.output, current_subs(name_type)],
                     )
-                elif isinstance(child, concat.level1.parse.SliceWordNode):
+                elif isinstance(child, concat.parse.SliceWordNode):
                     sliceable_object_type = o[-1]
                     # This doesn't match the evaluation order used by the
                     # transpiler.
@@ -357,9 +355,7 @@ def infer(
                         StackEffect(i, [*o, result_type])
                     )
                 # special case for subscription words
-                elif isinstance(
-                    child, concat.level1.parse.SubscriptionWordNode
-                ):
+                elif isinstance(child, concat.parse.SubscriptionWordNode):
                     S2, (i2, o2) = infer(
                         current_subs(gamma),
                         child.children,
@@ -403,7 +399,7 @@ def infer(
                     )
                 else:
                     if (
-                        isinstance(child, concat.level0.parse.QuoteWordNode)
+                        isinstance(child, concat.parse.QuoteWordNode)
                         and child.input_stack_type is not None
                     ):
                         input_stack, _ = child.input_stack_type.to_type(gamma)
@@ -425,7 +421,7 @@ def infer(
                             [*S2(TypeSequence(o1)), QuotationType(fun_type)],
                         ),
                     )
-            elif isinstance(node, concat.level1.parse.WithWordNode):
+            elif isinstance(node, concat.parse.WithWordNode):
                 a_bar, b_bar = SequenceVariable(), SequenceVariable()
                 body_type = StackEffect([a_bar, object_type], [b_bar])
                 phi = current_effect.output.constrain_and_bind_supertype_variables(
@@ -441,7 +437,7 @@ def infer(
                         )
                     ),
                 )
-            elif isinstance(node, concat.level1.parse.TryWordNode):
+            elif isinstance(node, concat.parse.TryWordNode):
                 a_bar, b_bar = SequenceVariable(), SequenceVariable()
                 phi = TypeSequence(o).constrain_and_bind_supertype_variables(
                     TypeSequence(
@@ -458,7 +454,7 @@ def infer(
                     phi(S),
                     phi(StackEffect(i, [b_bar])),
                 )
-            elif isinstance(node, concat.level1.parse.DictWordNode):
+            elif isinstance(node, concat.parse.DictWordNode):
                 phi = current_subs
                 collected_type = current_effect.output
                 for key, value in node.dict_children:
@@ -498,7 +494,7 @@ def infer(
                         )
                     ),
                 )
-            elif isinstance(node, concat.level1.parse.ListWordNode):
+            elif isinstance(node, concat.parse.ListWordNode):
                 phi = S
                 collected_type = TypeSequence(o)
                 element_type: IndividualType = object_type
@@ -527,7 +523,7 @@ def infer(
                         )
                     ),
                 )
-            elif isinstance(node, concat.level1.operators.InvertWordNode):
+            elif isinstance(node, concat.operators.InvertWordNode):
                 out_types = current_effect.output[:-1]
                 invert_attr_type = current_effect.output[
                     -1
@@ -542,13 +538,13 @@ def infer(
                 current_effect = StackEffect(
                     current_effect.input, [*out_types, result_type]
                 )
-            elif isinstance(node, concat.level1.parse.NoneWordNode):
+            elif isinstance(node, concat.parse.NoneWordNode):
                 current_effect = StackEffect(i, [*o, none_type])
-            elif isinstance(node, concat.level1.parse.NotImplWordNode):
+            elif isinstance(node, concat.parse.NotImplWordNode):
                 current_effect = StackEffect(i, [*o, not_implemented_type])
-            elif isinstance(node, concat.level1.parse.EllipsisWordNode):
+            elif isinstance(node, concat.parse.EllipsisWordNode):
                 current_effect = StackEffect(i, [*o, ellipsis_type])
-            elif isinstance(node, concat.level1.parse.SliceWordNode):
+            elif isinstance(node, concat.parse.SliceWordNode):
                 sliceable_object_type = o[-1]
                 # This doesn't match the evaluation order used by the
                 # transpiler.
@@ -600,7 +596,7 @@ def infer(
                 current_effect = overload_subs(
                     StackEffect(i, [*o, result_type])
                 )
-            elif isinstance(node, concat.level1.parse.FromImportStatementNode):
+            elif isinstance(node, concat.parse.FromImportStatementNode):
                 imported_name = node.asname or node.imported_name
                 # mutate type environment
                 gamma[imported_name] = object_type
@@ -627,7 +623,7 @@ def infer(
                             type_parameters=[args_var],
                             nominal=True,
                         )
-            elif isinstance(node, concat.level1.parse.ImportStatementNode):
+            elif isinstance(node, concat.parse.ImportStatementNode):
                 # TODO: Support all types of import correctly.
                 if node.asname is not None:
                     gamma[node.asname] = current_subs(
@@ -646,7 +642,7 @@ def infer(
                             components, source_dir=source_dir
                         )
                     )
-            elif isinstance(node, concat.level1.parse.SubscriptionWordNode):
+            elif isinstance(node, concat.parse.SubscriptionWordNode):
                 seq = current_effect.output[:-1]
                 index_type_var = IndividualVariable()
                 result_type_var = IndividualVariable()
@@ -692,7 +688,7 @@ def infer(
                         StackEffect(current_effect.input, result_type.output)
                     ),
                 )
-            elif isinstance(node, concat.level1.operators.SubtractWordNode):
+            elif isinstance(node, concat.operators.SubtractWordNode):
                 # FIXME: We should check if the other operand supports __rsub__ if the
                 # first operand doesn't support __sub__.
                 other_operand_type_var = IndividualVariable()
@@ -720,7 +716,7 @@ def infer(
                         )
                     ),
                 )
-            elif isinstance(node, concat.level1.parse.FuncdefStatementNode):
+            elif isinstance(node, concat.parse.FuncdefStatementNode):
                 S = current_subs
                 f = current_effect
                 name = node.name
@@ -762,7 +758,7 @@ def infer(
                 # we *mutate* the type environment
                 gamma[name] = effect.generalized_wrt(S(gamma))
             elif isinstance(
-                node, concat.level1.operators.GreaterThanOrEqualToWordNode
+                node, concat.operators.GreaterThanOrEqualToWordNode
             ):
                 a_type, b_type = current_effect.output[-2:]
                 try:
@@ -793,10 +789,10 @@ def infer(
             elif isinstance(
                 node,
                 (
-                    concat.level1.operators.IsWordNode,
-                    concat.level1.operators.AndWordNode,
-                    concat.level1.operators.OrWordNode,
-                    concat.level1.operators.EqualToWordNode,
+                    concat.operators.IsWordNode,
+                    concat.operators.AndWordNode,
+                    concat.operators.OrWordNode,
+                    concat.operators.EqualToWordNode,
                 ),
             ):
                 # TODO: I should be more careful here, since at least __eq__ can be
@@ -812,12 +808,12 @@ def infer(
                     current_effect.input,
                     TypeSequence([*current_effect.output[:-2], bool_type]),
                 )
-            elif isinstance(node, concat.level0.parse.NumberWordNode):
+            elif isinstance(node, concat.parse.NumberWordNode):
                 if isinstance(node.value, int):
                     current_effect = StackEffect(i, [*o, int_type])
                 else:
                     raise UnhandledNodeTypeError
-            elif isinstance(node, concat.level0.parse.NameWordNode):
+            elif isinstance(node, concat.parse.NameWordNode):
                 (i1, o1) = current_effect
                 if node.value not in current_subs(gamma):
                     raise NameError(node)
@@ -836,8 +832,8 @@ def infer(
                 current_effect = current_subs(
                     StackEffect(i1, type_of_name.output)
                 )
-            elif isinstance(node, concat.level0.parse.QuoteWordNode):
-                quotation = cast(concat.level0.parse.QuoteWordNode, node)
+            elif isinstance(node, concat.parse.QuoteWordNode):
+                quotation = cast(concat.parse.QuoteWordNode, node)
                 # make sure any annotation matches the current stack
                 if quotation.input_stack_type is not None:
                     input_stack, _ = quotation.input_stack_type.to_type(gamma)
@@ -857,7 +853,7 @@ def infer(
                     S1(S),
                     S1(StackEffect(i, o1)),
                 )
-            elif isinstance(node, concat.level0.parse.StringWordNode):
+            elif isinstance(node, concat.parse.StringWordNode):
                 current_subs, current_effect = (
                     S,
                     StackEffect(
@@ -865,7 +861,7 @@ def infer(
                         [*current_effect.output, str_type],
                     ),
                 )
-            elif isinstance(node, concat.level0.parse.AttributeWordNode):
+            elif isinstance(node, concat.parse.AttributeWordNode):
                 stack_top_type = o[-1]
                 out_types = o[:-1]
                 attr_function_type = stack_top_type.get_type_of_attribute(
@@ -886,7 +882,7 @@ def infer(
                     R(S),
                     R(StackEffect(i, attr_function_type.output)),
                 )
-            elif isinstance(node, concat.level2.parse.CastWordNode):
+            elif isinstance(node, concat.parse.CastWordNode):
                 new_type, _ = node.type.to_type(gamma)
                 rest = current_effect.output[:-1]
                 current_effect = current_subs(
@@ -905,7 +901,7 @@ def infer(
 # Parsing type annotations
 
 
-class TypeNode(concat.level0.parse.Node, abc.ABC):
+class TypeNode(concat.parse.Node, abc.ABC):
     def __init__(self, location: concat.astutils.Location) -> None:
         self.location = location
 
@@ -1110,7 +1106,7 @@ class StackEffectTypeNode(IndividualTypeNode):
         return StackEffect([a_bar, *in_types], [b_bar, *out_types]), new_env
 
 
-def typecheck_extension(parsers: concat.level0.parse.ParserDict) -> None:
+def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
     @parsy.generate
     def attribute_type_parser() -> Generator:
         location = (yield parsers.token('DOT')).start
