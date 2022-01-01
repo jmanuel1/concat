@@ -3,7 +3,7 @@
 
 from concat.transpile import transpile
 import concat.astutils
-import concat.level1.execute as execute
+import concat.execute as execute
 import concat.typecheck
 import concat.stdlib.repl as repl
 from concat.stdlib.pyinterop import to_py_function
@@ -96,6 +96,6 @@ choose  # FIXME: We should test for interactivity instead
 #         print('This is a bug in Concat.')
 #         raise
 #     else:
-#         concat.level1.execute.execute(filename, python_ast, {})
+#         concat.execute.execute(filename, python_ast, {})
 #     finally:
 #         args.file.close()

@@ -13,7 +13,7 @@ import concat.stdlib.types
 import concat.stdlib.continuations
 import concat.lex
 import concat.level1.transpile
-import concat.level1.execute
+import concat.execute
 import sys
 import tokenize as tokize
 import ast
@@ -89,13 +89,13 @@ def read_form(stack: List[object], stash: List[object]) -> None:
         py_ast = _transpile(ast)
 
         def statement_function(stack: List[object], stash: List[object]):
-            concat.level1.execute.execute('<stdin>', py_ast, scope, True)
+            concat.execute.execute('<stdin>', py_ast, scope, True)
 
         stack.append(statement_function)
     else:
         concat.typecheck.check(caller_globals['@@extra_env'], ast.children)
         py_ast = _transpile(ast)
-        concat.level1.execute.execute('<stdin>', py_ast, scope, True)
+        concat.execute.execute('<stdin>', py_ast, scope, True)
 
 
 def read_quot(
@@ -180,7 +180,7 @@ def _repl_impl(
     except FileNotFoundError:
         print('No startup initialization file found.')
     else:
-        concat.level1.execute.execute(
+        concat.execute.execute(
             init_file_name, python_ast, globals, True, locals
         )
     prompt = '>>> '
@@ -194,7 +194,7 @@ def _repl_impl(
             except concat.parse.ParseError as e:
                 print('Syntax error:\n')
                 print(e)
-            except concat.level0.execute.ConcatRuntimeError as e:
+            except concat.execute.ConcatRuntimeError as e:
                 print('Runtime error:\n')
                 print(e)
             except EOFError:
@@ -206,7 +206,7 @@ def _repl_impl(
                 )
                 try:
                     quotation(stack, cast(List[object], globals['stash']))
-                except concat.level0.execute.ConcatRuntimeError as e:
+                except concat.execute.ConcatRuntimeError as e:
                     value = e.__cause__
                     if value is None or value.__traceback__ is None:
                         tb = None

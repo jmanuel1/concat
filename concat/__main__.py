@@ -5,7 +5,7 @@ from concat.transpile import transpile
 import concat.astutils
 import concat.typecheck
 import concat.stdlib.repl
-import concat.level2.execute
+import concat.execute
 import argparse
 import os.path
 import sys
@@ -74,7 +74,7 @@ else:
         print('This is a bug in Concat.')
         raise
     else:
-        concat.level2.execute.execute(
+        concat.execute.execute(
             filename, python_ast, {}, should_log_stacks=args.debug
         )
     finally:

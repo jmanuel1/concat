@@ -24,7 +24,7 @@ import concat.stdlib.pyinterop.method
 import concat.stdlib.pyinterop.module
 import concat.lex
 import concat.level0.transpile
-import concat.level0.execute
+import concat.execute
 import concat.parse
 
 
@@ -739,7 +739,7 @@ class TestIntoConcatFromPython(unittest.TestCase):
         transpiler = concat.visitors.VisitorDict[concat.parse.Node, ast.AST]()
         transpiler.extend_with(concat.level0.transpile.level_0_extension)
         prog = cast(ast.Module, transpiler.visit(concat_ast))
-        concat.level0.execute.execute('<test>', prog, namespace)
+        concat.execute.execute('<test>', prog, namespace)
         self.assertIs(
             namespace['stack'][-1],
             namespace['sys'],
