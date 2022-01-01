@@ -2,8 +2,8 @@
 import ast
 import types
 from typing import Dict, Optional, List, Callable
-import concat.level0.stdlib.importlib
-from concat.level0.stdlib.pyinterop import py_call
+import concat.stdlib.importlib
+from concat.stdlib.pyinterop import py_call
 
 
 class ConcatRuntimeError(RuntimeError):
@@ -23,11 +23,13 @@ class LoggableStack(List[object]):
 
     def append(self, val: object) -> None:
         super().append(val)
-        self._should_log and print(self._name, ":: after push (.append):", self)
+        self._should_log and print(
+            self._name, ':: after push (.append):', self
+        )
 
     def pop(self, i: int = -1) -> object:
         r = super().pop(i)
-        self._should_log and print(self._name, ":: after pop (.pop):", self)
+        self._should_log and print(self._name, ':: after pop (.pop):', self)
         return r
 
 
@@ -38,7 +40,7 @@ def _compile(filename: str, ast_: ast.Module) -> types.CodeType:
 def _run(
     prog: types.CodeType,
     globals: Optional[Dict[str, object]] = None,
-    locals: Optional[Dict[str, object]] = None
+    locals: Optional[Dict[str, object]] = None,
 ) -> None:
     globals = {} if globals is None else globals
     try:
@@ -66,7 +68,9 @@ def _do_preamble(globals: Dict[str, object], should_log_stacks=False) -> None:
     def push(val: object) -> Callable[[List[object], List[object]], None]:
         def push_func(stack: List[object], _: List[object]):
             stack.append(val)
+
         return push_func
+
     globals.setdefault('push', push)
 
 

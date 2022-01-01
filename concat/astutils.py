@@ -446,7 +446,7 @@ def assign_self_pushing_module_type_to_all_components(
     for i in range(1, len(components) + 1):
         target = '.'.join(components[:i])
         assert target
-        assignment = '{}.__class__ = concat.level0.stdlib.importlib.Module'.format(
+        assignment = '{}.__class__ = concat.stdlib.importlib.Module'.format(
             target
         )
         yield ast.parse(assignment, mode='exec').body[0]  # type: ignore

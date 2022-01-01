@@ -7,7 +7,7 @@
 # None is the empty tree
 
 from builtins import eval
-from concat.level1.stdlib.pyinterop import to_str
+from concat.stdlib.pyinterop import to_str
 
 def get_input( -- result:str):
   {} [,] $input py_call cast (str)

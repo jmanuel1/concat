@@ -4,7 +4,7 @@
 from concat.transpile import transpile
 import concat.astutils
 import concat.typecheck
-import concat.level2.stdlib.repl
+import concat.stdlib.repl
 import concat.level2.execute
 import argparse
 import os.path
@@ -56,7 +56,7 @@ sys.argv = [sys.argv[0], *rest]
 
 # interactive mode
 if args.file.isatty():
-    concat.level2.stdlib.repl.repl([], [], args.debug)
+    concat.stdlib.repl.repl([], [], args.debug)
 else:
     try:
         python_ast = transpile(args.file.read(), os.path.dirname(filename))

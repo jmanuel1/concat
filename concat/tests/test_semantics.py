@@ -2,7 +2,7 @@ import concat.transpile
 import concat.astutils
 import concat.parse
 from concat.parse import AttributeWordNode, NumberWordNode, TopLevelNode
-from concat.level0.stdlib.ski import s, k, i
+from concat.stdlib.ski import s, k, i
 from concat.lex import Token
 from concat.level2.execute import execute
 import unittest

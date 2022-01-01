@@ -312,9 +312,7 @@ def _word_extension(visitors: VisitorDict[concat.parse.Node, ast.AST]) -> None:
 
     visitors['yield-word'] = yield_word_visitor
 
-    visitors.data[
-        'quote-constructor-string'
-    ] = 'concat.level1.stdlib.types.Quotation'
+    visitors.data['quote-constructor-string'] = 'concat.stdlib.types.Quotation'
 
     # Converts an AwaitWordNode to a Python expression that awaits the object
     # at the top of the stack.

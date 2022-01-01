@@ -72,7 +72,7 @@ def level_0_extension(
         )
         module_type = cast(
             ast.Expression,
-            ast.parse('concat.level0.stdlib.importlib.Module', mode='eval'),
+            ast.parse('concat.stdlib.importlib.Module', mode='eval'),
         ).body
         assign = ast.Assign(targets=[class_store], value=module_type)
         import_node.lineno, import_node.col_offset = node.location
@@ -99,9 +99,7 @@ def level_0_extension(
         py_node.lineno, py_node.col_offset = node.location
         return py_node
 
-    visitors.data[
-        'quote-constructor-string'
-    ] = 'concat.level0.stdlib.types.Quotation'
+    visitors.data['quote-constructor-string'] = 'concat.stdlib.types.Quotation'
 
     @assert_annotated_type
     def pushed_attribute_visitor(

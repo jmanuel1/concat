@@ -4,7 +4,7 @@
 # https://leetcode.com/problems/implement-strstr/
 # but we cheat by using the `str.find` method
 
-from concat.level1.stdlib.pyinterop import to_str
+from concat.stdlib.pyinterop import to_str
 
 def get_input( -- result:str):
   {} [,] $input py_call cast (str)
