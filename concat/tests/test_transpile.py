@@ -2,9 +2,7 @@ import concat.visitors
 from concat.astutils import get_explicit_positional_function_parameters
 from concat.lex import Token
 import concat.parse
-import concat.level0.transpile
-import concat.parse
-import concat.level1.transpile
+import concat.transpile
 import unittest
 import ast
 from typing import Iterable, Iterator, List, Sequence, Type, cast
@@ -16,8 +14,7 @@ class TestSubVisitors(unittest.TestCase):
         self.__visitors = concat.visitors.VisitorDict[
             concat.parse.Node, ast.AST
         ]()
-        self.__visitors.extend_with(concat.level0.transpile.level_0_extension)
-        self.__visitors.extend_with(concat.level1.transpile.level_1_extension)
+        self.__visitors.extend_with(concat.transpile.extension)
 
     def _test_visitor(
         self,
@@ -282,8 +279,7 @@ class TestMagicMethodTranspilaton(unittest.TestCase):
         self.__visitors = concat.visitors.VisitorDict[
             concat.parse.Node, ast.AST
         ]()
-        self.__visitors.extend_with(concat.level0.transpile.level_0_extension)
-        self.__visitors.extend_with(concat.level1.transpile.level_1_extension)
+        self.__visitors.extend_with(concat.transpile.extension)
 
     def _make_magic_py_method_from_name(
         self, method_name: str

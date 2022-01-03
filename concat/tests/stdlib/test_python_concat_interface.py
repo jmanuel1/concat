@@ -23,7 +23,7 @@ import concat.stdlib.pyinterop.math
 import concat.stdlib.pyinterop.method
 import concat.stdlib.pyinterop.module
 import concat.lex
-import concat.level0.transpile
+import concat.transpile
 import concat.execute
 import concat.parse
 
@@ -737,7 +737,7 @@ class TestIntoConcatFromPython(unittest.TestCase):
         parser.extend_with(concat.parse.extension)
         concat_ast = parser.parse(tokens)
         transpiler = concat.visitors.VisitorDict[concat.parse.Node, ast.AST]()
-        transpiler.extend_with(concat.level0.transpile.level_0_extension)
+        transpiler.extend_with(concat.transpile.extension)
         prog = cast(ast.Module, transpiler.visit(concat_ast))
         concat.execute.execute('<test>', prog, namespace)
         self.assertIs(

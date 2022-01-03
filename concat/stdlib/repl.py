@@ -8,11 +8,10 @@ import concat.astutils
 import concat.typecheck
 import concat.stdlib.importlib
 import concat.parse
-import concat.level0.transpile
 import concat.stdlib.types
 import concat.stdlib.continuations
 import concat.lex
-import concat.level1.transpile
+import concat.transpile
 import concat.execute
 import sys
 import tokenize as tokize
@@ -47,11 +46,8 @@ def _parse(code: str) -> concat.parse.TopLevelNode:
 
 
 def _transpile(code: concat.parse.TopLevelNode) -> ast.Module:
-    transpiler = concat.level0.transpile.VisitorDict[
-        concat.parse.Node, ast.AST
-    ]()
-    transpiler.extend_with(concat.level0.transpile.level_0_extension)
-    transpiler.extend_with(concat.level1.transpile.level_1_extension)
+    transpiler = concat.transpile.VisitorDict[concat.parse.Node, ast.AST]()
+    transpiler.extend_with(concat.transpile.extension)
     return cast(ast.Module, transpiler.visit(code))
 
 
