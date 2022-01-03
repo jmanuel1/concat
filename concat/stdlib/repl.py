@@ -85,13 +85,13 @@ def read_form(stack: List[object], stash: List[object]) -> None:
         py_ast = _transpile(ast)
 
         def statement_function(stack: List[object], stash: List[object]):
-            concat.execute.execute('<stdin>', py_ast, scope, True)
+            concat.execute.execute('<stdin>', py_ast, scope)
 
         stack.append(statement_function)
     else:
         concat.typecheck.check(caller_globals['@@extra_env'], ast.children)
         py_ast = _transpile(ast)
-        concat.execute.execute('<stdin>', py_ast, scope, True)
+        concat.execute.execute('<stdin>', py_ast, scope)
 
 
 def read_quot(
@@ -176,9 +176,7 @@ def _repl_impl(
     except FileNotFoundError:
         print('No startup initialization file found.')
     else:
-        concat.execute.execute(
-            init_file_name, python_ast, globals, True, locals
-        )
+        concat.execute.execute(init_file_name, python_ast, globals, locals)
     prompt = '>>> '
     try:
         while True:

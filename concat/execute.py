@@ -62,25 +62,11 @@ def _run(
         raise ConcatRuntimeError(globals['stack'], globals['stash']) from e
 
 
-def _do_preamble(
-    globals: Dict[str, object], should_log_stacks=False, interactive=False
-) -> None:
+def _do_preamble(globals: Dict[str, object], should_log_stacks=False) -> None:
     """Add key-value pairs expected by Concat code to the passed-in mapping.
 
     This mutates the mapping, but anything already in the mapping is preserved.
-    The dict is not mutated if interactive is True and the dict has a truthy
-    '@@level-1-interactive' key. The dict is not mutated if interactive is True
-    and the dict has a truthy '@@level-2-interactive' key."""
-
-    if interactive and globals.get('@@level-1-interactive', False):
-        return
-    if interactive:
-        globals['@@level-1-interactive'] = True
-
-    if interactive and globals.get('@@level-2-interactive', False):
-        return
-    if interactive:
-        globals['@@level-2-interactive'] = True
+    """
 
     globals.setdefault('concat', concat)
 
@@ -98,66 +84,67 @@ def _do_preamble(
     globals.setdefault('push', push)
 
     # needed by generated code to work
-    globals['concat'] = concat
+    globals.setdefault('concat', concat)
 
-    globals['to_int'] = concat.stdlib.pyinterop.to_int
-    globals['to_bool'] = concat.stdlib.pyinterop.to_bool
-    globals['to_complex'] = concat.stdlib.pyinterop.to_complex
-    globals['len'] = concat.stdlib.pyinterop.len
-    globals['getitem'] = concat.stdlib.pyinterop.getitem
-    globals['to_float'] = concat.stdlib.pyinterop.to_float
-    globals['decode_bytes'] = concat.stdlib.pyinterop.decode_bytes
-    globals['to_tuple'] = concat.stdlib.pyinterop.to_tuple
-    globals['to_bytes'] = concat.stdlib.pyinterop.to_bytes
-    globals['to_list'] = concat.stdlib.pyinterop.to_list
-    globals['to_bytearray'] = concat.stdlib.pyinterop.to_bytearray
-    globals['to_set'] = concat.stdlib.pyinterop.to_set
-    globals['add_to_set'] = concat.stdlib.pyinterop.add_to_set
-    globals['to_frozenset'] = concat.stdlib.pyinterop.to_frozenset
-    globals['to_dict'] = concat.stdlib.pyinterop.to_dict
-    globals['user_defined_function'] = udf
-    globals['method'] = concat.stdlib.pyinterop.method
-    globals['with_async'] = concat.stdlib.pyinterop.with_async
-    globals['for_async'] = concat.stdlib.pyinterop.for_async
-    globals['coroutine'] = concat.stdlib.pyinterop.coroutine
-    globals['math'] = concat.stdlib.pyinterop.math
-    globals['import_module'] = concat.stdlib.pyinterop.import_module
-    globals['import_advanced'] = concat.stdlib.pyinterop.import_advanced
-    globals['custom_class'] = concat.stdlib.pyinterop.custom_class
-    globals['instance'] = concat.stdlib.pyinterop.instance
-    globals['open'] = concat.stdlib.pyinterop.open
-    globals['popen'] = concat.stdlib.pyinterop.popen
-    globals['fdopen'] = concat.stdlib.pyinterop.fdopen
-    globals['call'] = concat.stdlib.pyinterop.call
-    globals['curry'] = concat.stdlib.compositional.curry
-    globals['drop'] = concat.stdlib.shuffle_words.drop
-    globals['drop_2'] = concat.stdlib.shuffle_words.drop_2
-    globals['drop_3'] = concat.stdlib.shuffle_words.drop_3
-    globals['nip'] = concat.stdlib.shuffle_words.nip
-    globals['nip_2'] = concat.stdlib.shuffle_words.nip_2
-    globals['dup'] = concat.stdlib.shuffle_words.dup
-    globals['dup_2'] = concat.stdlib.shuffle_words.dup_2
-    globals['swap'] = concat.stdlib.shuffle_words.swap
-    globals['dup_3'] = concat.stdlib.shuffle_words.dup_3
-    globals['over'] = concat.stdlib.shuffle_words.over
-    globals['over_2'] = concat.stdlib.shuffle_words.over_2
-    globals['pick'] = concat.stdlib.shuffle_words.pick
-    globals['to_slice'] = concat.stdlib.pyinterop.to_slice
-    globals['choose'] = concat.stdlib.execution.choose
-    globals['if_then'] = concat.stdlib.execution.if_then
-    globals['if_not'] = concat.stdlib.execution.if_not
-    globals['case'] = concat.stdlib.execution.case
-    globals['loop'] = concat.stdlib.execution.loop
+    globals.setdefault('to_int', concat.stdlib.pyinterop.to_int)
+    globals.setdefault('to_bool', concat.stdlib.pyinterop.to_bool)
+    globals.setdefault('to_complex', concat.stdlib.pyinterop.to_complex)
+    globals.setdefault('len', concat.stdlib.pyinterop.len)
+    globals.setdefault('getitem', concat.stdlib.pyinterop.getitem)
+    globals.setdefault('to_float', concat.stdlib.pyinterop.to_float)
+    globals.setdefault('decode_bytes', concat.stdlib.pyinterop.decode_bytes)
+    globals.setdefault('to_tuple', concat.stdlib.pyinterop.to_tuple)
+    globals.setdefault('to_bytes', concat.stdlib.pyinterop.to_bytes)
+    globals.setdefault('to_list', concat.stdlib.pyinterop.to_list)
+    globals.setdefault('to_bytearray', concat.stdlib.pyinterop.to_bytearray)
+    globals.setdefault('to_set', concat.stdlib.pyinterop.to_set)
+    globals.setdefault('add_to_set', concat.stdlib.pyinterop.add_to_set)
+    globals.setdefault('to_frozenset', concat.stdlib.pyinterop.to_frozenset)
+    globals.setdefault('to_dict', concat.stdlib.pyinterop.to_dict)
+    globals.setdefault('user_defined_function', udf)
+    globals.setdefault('method', concat.stdlib.pyinterop.method)
+    globals.setdefault('with_async', concat.stdlib.pyinterop.with_async)
+    globals.setdefault('for_async', concat.stdlib.pyinterop.for_async)
+    globals.setdefault('coroutine', concat.stdlib.pyinterop.coroutine)
+    globals.setdefault('math', concat.stdlib.pyinterop.math)
+    globals.setdefault('import_module', concat.stdlib.pyinterop.import_module)
+    globals.setdefault(
+        'import_advanced', concat.stdlib.pyinterop.import_advanced
+    )
+    globals.setdefault('custom_class', concat.stdlib.pyinterop.custom_class)
+    globals.setdefault('instance', concat.stdlib.pyinterop.instance)
+    globals.setdefault('open', concat.stdlib.pyinterop.open)
+    globals.setdefault('popen', concat.stdlib.pyinterop.popen)
+    globals.setdefault('fdopen', concat.stdlib.pyinterop.fdopen)
+    globals.setdefault('call', concat.stdlib.pyinterop.call)
+    globals.setdefault('curry', concat.stdlib.compositional.curry)
+    globals.setdefault('drop', concat.stdlib.shuffle_words.drop)
+    globals.setdefault('drop_2', concat.stdlib.shuffle_words.drop_2)
+    globals.setdefault('drop_3', concat.stdlib.shuffle_words.drop_3)
+    globals.setdefault('nip', concat.stdlib.shuffle_words.nip)
+    globals.setdefault('nip_2', concat.stdlib.shuffle_words.nip_2)
+    globals.setdefault('dup', concat.stdlib.shuffle_words.dup)
+    globals.setdefault('dup_2', concat.stdlib.shuffle_words.dup_2)
+    globals.setdefault('swap', concat.stdlib.shuffle_words.swap)
+    globals.setdefault('dup_3', concat.stdlib.shuffle_words.dup_3)
+    globals.setdefault('over', concat.stdlib.shuffle_words.over)
+    globals.setdefault('over_2', concat.stdlib.shuffle_words.over_2)
+    globals.setdefault('pick', concat.stdlib.shuffle_words.pick)
+    globals.setdefault('to_slice', concat.stdlib.pyinterop.to_slice)
+    globals.setdefault('choose', concat.stdlib.execution.choose)
+    globals.setdefault('if_then', concat.stdlib.execution.if_then)
+    globals.setdefault('if_not', concat.stdlib.execution.if_not)
+    globals.setdefault('case', concat.stdlib.execution.case)
+    globals.setdefault('loop', concat.stdlib.execution.loop)
 
-    globals['True'] = lambda s, _: s.append(True)
-    globals['False'] = lambda s, _: s.append(False)
+    globals.setdefault('True', lambda s, _: s.append(True))
+    globals.setdefault('False', lambda s, _: s.append(False))
 
 
 def execute(
     filename: str,
     ast: ast.Module,
     globals: Dict[str, object],
-    interactive=False,
     locals: Optional[Dict[str, object]] = None,
     should_log_stacks=False,
 ) -> None:
