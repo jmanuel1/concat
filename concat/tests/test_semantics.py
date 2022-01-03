@@ -32,8 +32,7 @@ def program(draw,) -> ProgramFragmentAndEffect[concat.parse.TopLevelNode]:
 def suite(
     draw, init_stack, init_stash
 ) -> ProgramFragmentAndEffect[concat.astutils.WordsOrStatements]:
-    # we don't generate level 0 import statements because the higher-level
-    # visitors don't accept it
+    # TODO: generate statements
     stack, stash = init_stack, init_stash
     count = draw(integers(min_value=0, max_value=10))
     words_and_statements = []

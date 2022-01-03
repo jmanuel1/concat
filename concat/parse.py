@@ -6,17 +6,17 @@ The parser uses parsy, a parser combinator library. A custom parser
 primitive is used to call the lexer.
 
 - The extension mechanism:
-Assume there is a level 0 word parser. In level 1:
+Assume there is an existing word parser, like:
 
-# import * level 0 parser module
+# import * parser module
 
 def word_ext(parsers):
     parsers['word'] |= extensionParser
 
-extendedParsers = level0Parsers.extend_with(word_ext)
+extendedParsers = parsers.extend_with(word_ext)
 
 The parsers object is a dictionary with a few methods:
-extend_with(extension) -- returns a new object that adds the extension
+extend_with(extension) -- mutates the dictionary by adding the extension
 
 - Other possible approaches:
 Hand-written recursive descent parser that tries extensions when throwing an
@@ -81,7 +81,6 @@ class StatementNode(Node, abc.ABC):
     pass
 
 
-# TODO: Remove in favor of level 1 import statement
 class ImportStatementNode(StatementNode):
     def __init__(
         self,
@@ -772,7 +771,7 @@ def extension(parsers: ParserDict) -> None:
     # annotation = RARROW, word* ;
     # suite = NEWLINE, INDENT, (word | statement, NEWLINE)+, DEDENT | statement
     #    | word+ ;
-    # The stack effect syntax is defined within the ..level2.typecheck module.
+    # The stack effect syntax is defined within the typecheck module.
     @parsy.generate
     def funcdef_statement_parser() -> Generator:
         location = (yield parsers.token('DEF')).start

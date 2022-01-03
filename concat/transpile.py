@@ -766,7 +766,6 @@ except:
     )
 
 
-# This should stay in this module since it operates on level 1 types.
 def _binary_operator_visitor(operator: str) -> Visitor[object, ast.expr]:
     expression = 'lambda s,_:s.append((lambda a,b: a {} b)(s.pop(-2), s.pop()))'.format(
         operator

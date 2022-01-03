@@ -270,8 +270,6 @@ def infer(
                     current_effect = StackEffect(
                         current_effect.input, [*rest, radd_type.output],
                     )
-            # TODO: Split this up based on level, somehow. Maybe, use methods
-            # instead of dispatch using isinstance.
             elif isinstance(node, concat.parse.PushWordNode):
                 S1, (i1, o1) = S, (i, o)
                 # special case for pushing an attribute accessor
