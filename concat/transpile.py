@@ -489,7 +489,8 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
     # that does what `yield` does when called.
     # `yield` causes the nearest enclosing generator quotation on the stack to
     # yield.
-    # TODO: Remove yield from language or make it a statement
+    # TODO: Remove yield from language or make it a statement.
+    # `Quotation.yield_function` doesn't even exist anymore.
     @assert_annotated_type
     def yield_word_visitor(node: concat.parse.YieldWordNode,) -> ast.expr:
         return node_to_py_string(
