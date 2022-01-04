@@ -41,6 +41,14 @@ class LoggableStack(List[object]):
         self._should_log and print(self._name, ':: after pop (.pop):', self)
         return r
 
+    def __getitem__(self, i):
+        res = super().__getitem__(i)
+        if isinstance(i, slice):
+            s = LoggableStack(self._name + ' (copy)', self._should_log)
+            s.extend(res)
+            return s
+        return res
+
 
 def _compile(filename: str, ast_: ast.Module) -> types.CodeType:
     return compile(ast_, filename, 'exec')
