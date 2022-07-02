@@ -253,29 +253,6 @@ class ParseError(parsy.ParseError):
 parsy.ParseError = ParseError  # type: ignore
 
 
-class SimpleValueWordNode(WordNode, abc.ABC):
-    @abc.abstractmethod
-    def __init__(self, token: 'Token'):
-        super().__init__()
-        self.location = token.start
-        self.children = []
-
-
-class NoneWordNode(SimpleValueWordNode):
-    def __init__(self, token: 'Token'):
-        super().__init__(token)
-
-
-class NotImplWordNode(SimpleValueWordNode):
-    def __init__(self, token: 'Token'):
-        super().__init__(token)
-
-
-class EllipsisWordNode(SimpleValueWordNode):
-    def __init__(self, token: 'Token'):
-        super().__init__(token)
-
-
 class SubscriptionWordNode(WordNode):
     def __init__(self, children: Iterable[WordNode]):
         super().__init__()
@@ -549,27 +526,12 @@ def extension(parsers: ParserDict) -> None:
     parsers['attribute-word'] = dot >> name.map(AttributeWordNode)
 
     parsers['literal-word'] |= parsy.alt(
-        parsers.ref_parser('none-word'),
-        parsers.ref_parser('not-impl-word'),
-        parsers.ref_parser('ellipsis-word'),
         parsers.ref_parser('bytes-word'),
         parsers.ref_parser('tuple-word'),
         parsers.ref_parser('list-word'),
         parsers.ref_parser('set-word'),
         parsers.ref_parser('dict-word'),
     )
-
-    # This parses a none word.
-    # none word = NONE ;
-    parsers['none-word'] = parsers.token('NONE').map(NoneWordNode)
-
-    # This parses a not-impl word.
-    # not-impl word = NOTIMPL ;
-    parsers['not-impl-word'] = parsers.token('NOTIMPL').map(NotImplWordNode)
-
-    # This parses an ellipsis word.
-    # ellipsis word = ELLIPSIS ;
-    parsers['ellipsis-word'] = parsers.token('ELLIPSIS').map(EllipsisWordNode)
 
     parsers['word'] |= parsy.alt(
         parsers.ref_parser('subscription-word'),
@@ -600,8 +562,8 @@ def extension(parsers: ParserDict) -> None:
         yield parsers.token('COLON')
         stop = yield parsers.ref_parser('word').many()
         none = concat.lex.Token()
-        none.type = 'NONE'
-        step = [NoneWordNode(none)]
+        none.type = 'NAME'
+        step = [NameWordNode(none)]
         if (yield parsers.token('COLON').optional()):
             step = yield parsers['word'].many()
         yield parsers.token('RSQB')

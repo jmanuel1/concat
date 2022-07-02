@@ -147,6 +147,10 @@ def _do_preamble(globals: Dict[str, object], should_log_stacks=False) -> None:
 
     globals.setdefault('True', lambda s, _: s.append(True))
     globals.setdefault('False', lambda s, _: s.append(False))
+    globals.setdefault('None', lambda s, _: s.append(None))
+    globals.setdefault('NotImplemented', lambda s, _: s.append(NotImplemented))
+    globals.setdefault('Ellipsis', lambda s, _: s.append(...))
+    globals.setdefault('...', lambda s, _: s.append(...))
 
 
 def execute(

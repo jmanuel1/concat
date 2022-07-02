@@ -5,20 +5,20 @@ from concat.lex import to_tokens
 examples = {
     'None\n': to_tokens(
         ('ENCODING', 'utf-8', (0, 0), (0, 0)),
-        ('NONE', 'None', (1, 0), (1, 4)),
+        ('NAME', 'None', (1, 0), (1, 4)),
         ('NEWLINE', '\n', (1, 4), (1, 5)),
         ('ENDMARKER', '', (2, 0), (2, 0)),
     ),
     'NotImplemented\n': to_tokens(
         ('ENCODING', 'utf-8', (0, 0), (0, 0)),
-        ('NOTIMPL', 'NotImplemented', (1, 0), (1, 14)),
+        ('NAME', 'NotImplemented', (1, 0), (1, 14)),
         ('NEWLINE', '\n', (1, 14), (1, 15)),
         ('ENDMARKER', '', (2, 0), (2, 0)),
     ),
     '... Ellipsis\n': to_tokens(
         ('ENCODING', 'utf-8', (0, 0), (0, 0)),
-        ('ELLIPSIS', '...', (1, 0), (1, 3)),
-        ('ELLIPSIS', 'Ellipsis', (1, 4), (1, 12)),
+        ('NAME', '...', (1, 0), (1, 3)),
+        ('NAME', 'Ellipsis', (1, 4), (1, 12)),
         ('NEWLINE', '\n', (1, 12), (1, 13)),
         ('ENDMARKER', '', (2, 0), (2, 0)),
     ),
@@ -475,7 +475,7 @@ examples = {
     ),
     'None AnException raise\n': to_tokens(
         ('ENCODING', 'utf-8', (0, 0), (0, 0)),
-        ('NONE', 'None', (1, 0), (1, 4)),
+        ('NAME', 'None', (1, 0), (1, 4)),
         ('NAME', 'AnException', (1, 5), (1, 16)),
         ('RAISE', 'raise', (1, 17), (1, 22)),
         ('NEWLINE', '\n', (1, 22), (1, 23)),

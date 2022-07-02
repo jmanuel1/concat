@@ -246,39 +246,6 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         name = node.value
         return ast.Name(id=name, ctx=ast.Load())
 
-    @visitors.add_alternative_to('literal-word', 'none-word')
-    @assert_annotated_type
-    def none_word_visitor(node: concat.parse.NoneWordNode) -> ast.expr:
-        """Converts a NoneWordNode to the Python expression `push(None)`."""
-        none = ast.NameConstant(value=None)
-        load = ast.Load()
-        push_func = ast.Name(id='push', ctx=load)
-        py_node = ast.Call(func=push_func, args=[none], keywords=[])
-        py_node.lineno, py_node.col_offset = node.location
-        return py_node
-
-    @visitors.add_alternative_to('literal-word', 'not-impl-word')
-    @assert_annotated_type
-    def not_impl_word_visitor(node: concat.parse.NotImplWordNode):
-        """Converts a NotImplWordNode to the Python expression `push(NotImplemented)`."""
-        load = ast.Load()
-        not_impl = ast.Name(id='NotImplemented', ctx=load)
-        push_func = ast.Name(id='push', ctx=load)
-        py_node = ast.Call(func=push_func, args=[not_impl], keywords=[])
-        py_node.lineno, py_node.col_offset = node.location
-        return py_node
-
-    @visitors.add_alternative_to('literal-word', 'ellipsis-word')
-    @assert_annotated_type
-    def ellipsis_word_visitor(node: concat.parse.EllipsisWordNode):
-        """Converts a EllipsisWordNode to the Python expression `push(...)`."""
-        load = ast.Load()
-        ellipsis = ast.Ellipsis()
-        push_func = ast.Name(id='push', ctx=load)
-        py_node = ast.Call(func=push_func, args=[ellipsis], keywords=[])
-        py_node.lineno, py_node.col_offset = node.location
-        return py_node
-
     @visitors.add_alternative_to('literal-word', 'bytes-word')
     @assert_annotated_type
     def bytes_word_visitor(node: concat.parse.BytesWordNode):

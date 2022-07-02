@@ -9,6 +9,7 @@ from concat.typecheck.types import (
     bool_type,
     context_manager_type,
     dict_type,
+    ellipsis_type,
     file_type,
     float_type,
     init_primitives,
@@ -16,7 +17,9 @@ from concat.typecheck.types import (
     iterable_type,
     list_type,
     module_type,
+    none_type,
     no_return_type,
+    not_implemented_type,
     object_type,
     optional_type,
     py_function_type,
@@ -176,4 +179,32 @@ types = {
     'int': int_type,
     'float': float_type,
     'file': file_type,
+    'None': ForAll(
+        [_stack_type_var],
+        StackEffect(
+            TypeSequence([_stack_type_var]),
+            TypeSequence([_stack_type_var, none_type]),
+        ),
+    ),
+    '...': ForAll(
+        [_stack_type_var],
+        StackEffect(
+            TypeSequence([_stack_type_var]),
+            TypeSequence([_stack_type_var, ellipsis_type]),
+        ),
+    ),
+    'Ellipsis': ForAll(
+        [_stack_type_var],
+        StackEffect(
+            TypeSequence([_stack_type_var]),
+            TypeSequence([_stack_type_var, ellipsis_type]),
+        ),
+    ),
+    'NotImplemented': ForAll(
+        [_stack_type_var],
+        StackEffect(
+            TypeSequence([_stack_type_var]),
+            TypeSequence([_stack_type_var, not_implemented_type]),
+        ),
+    ),
 }

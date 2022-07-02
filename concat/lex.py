@@ -76,15 +76,15 @@ class Lexer:
                 return self.token()
             elif tok.value == '$':
                 tok.type = 'DOLLARSIGN'
-        elif tok.value in {'def', 'import', 'None', 'from'}:
+        elif tok.value in {'def', 'import', 'from'}:
             tok.type = tok.value.upper()
+        elif tok.value == '...':
+            tok.type = 'NAME'
 
         self._update_position(tok)
 
         if tok.type == 'NAME':
             type_map = {
-                'NotImplemented': 'NOTIMPL',
-                'Ellipsis': 'ELLIPSIS',
                 'del': 'DEL',
                 'yield': 'YIELD',
                 'async': 'ASYNC',

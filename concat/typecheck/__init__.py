@@ -536,12 +536,6 @@ def infer(
                 current_effect = StackEffect(
                     current_effect.input, [*out_types, result_type]
                 )
-            elif isinstance(node, concat.parse.NoneWordNode):
-                current_effect = StackEffect(i, [*o, none_type])
-            elif isinstance(node, concat.parse.NotImplWordNode):
-                current_effect = StackEffect(i, [*o, not_implemented_type])
-            elif isinstance(node, concat.parse.EllipsisWordNode):
-                current_effect = StackEffect(i, [*o, ellipsis_type])
             elif isinstance(node, concat.parse.SliceWordNode):
                 sliceable_object_type = o[-1]
                 # This doesn't match the evaluation order used by the

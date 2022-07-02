@@ -19,9 +19,5 @@ class TestSmallExamples(unittest.TestCase):
                     tokens.append(token)
 
                 expectationPairs = zip(tokens, examples[example])
-                self.assertTrue(
-                    all(map(self._matches_token, expectationPairs))
-                )
-
-    def _matches_token(self, pair: Tuple[lex.Token, lex.Token]) -> bool:
-        return pair[0] == pair[1]
+                for actual_token, expected_token in expectationPairs:
+                    self.assertEqual(actual_token, expected_token)

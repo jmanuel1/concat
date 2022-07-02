@@ -25,7 +25,6 @@ from concat.typecheck.types import (
     py_function_type,
 )
 import concat.typecheck.preamble_types
-import concat.parse
 import concat.astutils
 import concat.tests.strategies  # for side-effects
 import unittest
@@ -33,7 +32,13 @@ from textwrap import dedent
 from typing import List, Dict, cast
 import parsy
 from hypothesis import HealthCheck, given, example, note, settings
-from hypothesis.strategies import dictionaries, from_type, integers, text
+from hypothesis.strategies import (
+    dictionaries,
+    from_type,
+    integers,
+    sampled_from,
+    text,
+)
 
 
 def lex_string(string: str) -> List[concat.lex.Token]:
@@ -127,19 +132,21 @@ class TestTypeChecker(unittest.TestCase):
         )
         self.assertEqual(type, StackEffect([], [int_type]))
 
-    @given(from_type(concat.parse.SimpleValueWordNode))
-    def test_simple_value_word(self, simple_value_word) -> None:
+    @given(sampled_from(['None', '...', 'NotImplemented']))
+    def test_constants(self, constant_name) -> None:
         _, effect = concat.typecheck.infer(
-            concat.typecheck.Environment(),
-            [simple_value_word],
+            concat.typecheck.Environment(
+                concat.typecheck.preamble_types.types
+            ),
+            [concat.parse.NameWordNode(lex.Token(value=constant_name))],
             initial_stack=TypeSequence([]),
         )
         expected_types = {
-            concat.parse.NoneWordNode: none_type,
-            concat.parse.NotImplWordNode: not_implemented_type,
-            concat.parse.EllipsisWordNode: ellipsis_type,
+            'None': none_type,
+            'NotImplemented': not_implemented_type,
+            '...': ellipsis_type,
         }
-        expected_type = expected_types[type(simple_value_word)]
+        expected_type = expected_types[constant_name]
         self.assertEqual(list(effect.output), [expected_type])
 
     def test_slice_inference(self) -> None:
@@ -171,10 +178,10 @@ class TestTypeChecker(unittest.TestCase):
         stricter than what would be inferred without the annotation."""
         tree = parse(
             dedent(
-                """\
+                '''\
                     def seek_file(file:file offset:int whence:int --):
                         swap [(), (),] [,] swap pick $.seek py_call drop drop
-                """
+                '''
             )
         )
         env = concat.typecheck.Environment(

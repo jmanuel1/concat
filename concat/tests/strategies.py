@@ -1,10 +1,4 @@
 from concat.lex import Token
-from concat.parse import (
-    SimpleValueWordNode,
-    NotImplWordNode,
-    NoneWordNode,
-    EllipsisWordNode,
-)
 from concat.typecheck.types import (
     IndividualType,
     SequenceVariable,
@@ -53,19 +47,5 @@ def _sequence_strategy(type: Type[Sequence]) -> SearchStrategy[Sequence]:
     return strategy()
 
 
-def _simple_value_word_node_strategy(
-    type: Type[SimpleValueWordNode],
-) -> SearchStrategy[SimpleValueWordNode]:
-    @composite
-    def strategy(draw) -> SimpleValueWordNode:
-        cls = draw(
-            sampled_from([NotImplWordNode, NoneWordNode, EllipsisWordNode])
-        )
-        return cls(draw(from_type(Token)))
-
-    return strategy()
-
-
 register_type_strategy(Iterable, _iterable_strategy)
 register_type_strategy(Sequence, _sequence_strategy)
-register_type_strategy(SimpleValueWordNode, _simple_value_word_node_strategy)

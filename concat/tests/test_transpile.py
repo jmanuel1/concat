@@ -46,38 +46,6 @@ class TestSubVisitors(unittest.TestCase):
     ) -> ast.AST:
         return self._test_visitor(node, visitor, ast.Call)
 
-    def test_none_word_visitor(self) -> None:
-        """Tests that none words are transpiled to calls which contain None."""
-        none = Token()
-        none.start = (0, 0)
-        node = concat.parse.NoneWordNode(none)
-        py_node = self._test_visitor_basic(node, 'none-word')
-        value = cast(ast.NameConstant, cast(ast.Call, py_node).args[0]).value
-        self.assertIs(
-            value, None, msg='Python None node does not contain `None`'
-        )
-
-    def test_not_impl_word_visitor(self) -> None:
-        """Not-impl words are transpiled to calls containing NotImplemented."""
-        not_impl = Token()
-        not_impl.start = (0, 0)
-        node = concat.parse.NotImplWordNode(not_impl)
-        py_node = self._test_visitor_basic(node, 'not-impl-word')
-        identifier = cast(ast.Name, cast(ast.Call, py_node).args[0]).id
-        message = 'Python Name node does not contain "NotImplemented"'
-        self.assertEqual(identifier, 'NotImplemented', msg=message)
-
-    def test_ellipsis_word_visitor(self) -> None:
-        """Ellipsis words are transpiled to calls which contain '...'."""
-        ellipsis = Token()
-        ellipsis.start = (0, 0)
-        node = concat.parse.EllipsisWordNode(ellipsis)
-        py_node = self._test_visitor_basic(node, 'ellipsis-word')
-        message = 'The Python node within the call is not an Ellipsis'
-        self.assertIsInstance(
-            cast(ast.Call, py_node).args[0], ast.Ellipsis, msg=message
-        )
-
     def test_slice_word_visitor_with_step(self) -> None:
         two_token = concat.lex.Token()
         two_token.type, two_token.value = 'NUMBER', '2'
