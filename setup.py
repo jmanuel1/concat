@@ -32,5 +32,5 @@ setup(
         'hypothesis==5.38.0',
         'typing-extensions>=3.7.4,<4',
     ],
-    extras_require={'dev': ['pre-commit>=2.6.0,<3', 'axblack==20200130']},
+    extras_require={'dev': ['pre-commit>=2.6.0,<3', 'axblack==20220330']},
 )
