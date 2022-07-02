@@ -5,17 +5,18 @@
 # but we cheat by using the `str.find` method
 
 from concat.stdlib.pyinterop import to_str
+from concat.stdlib.pyinterop import to_dict
 
 def get_input( -- result:str):
-  {} [,] $input py_call cast (str)
+  None to_dict [,] $input py_call cast (str)
 
 def put_output(string:str -- ):
-  [(),] {} swap $print py_call drop
+  [(),] None to_dict swap $print py_call drop
 
 def simple_str(obj:object -- string:str):
   None swap None swap to_str
 
 def strstr(haystack:str needle:str -- index:int):
-  [(), None, None] {} swap pick$.find py_call cast (int) nip
+  [(), None, None] None to_dict swap pick$.find py_call cast (int) nip
 
 get_input get_input strstr simple_str put_output

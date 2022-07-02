@@ -87,7 +87,10 @@ types = {
     ),
     'open': ForAll(
         [_rest_var],
-        StackEffect([_rest_var, dict_type, str_type], [_rest_var, file_type]),
+        StackEffect(
+            [_rest_var, dict_type[str_type, object_type], str_type],
+            [_rest_var, file_type],
+        ),
     ),
     'over': ForAll(
         [_rest_var, _a_var, _b_var],

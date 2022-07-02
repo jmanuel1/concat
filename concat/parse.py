@@ -305,12 +305,6 @@ class ListWordNode(IterableWordNode):
         self.list_children = element_words
 
 
-class SetWordNode(IterableWordNode):
-    def __init__(self, element_words: Iterable['Words'], location: 'Location'):
-        super().__init__(element_words, location)
-        self.set_children = element_words
-
-
 class DelStatementNode(StatementNode):
     def __init__(self, targets: Sequence[WordNode]):
         super().__init__()
@@ -319,23 +313,6 @@ class DelStatementNode(StatementNode):
             self.location = targets[0].location
         except IndexError:
             raise ValueError('there must be at least one target')
-
-
-class DictWordNode(IterableWordNode):
-    def __init__(
-        self, element_words: Iterable[Iterable['Words']], location: 'Location'
-    ):
-        flattened_pairs = self.__flatten_pairs(element_words)
-        super().__init__(flattened_pairs, location)
-        self.dict_children = element_words
-
-    @staticmethod
-    def __flatten_pairs(
-        element_words: Iterable[Iterable['Words']],
-    ) -> Iterable['Words']:
-        for key, value in element_words:
-            yield key
-            yield value
 
 
 class SimpleKeywordWordNode(WordNode, abc.ABC):
@@ -529,8 +506,6 @@ def extension(parsers: ParserDict) -> None:
         parsers.ref_parser('bytes-word'),
         parsers.ref_parser('tuple-word'),
         parsers.ref_parser('list-word'),
-        parsers.ref_parser('set-word'),
-        parsers.ref_parser('dict-word'),
     )
 
     parsers['word'] |= parsy.alt(
@@ -623,37 +598,6 @@ def extension(parsers: ParserDict) -> None:
         )
         element_words = yield (multiple_element | singleton | empty)
         return element_words
-
-    # This parses a set word.
-    # list word = LBRACE, word list, RBRACE ;
-    parsers['set-word'] = iterable_word_parser(
-        'BRACE', SetWordNode, 'set word'
-    )
-
-    # This parses a dict word.
-    # dict word =
-    #   LBRACE,
-    #   [ key-value pair, (COMMA, key-value pair)* ],
-    #   [ COMMA ],
-    #   RBRACE ;
-    # key-value pair = word*, COLON, word* ;
-    @parsy.generate('dict word')
-    def dict_word_parser() -> Generator:
-        location = (yield parsers.token('LBRACE')).start
-        elements = (
-            key_value_pair.sep_by(parsers.token('COMMA'), min=0)
-            << parsers.token('COMMA').optional()
-        )
-        element_words = yield elements
-        yield parsers.token('RBRACE')
-        return DictWordNode(element_words, location)
-
-    parsers['dict-word'] = dict_word_parser
-
-    key_value_pair = parsy.seq(
-        parsers.ref_parser('word').many() << parsers.token('COLON'),
-        parsers.ref_parser('word').many(),
-    )
 
     parsers['yield-word'] = parsers.token('YIELD').map(YieldWordNode)
 

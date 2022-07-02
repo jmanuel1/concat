@@ -151,7 +151,6 @@ from concat.typecheck.types import (
     QuotationType,
     bool_type,
     context_manager_type,
-    dict_type,
     ellipsis_type,
     int_type,
     init_primitives,
@@ -167,6 +166,7 @@ from concat.typecheck.types import (
     str_type,
     subscriptable_type,
     subtractable_type,
+    tuple_type,
 )
 
 
@@ -452,46 +452,6 @@ def infer(
                     phi(S),
                     phi(StackEffect(i, [b_bar])),
                 )
-            elif isinstance(node, concat.parse.DictWordNode):
-                phi = current_subs
-                collected_type = current_effect.output
-                for key, value in node.dict_children:
-                    phi1, (i1, o1) = infer(
-                        phi(gamma),
-                        key,
-                        extensions=extensions,
-                        source_dir=source_dir,
-                        initial_stack=collected_type,
-                    )
-                    phi = phi1(phi)
-                    collected_type = phi(o1)
-                    # drop the top of the stack to use as the key
-                    collected_type, key_type = (
-                        collected_type[:-1],
-                        collected_type.as_sequence()[-1],
-                    )
-                    phi2, (i2, o2) = infer(
-                        phi(gamma),
-                        value,
-                        extensions=extensions,
-                        source_dir=source_dir,
-                        initial_stack=collected_type,
-                    )
-                    phi = phi2(phi)
-                    collected_type = phi(o2)
-                    # drop the top of the stack to use as the value
-                    collected_type, value_type = (
-                        collected_type[:-1],
-                        collected_type.as_sequence()[-1],
-                    )
-                current_subs, current_effect = (
-                    phi,
-                    phi(
-                        StackEffect(
-                            current_effect.input, [*collected_type, dict_type]
-                        )
-                    ),
-                )
             elif isinstance(node, concat.parse.ListWordNode):
                 phi = S
                 collected_type = TypeSequence(o)
@@ -518,6 +478,36 @@ def infer(
                     phi(
                         StackEffect(
                             i, [*collected_type, list_type[element_type,]]
+                        )
+                    ),
+                )
+            elif isinstance(node, concat.parse.TupleWordNode):
+                phi = S
+                collected_type = current_effect.output
+                element_types: List[IndividualType] = []
+                for item in node.tuple_children:
+                    phi1, fun_type = infer(
+                        phi(gamma),
+                        item,
+                        extensions=extensions,
+                        source_dir=source_dir,
+                        initial_stack=collected_type,
+                    )
+                    collected_type = fun_type.output
+                    assert isinstance(collected_type[-1], IndividualType)
+                    element_types.append(collected_type[-1])
+                    # drop the top of the stack to use as the item
+                    collected_type = collected_type[:-1]
+                    phi = phi1(phi)
+                current_subs, current_effect = (
+                    phi,
+                    phi(
+                        StackEffect(
+                            i,
+                            [
+                                *collected_type,
+                                tuple_type[TypeSequence(element_types),],
+                            ],
                         )
                     ),
                 )

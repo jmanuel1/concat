@@ -6,18 +6,19 @@
 # also this uses strings instead of bit-fiddling
 
 from builtins import abs
+from concat.stdlib.pyinterop import to_dict
 from concat.stdlib.pyinterop import to_str
 
 def get_input( -- result:str):
-  {} [,] $input py_call cast (str)
+  None to_dict [,] $input py_call cast (str)
 
 def put_output(string:str -- ):
-  [(),] {} swap $print py_call drop
+  [(),] None to_dict swap $print py_call drop
 
 def simple_str(obj:object -- string:str):
   None swap None swap to_str
 
 def mag(n:int -- abs_n:int):
-  [(),] {} swap $abs py_call cast (int)
+  [(),] None to_dict swap $abs py_call cast (int)
 
 get_input dup None swap to_int 0 >= $(num:str: $[None:None:0 1 -]) $(num:str: $[1:None:None] '-' + $[None:None:0 1 -]) choose put_output

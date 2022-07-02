@@ -1632,8 +1632,13 @@ optional_type.set_internal_name('optional_type')
 none_type = ObjectType(_x, {})
 none_type.set_internal_name('none_type')
 
+_key_type_var = IndividualVariable()
+_value_type_var = IndividualVariable()
 dict_type = ObjectType(
-    _x, {'__iter__': py_function_type[TypeSequence([]), object_type]}
+    _x,
+    {'__iter__': py_function_type[TypeSequence([]), object_type]},
+    [_key_type_var, _value_type_var],
+    nominal=True,
 )
 dict_type.set_internal_name('dict_type')
 
@@ -1709,9 +1714,12 @@ str_type.set_internal_name('str_type')
 ellipsis_type = ObjectType(_x, {})
 not_implemented_type = ObjectType(_x, {})
 
+_element_types_var = SequenceVariable()
 tuple_type = ObjectType(
     _x,
-    {'__getitem__': py_function_type}
+    {'__getitem__': py_function_type},
+    [_element_types_var],
+    nominal=True
     # iterable_type is a structural supertype
 )
 tuple_type.set_internal_name('tuple_type')

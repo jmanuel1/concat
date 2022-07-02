@@ -2,12 +2,17 @@
 import concat.stdlib.ski
 from concat.typecheck.types import (
     ForAll,
+    IndividualVariable,
     SequenceVariable,
     StackEffect,
     TypeSequence,
+    dict_type,
+    iterable_type,
     object_type,
+    optional_type,
     py_function_type,
     str_type,
+    tuple_type,
 )
 import builtins
 import importlib
@@ -33,7 +38,23 @@ _stack_type_var = SequenceVariable()
 _rest_var = SequenceVariable()
 _rest_var_2 = SequenceVariable()
 _rest_var_3 = SequenceVariable()
+_x = IndividualVariable()
+_y = IndividualVariable()
 globals()['@@types'] = {
+    'to_dict': ForAll(
+        [_stack_type_var, _x, _y],
+        StackEffect(
+            TypeSequence(
+                [
+                    _stack_type_var,
+                    optional_type[
+                        iterable_type[tuple_type[TypeSequence([_x, _y]),],],
+                    ],
+                ]
+            ),
+            TypeSequence([_stack_type_var, dict_type[_x, _y]]),
+        ),
+    ),
     'to_str': StackEffect(
         TypeSequence([_stack_type_var, object_type, object_type, object_type]),
         TypeSequence([_stack_type_var, str_type]),

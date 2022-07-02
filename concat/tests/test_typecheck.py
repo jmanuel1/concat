@@ -23,6 +23,7 @@ from concat.typecheck.types import (
     not_implemented_type,
     object_type,
     py_function_type,
+    str_type,
 )
 import concat.typecheck.preamble_types
 import concat.astutils
@@ -298,7 +299,7 @@ class TestNamedTypeNode(unittest.TestCase):
 
 class TestSequenceVariableTypeInference(unittest.TestCase):
     def test_with_word_and_funcdef_inference(self) -> None:
-        wth = 'def fn(f:object -- n:int): drop 0 ~\n$fn {"file": "a_file"} open with'
+        wth = 'from concat.stdlib.pyinterop import to_dict\ndef fn(f:object -- n:int): drop 0 ~\n$fn [("file", "a_file"),] to_dict open with'
         tree = parse(wth)
         in_var = SequenceVariable()
         _, type = concat.typecheck.infer(
@@ -310,8 +311,10 @@ class TestSequenceVariableTypeInference(unittest.TestCase):
                     ),
                     'open': concat.typecheck.types.ForAll(
                         [in_var],
-                        # FIXME: dict_type should be a type constructor
-                        StackEffect([in_var, dict_type], [in_var, file_type]),
+                        StackEffect(
+                            [in_var, dict_type[str_type, object_type]],
+                            [in_var, file_type],
+                        ),
                     ),
                 }
             ),

@@ -298,45 +298,6 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         """Converts a ListWordNode to a Python expression."""
         return iterable_word_visitor(node, ast.List, ctx=ast.Load())
 
-    @visitors.add_alternative_to('literal-word', 'set-word')
-    @assert_annotated_type
-    def set_word_visitor(node: concat.parse.SetWordNode) -> ast.expr:
-        """Converts a SetWordNode to the Python expression."""
-        return iterable_word_visitor(node, ast.Set)
-
-    @visitors.add_alternative_to('literal-word', 'dict-word')
-    @assert_annotated_type
-    def dict_word_visitor(node: concat.parse.DictWordNode):
-        """Converts a DictWordNode to a Python expression.
-
-        The expression looks like
-        `push({(Quotation([...1])(stack,stash),stack.pop())[-1]:(Quotation([...2])(stack,stash),stack.pop())[-1],......})`."""
-        load = ast.Load()
-        pairs = []
-        for key, value in node.dict_children:
-            key_quote = to_transpiled_quotation(key, node.location, visitors)
-            value_quote = to_transpiled_quotation(
-                value, node.location, visitors
-            )
-            stack = ast.Name(id='stack', ctx=load)
-            stash = ast.Name(id='stash', ctx=load)
-            key_quote_call = ast.Call(
-                func=key_quote, args=[stack, stash], keywords=[]
-            )
-            value_quote_call = ast.Call(
-                func=value_quote, args=[stack, stash], keywords=[]
-            )
-            py_key = pack_expressions([key_quote_call, pop_stack()])
-            py_value = pack_expressions([value_quote_call, pop_stack()])
-            pairs.append((py_key, py_value))
-        dictionary = ast.Dict(
-            keys=[*dict(pairs)], values=[*dict(pairs).values()]
-        )
-        push_func = ast.Name(id='push', ctx=load)
-        py_node = ast.Call(func=push_func, args=[dictionary], keywords=[])
-        py_node.lineno, py_node.col_offset = node.location
-        return py_node
-
     @visitors.add_alternative_to('word', 'subscription-word')
     @assert_annotated_type
     def subscription_word_visitor(

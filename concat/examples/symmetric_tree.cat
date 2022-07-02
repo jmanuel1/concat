@@ -8,15 +8,16 @@
 
 from builtins import eval
 from concat.stdlib.pyinterop import to_str
+from concat.stdlib.pyinterop import to_dict
 
 def get_input( -- result:str):
-  {} [,] $input py_call cast (str)
+  None to_dict [,] $input py_call cast (str)
 
 def put_output(value:object -- ):
-  [(),] {} swap $print py_call drop
+  [(),] None to_dict swap $print py_call drop
 
 def py_eval(string:str -- result:object):
-  [(),] {} swap $eval py_call cast (object)
+  [(),] None to_dict swap $eval py_call cast (object)
 
 def simple_str(obj:object -- string:str):
   None swap None swap to_str
