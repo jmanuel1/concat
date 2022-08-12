@@ -512,7 +512,6 @@ def extension(parsers: ParserDict) -> None:
         parsers.ref_parser('subscription-word'),
         parsers.ref_parser('slice-word'),
         parsers.ref_parser('operator-word'),
-        parsers.ref_parser('yield-word'),
         parsers.ref_parser('await-word'),
         parsers.ref_parser('assert-word'),
         parsers.ref_parser('raise-word'),
@@ -598,8 +597,6 @@ def extension(parsers: ParserDict) -> None:
         )
         element_words = yield (multiple_element | singleton | empty)
         return element_words
-
-    parsers['yield-word'] = parsers.token('YIELD').map(YieldWordNode)
 
     parsers['await-word'] = parsers.token('AWAIT').map(AwaitWordNode)
 
@@ -757,6 +754,7 @@ def extension(parsers: ParserDict) -> None:
         location = (yield parsers.token('FROM')).start
         module = yield relative_module
         name_parser = parsers.token('NAME').map(operator.attrgetter('value'))
+        # TODO: Support importing multiple names at once
         imported_name = yield parsers.token('IMPORT') >> name_parser
         asname = None
         if (yield parsers.token('AS').optional()):

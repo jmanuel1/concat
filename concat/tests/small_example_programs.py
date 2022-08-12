@@ -106,13 +106,6 @@ examples = {
         ('NEWLINE', '\n', (1, 9), (1, 10)),
         ('ENDMARKER', '', (2, 0), (2, 0)),
     ),
-    'word yield\n': to_tokens(
-        ('ENCODING', 'utf-8', (0, 0), (0, 0)),
-        ('NAME', 'word', (1, 0), (1, 4)),
-        ('YIELD', 'yield', (1, 5), (1, 10)),
-        ('NEWLINE', '\n', (1, 10), (1, 11)),
-        ('ENDMARKER', '', (2, 0), (2, 0)),
-    ),
     'async def fun: 5\n': to_tokens(
         ('ENCODING', 'utf-8', (0, 0), (0, 0)),
         ('ASYNC', 'async', (1, 0), (1, 5)),

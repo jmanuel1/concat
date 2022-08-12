@@ -86,7 +86,6 @@ class Lexer:
         if tok.type == 'NAME':
             type_map = {
                 'del': 'DEL',
-                'yield': 'YIELD',
                 'async': 'ASYNC',
                 'await': 'AWAIT',
                 'as': 'AS',

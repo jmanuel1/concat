@@ -100,7 +100,10 @@ types = {
     ),
     'to_list': ForAll(
         [_rest_var],
-        StackEffect([_rest_var, iterable_type], [_rest_var, list_type]),
+        StackEffect(
+            [_rest_var, iterable_type[_a_var,]],
+            [_rest_var, list_type[_a_var,]],
+        ),
     ),
     'False': ForAll(
         [_rest_var], StackEffect([_rest_var], [_rest_var, bool_type])
@@ -165,6 +168,7 @@ types = {
         TypeSequence([_stack_type_var, optional_type[int_type,], object_type]),
         TypeSequence([_stack_type_var, int_type]),
     ),
+    'iterable': iterable_type,
     'tuple': tuple_type,
     'BaseException': base_exception_type,
     'NoReturn': no_return_type,

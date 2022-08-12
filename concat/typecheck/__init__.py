@@ -588,6 +588,7 @@ def infer(
                 sys.path = old_path
                 # For now, assume the module's written in Python.
                 try:
+                    # TODO: Support star imports
                     gamma[imported_name] = current_subs(
                         getattr(module, '@@types')[node.imported_name]
                     )
@@ -1169,6 +1170,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         yield parsers.token('RSQB')
         return _GenericTypeNode(type.location, type, type_arguments)
 
+    # TODO: Parse type variables
     parsers['nonparameterized-type'] = parsy.alt(
         concat.parser_combinators.desc_cumulatively(
             intersection_type_parser, 'intersection type'

@@ -1706,6 +1706,7 @@ str_type = ObjectType(
             ),
             int_type,
         ],
+        'join': py_function_type[TypeSequence([_x, iterable_type[_x,]]), _x],
     },
     nominal=True,
 )

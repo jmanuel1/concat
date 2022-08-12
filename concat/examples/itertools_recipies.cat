@@ -1,16 +1,19 @@
-# IGNORE
+# IN: 'TEST'
+# OUT: 'TE\n'
 # Python's itertools recipes
-from itertools import *  # mostly automatically turned into a concat interface
-import collections
+from itertools import islice
+from concat.stdlib.pyinterop import to_str
+from concat.stdlib.pyinterop import to_dict
 
-def take: swap islice list
-def tabulate: count map
+def str_from_iter(it:object -- s:str):
+  [(),] None to_dict swap ''$.join py_call cast (str)
 
-def consume:  # (iterator, n)
-    $(pop
-    0 collections.deque)
-    $(dup pick  # iterator n n iterator
-    3 roll islice
-    None next) dup None is if
-    pop # get rid of None
-# ...
+def take(it:str n:int -- it2:str): [swap, ()] None to_dict swap $islice py_call str_from_iter
+
+def get_input( -- result:str):
+  None to_dict [,] $input py_call cast (str)
+
+def put_output(string:str -- ):
+  [(),] None to_dict swap $print py_call drop
+
+get_input 2 take put_output
