@@ -7,6 +7,7 @@
 # None is the empty tree
 
 from builtins import eval
+from concat.stdlib.pyinterop import getitem
 from concat.stdlib.pyinterop import to_str
 from concat.stdlib.pyinterop import to_dict
 
@@ -23,13 +24,13 @@ def simple_str(obj:object -- string:str):
   None swap None swap to_str
 
 def left_subtree(tree:list[object] -- left:object):
-  $[0] cast (object)
+  0 getitem cast (object)
 
 def right_subtree(tree:list[object] -- right:object):
-  $[2]
+  2 getitem
 
 def root(tree:list[object] -- value:int):
-  $[1] cast (int)
+  1 getitem cast (int)
 
 def are_reflections(left:object right:object -- result:bool):
   over None is over None is and $(left:object right:object: True) $(left:object right:object:

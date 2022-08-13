@@ -253,27 +253,6 @@ class ParseError(parsy.ParseError):
 parsy.ParseError = ParseError  # type: ignore
 
 
-class SubscriptionWordNode(WordNode):
-    def __init__(self, children: Iterable[WordNode]):
-        super().__init__()
-        self.children: List[WordNode] = list(children)
-        if self.children:
-            self.location = self.children[0].location
-
-
-class SliceWordNode(WordNode):
-    def __init__(self, children: Iterable[Iterable[WordNode]]):
-        super().__init__()
-        self.start_children, self.stop_children, self.step_children = children
-        self.children = [
-            *self.start_children,
-            *self.stop_children,
-            *self.step_children,
-        ]
-        if self.children:
-            self.location = self.children[0].location
-
-
 class BytesWordNode(WordNode):
     def __init__(self, bytes: 'concat.lex.Token'):
         super().__init__()
@@ -509,8 +488,6 @@ def extension(parsers: ParserDict) -> None:
     )
 
     parsers['word'] |= parsy.alt(
-        parsers.ref_parser('subscription-word'),
-        parsers.ref_parser('slice-word'),
         parsers.ref_parser('operator-word'),
         parsers.ref_parser('await-word'),
         parsers.ref_parser('assert-word'),
@@ -518,32 +495,6 @@ def extension(parsers: ParserDict) -> None:
         parsers.ref_parser('try-word'),
         parsers.ref_parser('with-word'),
     )
-
-    # This parses a subscription word.
-    # subscription word = LSQB, word*, RSQB ;
-    parsers['subscription-word'] = (
-        parsers.token('LSQB')
-        >> parsers.ref_parser('word').many().map(SubscriptionWordNode)
-        << parsers.token('RSQB')
-    )
-
-    # This parses a slice word.
-    # slice word = LSQB, word*, COLON, word*, [ COLON, word* ], RSQB ;
-    @parsy.generate('slice word')
-    def slice_word_parser():
-        yield parsers.token('LSQB')
-        start = yield parsers.ref_parser('word').many()
-        yield parsers.token('COLON')
-        stop = yield parsers.ref_parser('word').many()
-        none = concat.lex.Token()
-        none.type = 'NAME'
-        step = [NameWordNode(none)]
-        if (yield parsers.token('COLON').optional()):
-            step = yield parsers['word'].many()
-        yield parsers.token('RSQB')
-        return SliceWordNode([start, stop, step])
-
-    parsers['slice-word'] = slice_word_parser
 
     parsers['operator-word'] = parsy.fail('operator')
 

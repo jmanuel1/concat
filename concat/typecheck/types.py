@@ -1700,6 +1700,9 @@ str_type = ObjectType(
     {
         '__getitem__': _str_getitem_type,
         '__add__': py_function_type[TypeSequence([object_type]), _x],
+        # FIXME: str doesn't have an __radd__. I added it only to help with
+        # type checking.
+        '__radd__': py_function_type[TypeSequence([object_type]), _x],
         'find': py_function_type[
             TypeSequence(
                 [_x, optional_type[int_type,], optional_type[int_type,]]

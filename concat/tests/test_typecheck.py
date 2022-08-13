@@ -150,16 +150,6 @@ class TestTypeChecker(unittest.TestCase):
         expected_type = expected_types[constant_name]
         self.assertEqual(list(effect.output), [expected_type])
 
-    def test_slice_inference(self) -> None:
-        slice_prog = '[1, 2, 3, 4, 5, 6, 7, 8] $[1:None:2]\n'
-        tree = parse(slice_prog)
-        _, type = concat.typecheck.infer(
-            Environment(concat.typecheck.preamble_types.types),
-            tree.children,
-            is_top_level=True,
-        )
-        self.assertEqual(type, StackEffect([], [list_type[int_type,]]))
-
     def test_function_with_stack_effect(self) -> None:
         funcdef = 'def f(a b -- c): ()\n'
         tree = parse(funcdef)
@@ -190,30 +180,6 @@ class TestTypeChecker(unittest.TestCase):
         )
         concat.typecheck.infer(env, tree.children, None, True)
         # If we get here, we passed
-
-    def test_string_subscription(self) -> None:
-        """Test that the type checker allows subscription into strings."""
-        tree = parse('"a string" $[1]')
-        concat.typecheck.infer(
-            concat.typecheck.Environment(), tree.children, None, True,
-        )
-
-    def test_list_subscription(self) -> None:
-        """Test that the type checker allows subscription into lists."""
-        tree = parse('["a string", "another string",] $[1]')
-        concat.typecheck.infer(
-            concat.typecheck.Environment(), tree.children, None, True,
-        )
-
-    def test_pushed_subscription_failure(self) -> None:
-        """Test that pushed subscription words without something on the stack are disallowed."""
-        tree = parse('$[0] cast (int)')
-        self.assertRaises(
-            concat.typecheck.TypeError,
-            concat.typecheck.infer,
-            Environment(concat.typecheck.preamble_types.types),
-            tree.children,
-        )
 
     def test_cast_word(self) -> None:
         """Test that the type checker properly checks casts."""

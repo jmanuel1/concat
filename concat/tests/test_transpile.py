@@ -46,18 +46,6 @@ class TestSubVisitors(unittest.TestCase):
     ) -> ast.AST:
         return self._test_visitor(node, visitor, ast.Call)
 
-    def test_slice_word_visitor_with_step(self) -> None:
-        two_token = concat.lex.Token()
-        two_token.type, two_token.value = 'NUMBER', '2'
-        two = concat.parse.NumberWordNode(two_token)
-        node = concat.parse.SliceWordNode(([], [], [two]))
-        py_node = self._test_visitor(node, 'slice-word', ast.expr)
-        self.assertIn(
-            '2',
-            astunparse.unparse(py_node),
-            msg='Python node does not contain 2',
-        )
-
     def test_del_statement_visitor(self) -> None:
         """Concat del statements are transpiled to Python del statements."""
         name_token = concat.lex.Token()

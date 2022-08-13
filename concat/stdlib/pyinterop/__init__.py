@@ -11,7 +11,9 @@ from concat.typecheck.types import (
     object_type,
     optional_type,
     py_function_type,
+    slice_type,
     str_type,
+    subscriptable_type,
     tuple_type,
 )
 import builtins
@@ -40,7 +42,15 @@ _rest_var_2 = SequenceVariable()
 _rest_var_3 = SequenceVariable()
 _x = IndividualVariable()
 _y = IndividualVariable()
+_z = IndividualVariable()
 globals()['@@types'] = {
+    'getitem': ForAll(
+        [_stack_type_var, _x, _y],
+        StackEffect(
+            TypeSequence([_stack_type_var, subscriptable_type[_x, _y], _x,]),
+            TypeSequence([_stack_type_var, _y]),
+        ),
+    ),
     'to_dict': ForAll(
         [_stack_type_var, _x, _y],
         StackEffect(
@@ -53,6 +63,20 @@ globals()['@@types'] = {
                 ]
             ),
             TypeSequence([_stack_type_var, dict_type[_x, _y]]),
+        ),
+    ),
+    'to_slice': ForAll(
+        [_stack_type_var, _x, _y, _z],
+        StackEffect(
+            TypeSequence(
+                [
+                    _stack_type_var,
+                    optional_type[_x,],
+                    optional_type[_y,],
+                    optional_type[_z,],
+                ]
+            ),
+            TypeSequence([_stack_type_var, slice_type[_z, _y, _x]]),
         ),
     ),
     'to_str': StackEffect(
