@@ -1,0 +1,18 @@
+# IGNORE
+
+class Tree:
+  left: object
+  right: object
+
+  def __init__(left:object right:object self:Tree -- ):
+    over over := .right nip := .left
+
+  def __str__(self:Tree -- s:str):
+    "(" over.left opt_simple_str + over.right opt_simple_str + ")" + nip
+
+
+def put_output(string:str -- ):
+  [(),] None to_dict swap $print py_call drop
+
+
+None (None None Tree) Tree simple_str put_output

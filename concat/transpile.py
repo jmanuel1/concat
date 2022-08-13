@@ -33,7 +33,6 @@ from concat.astutils import (
     append_to_stack,
     assign_self_pushing_module_type_to_all_components,
     call_concat_function,
-    correct_magic_signature,
     count_leading_dots,
     pack_expressions,
     pop_stack,
@@ -638,7 +637,7 @@ except:
         node: concat.parse.ClassdefStatementNode,
     ) -> ast.ClassDef:
         py_body = [
-            correct_magic_signature(statementfy(node))
+            statementfy(node)
             for node in All(
                 alt(visitors['word'], visitors['statement'])
             ).visit(node)
