@@ -46,14 +46,6 @@ class TestSubVisitors(unittest.TestCase):
     ) -> ast.AST:
         return self._test_visitor(node, visitor, ast.Call)
 
-    def test_del_statement_visitor(self) -> None:
-        """Concat del statements are transpiled to Python del statements."""
-        name_token = concat.lex.Token()
-        name_token.value, name_token.start = 'a', (0, 0)
-        name = concat.parse.NameWordNode(name_token)
-        node = concat.parse.DelStatementNode([name])
-        self._test_visitors(node, {'del-statement', 'statement'}, ast.Delete)
-
     def test_async_funcdef_statement_visitor(self) -> None:
         """Async function definitions are transpiled to the same kind of Python statement."""
         name_token = concat.lex.Token()

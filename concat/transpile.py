@@ -409,19 +409,6 @@ except:
         ),
     )
 
-    @visitors.add_alternative_to('statement', 'del-statement')
-    @assert_annotated_type
-    def del_statement_visitor(
-        node: concat.parse.DelStatementNode,
-    ) -> ast.Delete:
-        """This converts a DelStatementNode to a Python statement.
-
-        The Python statement has the form of `del ...1,......,...n`."""
-
-        subvisitor = alt(visitors['name-word'], visitors['attribute-word'])
-        targets = All(subvisitor).visit(node)
-        return ast.Delete(targets=targets)
-
     @visitors.add_alternative_to('statement', 'async-funcdef-statement')
     @assert_annotated_type
     def async_funcdef_statement_visitor(

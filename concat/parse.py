@@ -284,16 +284,6 @@ class ListWordNode(IterableWordNode):
         self.list_children = element_words
 
 
-class DelStatementNode(StatementNode):
-    def __init__(self, targets: Sequence[WordNode]):
-        super().__init__()
-        self.children = targets
-        try:
-            self.location = targets[0].location
-        except IndexError:
-            raise ValueError('there must be at least one target')
-
-
 class SimpleKeywordWordNode(WordNode, abc.ABC):
     def __init__(self, token: 'Token'):
         self.location = token.start
@@ -560,24 +550,10 @@ def extension(parsers: ParserDict) -> None:
     parsers['with-word'] = parsers.token('WITH').map(WithWordNode)
 
     parsers['statement'] |= parsy.alt(
-        parsers.ref_parser('del-statement'),
         parsers.ref_parser('async-funcdef-statement'),
         parsers.ref_parser('classdef-statement'),
         parsers.ref_parser('funcdef-statement'),
     )
-
-    # Parsers a del statement.
-    # del statement = DEL, target words ;
-    # target words = target word, (COMMA, target word)*, [ COMMA ] ;
-    # target word = name word
-    #   | LPAR, target words, RPAR
-    #   | LSQB, target words, RQSB
-    #   | attribute word
-    #   | subscription word
-    #   | slice word ;
-    parsers['del-statement'] = parsers.token('DEL') >> parsers.ref_parser(
-        'target-words'
-    ).map(DelStatementNode)
 
     from concat.astutils import flatten
 
