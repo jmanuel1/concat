@@ -329,20 +329,6 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         ),
     )
 
-    # Converts an AwaitWordNode to a Python expression that awaits the object
-    # at the top of the stack.
-    visitors.add_alternative_to(
-        'word',
-        'await-word',
-        assert_type(concat.parse.AwaitWordNode).then(
-            node_to_py_string(
-                '''lambda s,_:exec("""
-            import asyncio
-            asyncio.get_running_loop().run_until_complete(s.pop())""")'''
-            )
-        ),
-    )
-
     # Converts an AssertWordNode to the Python 'lambda s,_: exec("assert
     # s.pop()")'.
     visitors.add_alternative_to(

@@ -290,10 +290,6 @@ class SimpleKeywordWordNode(WordNode, abc.ABC):
         self.children = []
 
 
-class AwaitWordNode(SimpleKeywordWordNode):
-    pass
-
-
 class AssertWordNode(SimpleKeywordWordNode):
     pass
 
@@ -475,7 +471,6 @@ def extension(parsers: ParserDict) -> None:
 
     parsers['word'] |= parsy.alt(
         parsers.ref_parser('operator-word'),
-        parsers.ref_parser('await-word'),
         parsers.ref_parser('assert-word'),
         parsers.ref_parser('raise-word'),
         parsers.ref_parser('try-word'),
@@ -534,8 +529,6 @@ def extension(parsers: ParserDict) -> None:
         )
         element_words = yield (multiple_element | singleton | empty)
         return element_words
-
-    parsers['await-word'] = parsers.token('AWAIT').map(AwaitWordNode)
 
     parsers['assert-word'] = parsers.token('ASSERT').map(AssertWordNode)
 
