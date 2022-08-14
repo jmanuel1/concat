@@ -290,10 +290,6 @@ class SimpleKeywordWordNode(WordNode, abc.ABC):
         self.children = []
 
 
-class YieldWordNode(SimpleKeywordWordNode):
-    pass
-
-
 class AwaitWordNode(SimpleKeywordWordNode):
     pass
 
