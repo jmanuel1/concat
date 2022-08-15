@@ -315,22 +315,6 @@ def infer(
                             [*S2(TypeSequence(o1)), QuotationType(fun_type)],
                         ),
                     )
-            elif isinstance(node, concat.parse.WithWordNode):
-                a_bar, b_bar = SequenceVariable(), SequenceVariable()
-                body_type = StackEffect([a_bar, object_type], [b_bar])
-                phi = current_effect.output.constrain_and_bind_supertype_variables(
-                    TypeSequence([a_bar, body_type, context_manager_type]),
-                    set(),
-                )
-                assert b_bar in phi
-                current_subs, current_effect = (
-                    phi(current_subs),
-                    phi(
-                        StackEffect(
-                            current_effect.input, TypeSequence([b_bar])
-                        )
-                    ),
-                )
             elif isinstance(node, concat.parse.ListWordNode):
                 phi = S
                 collected_type = TypeSequence(o)

@@ -329,18 +329,6 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         ),
     )
 
-    # Converts a WithWordNode to the Python 'lambda s,_: exec("with s[-1] as
-    # c:s.pop(-2)(s,_)")'.
-    visitors.add_alternative_to(
-        'word',
-        'with-word',
-        assert_type(concat.parse.WithWordNode).then(
-            node_to_py_string(
-                'lambda s,_: exec("with s[-1] as c:s.pop(-2)(s,_)")'
-            )
-        ),
-    )
-
     @visitors.add_alternative_to('statement', 'async-funcdef-statement')
     @assert_annotated_type
     def async_funcdef_statement_visitor(

@@ -290,10 +290,6 @@ class SimpleKeywordWordNode(WordNode, abc.ABC):
         self.children = []
 
 
-class WithWordNode(SimpleKeywordWordNode):
-    pass
-
-
 class FuncdefStatementNode(StatementNode):
     def __init__(
         self,
@@ -457,9 +453,7 @@ def extension(parsers: ParserDict) -> None:
         parsers.ref_parser('list-word'),
     )
 
-    parsers['word'] |= parsy.alt(
-        parsers.ref_parser('operator-word'), parsers.ref_parser('with-word'),
-    )
+    parsers['word'] |= parsy.alt(parsers.ref_parser('operator-word'),)
 
     parsers['operator-word'] = parsy.fail('operator')
 
@@ -513,8 +507,6 @@ def extension(parsers: ParserDict) -> None:
         )
         element_words = yield (multiple_element | singleton | empty)
         return element_words
-
-    parsers['with-word'] = parsers.token('WITH').map(WithWordNode)
 
     parsers['statement'] |= parsy.alt(
         parsers.ref_parser('async-funcdef-statement'),

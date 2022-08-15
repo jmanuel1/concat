@@ -61,23 +61,6 @@ def build_parsers() -> concat.parse.ParserDict:
 
 
 class TestTypeChecker(unittest.TestCase):
-    def test_with_word(self) -> None:
-        wth = '$() ctxmgr with\n'
-        tree = parse(wth)
-        a_bar = SequenceVariable()
-        self.assertRaises(
-            concat.typecheck.TypeError,
-            concat.typecheck.infer,
-            concat.typecheck.Environment(
-                {
-                    'ctxmgr': concat.typecheck.types.ForAll(
-                        [a_bar], StackEffect([a_bar], [a_bar, object_type])
-                    )
-                }
-            ),
-            tree.children,
-        )
-
     @given(from_type(concat.parse.AttributeWordNode))
     def test_attribute_word(self, attr_word) -> None:
         _, type = concat.typecheck.infer(
@@ -256,33 +239,6 @@ class TestNamedTypeNode(unittest.TestCase):
         expected_type = named_type_node.to_type(env)[0]
         note((expected_type, type))
         self.assertEqual(named_type_node.to_type(env)[0], type)
-
-
-class TestSequenceVariableTypeInference(unittest.TestCase):
-    def test_with_word_and_funcdef_inference(self) -> None:
-        wth = 'from concat.stdlib.pyinterop import to_dict\ndef fn(f:object -- n:int): drop 0 ~\n$fn [("file", "a_file"),] to_dict open with'
-        tree = parse(wth)
-        in_var = SequenceVariable()
-        _, type = concat.typecheck.infer(
-            Environment(
-                {
-                    **concat.typecheck.preamble_types.types,
-                    'drop': concat.typecheck.types.ForAll(
-                        [in_var], StackEffect([in_var, object_type], [in_var])
-                    ),
-                    'open': concat.typecheck.types.ForAll(
-                        [in_var],
-                        StackEffect(
-                            [in_var, dict_type[str_type, object_type]],
-                            [in_var, file_type],
-                        ),
-                    ),
-                }
-            ),
-            tree.children,
-            initial_stack=TypeSequence([in_var]),
-        )
-        self.assertEqual(type, StackEffect([in_var], [in_var, int_type]))
 
 
 class TestStackEffectProperties(unittest.TestCase):

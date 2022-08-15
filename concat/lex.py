@@ -92,7 +92,6 @@ class Lexer:
                 'or': 'OR',
                 'and': 'AND',
                 'not': 'NOT',
-                'with': 'WITH',
             }
             tok.type = type_map.get(tok.value, tok.type)
         elif tok.type == 'STRING' and self.__is_bytes_literal(tok.value):
