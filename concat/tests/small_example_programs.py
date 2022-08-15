@@ -395,7 +395,7 @@ examples = {
         ('ENCODING', 'utf-8', (0, 0), (0, 0)),
         ('NAME', 'None', (1, 0), (1, 4)),
         ('NAME', 'AnException', (1, 5), (1, 16)),
-        ('RAISE', 'raise', (1, 17), (1, 22)),
+        ('NAME', 'raise', (1, 17), (1, 22)),
         ('NEWLINE', '\n', (1, 22), (1, 23)),
         ('ENDMARKER', '', (2, 0), (2, 0)),
     ),

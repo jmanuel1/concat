@@ -329,16 +329,6 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         ),
     )
 
-    # Converts an RaiseWordNode to the Python 'lambda s,_: exec("raise s.pop()
-    # from s.pop()")'.
-    visitors.add_alternative_to(
-        'word',
-        'raise-word',
-        assert_type(concat.parse.RaiseWordNode).then(
-            node_to_py_string('lambda s,_:exec("raise s.pop() from s.pop()")')
-        ),
-    )
-
     # Converts a TryWordNode to the Python 'lambda s,t: exec("""
     #   import sys
     #   hs=s.pop(-2)
