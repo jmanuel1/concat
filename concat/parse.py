@@ -284,12 +284,6 @@ class ListWordNode(IterableWordNode):
         self.list_children = element_words
 
 
-class SimpleKeywordWordNode(WordNode, abc.ABC):
-    def __init__(self, token: 'Token'):
-        self.location = token.start
-        self.children = []
-
-
 class FuncdefStatementNode(StatementNode):
     def __init__(
         self,
