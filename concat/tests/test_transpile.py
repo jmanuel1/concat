@@ -46,17 +46,6 @@ class TestSubVisitors(unittest.TestCase):
     ) -> ast.AST:
         return self._test_visitor(node, visitor, ast.Call)
 
-    def test_async_funcdef_statement_visitor(self) -> None:
-        """Async function definitions are transpiled to the same kind of Python statement."""
-        name_token = concat.lex.Token()
-        name_token.value, name_token.start = 'a', (0, 0)
-        node = concat.parse.AsyncFuncdefStatementNode(
-            name_token, [], [], [], (0, 0)
-        )
-
-        visitors = {'async-funcdef-statement', 'statement'}
-        self._test_visitors(node, visitors, ast.AsyncFunctionDef)
-
     def test_funcdef_statement_visitor(self) -> None:
         """Function definitions are transpiled to the same kind of Python statement."""
         name_token = concat.lex.Token()

@@ -318,10 +318,6 @@ class FuncdefStatementNode(StatementNode):
         )
 
 
-class AsyncFuncdefStatementNode(FuncdefStatementNode):
-    pass
-
-
 class FromImportStatementNode(ImportStatementNode):
     def __init__(
         self,
@@ -503,7 +499,6 @@ def extension(parsers: ParserDict) -> None:
         return element_words
 
     parsers['statement'] |= parsy.alt(
-        parsers.ref_parser('async-funcdef-statement'),
         parsers.ref_parser('classdef-statement'),
         parsers.ref_parser('funcdef-statement'),
     )
@@ -527,25 +522,6 @@ def extension(parsers: ParserDict) -> None:
         parsers.ref_parser('subscription-word'),
         parsers.ref_parser('slice-word'),
     )
-
-    # This parses an async function definition.
-    # async funcdef statement = ASYNC, funcdef statement ;
-    @parsy.generate('async funcdef statement')
-    def async_funcdef_statement_parser() -> Generator:
-        location = (yield parsers.token('ASYNC')).start
-        func: FuncdefStatementNode = (yield parsers['funcdef-statement'])
-        name = concat.lex.Token()
-        name.value = func.name
-        return AsyncFuncdefStatementNode(
-            name,
-            func.decorators,
-            func.annotation,
-            func.body,
-            location,
-            func.stack_effect,
-        )
-
-    parsers['async-funcdef-statement'] = async_funcdef_statement_parser
 
     # This parses a function definition.
     # funcdef statement = DEF, NAME, [ LPAR, stack effect, RPAR ], decorator*,

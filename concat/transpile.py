@@ -329,35 +329,6 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         ),
     )
 
-    @visitors.add_alternative_to('statement', 'async-funcdef-statement')
-    @assert_annotated_type
-    def async_funcdef_statement_visitor(
-        node: concat.parse.AsyncFuncdefStatementNode,
-    ) -> ast.AsyncFunctionDef:
-        """This converts an AsyncFuncdefStatementNode to a Python statement.
-
-        The statement takes the form of  '@... @(lambda f: lambda s,t:
-        s.append(f(s[:],t[:]))) async def name(stack, stash) -> ...: ...'."""
-        py_func_def = cast(
-            ast.FunctionDef, visitors['funcdef-statement'].visit(node)
-        )
-        py_node = ast.AsyncFunctionDef(
-            name=node.name,
-            args=py_func_def.args,
-            body=py_func_def.body,
-            decorator_list=py_func_def.decorator_list,
-            returns=py_func_def.returns,
-        )
-        # NOTE: The stacks passed into the function are copies.
-        coroutine_decorator_string = (
-            'lambda f:lambda s,t:s.append(f(s[:],t[:]))'
-        )
-        coroutine_decorator = cast(
-            ast.Expression, ast.parse(coroutine_decorator_string, mode='eval')
-        ).body
-        py_node.decorator_list.append(coroutine_decorator)
-        return py_node
-
     @visitors.add_alternative_to('statement', 'funcdef-statement')
     @assert_annotated_type
     def funcdef_statement_visitor(
