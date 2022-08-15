@@ -290,10 +290,6 @@ class SimpleKeywordWordNode(WordNode, abc.ABC):
         self.children = []
 
 
-class TryWordNode(SimpleKeywordWordNode):
-    pass
-
-
 class WithWordNode(SimpleKeywordWordNode):
     pass
 
@@ -462,9 +458,7 @@ def extension(parsers: ParserDict) -> None:
     )
 
     parsers['word'] |= parsy.alt(
-        parsers.ref_parser('operator-word'),
-        parsers.ref_parser('try-word'),
-        parsers.ref_parser('with-word'),
+        parsers.ref_parser('operator-word'), parsers.ref_parser('with-word'),
     )
 
     parsers['operator-word'] = parsy.fail('operator')
@@ -519,8 +513,6 @@ def extension(parsers: ParserDict) -> None:
         )
         element_words = yield (multiple_element | singleton | empty)
         return element_words
-
-    parsers['try-word'] = parsers.token('TRY').map(TryWordNode)
 
     parsers['with-word'] = parsers.token('WITH').map(WithWordNode)
 

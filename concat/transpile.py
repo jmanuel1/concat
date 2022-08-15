@@ -329,40 +329,6 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         ),
     )
 
-    # Converts a TryWordNode to the Python 'lambda s,t: exec("""
-    #   import sys
-    #   hs=s.pop(-2)
-    #   # Create copies of the stacks in case the stacks get into a weird state
-    #   a,b=s[:],t[:]
-    #   a.pop()
-    #   try:s.pop()(s,t)
-    #   except:
-    #       s[:],t[:]=a,b  # Restore the stacks
-    #       h=[h for h in hs if isinstance(sys.exc_info[1], h[0])]
-    #       if not h: raise
-    #       s.append(sys.exc_info[1])
-    #       h[0][1](s,t)"""'
-    visitors.add_alternative_to(
-        'word',
-        'try-word',
-        assert_type(concat.parse.TryWordNode).then(
-            node_to_py_string(
-                '''lambda s,t: exec("""
-import sys
-hs=s.pop(-2)
-a,b=s[:],t[:]
-a.pop()
-try:s.pop()(s,t)
-except:
-    s[:],t[:]=a,b
-    h=[h for h in hs if isinstance(sys.exc_info()[1], h[0])]
-    if not h: raise
-    s.append(sys.exc_info()[1])
-    h[0][1](s,t)""")'''
-            )
-        ),
-    )
-
     # Converts a WithWordNode to the Python 'lambda s,_: exec("with s[-1] as
     # c:s.pop(-2)(s,_)")'.
     visitors.add_alternative_to(

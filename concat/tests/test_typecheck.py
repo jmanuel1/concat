@@ -78,11 +78,6 @@ class TestTypeChecker(unittest.TestCase):
             tree.children,
         )
 
-    def test_try_word(self) -> None:
-        try_prog = '$() $() try\n'
-        tree = parse(try_prog)
-        concat.typecheck.infer(concat.typecheck.Environment(), tree.children)
-
     @given(from_type(concat.parse.AttributeWordNode))
     def test_attribute_word(self, attr_word) -> None:
         _, type = concat.typecheck.infer(

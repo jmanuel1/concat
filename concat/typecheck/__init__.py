@@ -331,23 +331,6 @@ def infer(
                         )
                     ),
                 )
-            elif isinstance(node, concat.parse.TryWordNode):
-                a_bar, b_bar = SequenceVariable(), SequenceVariable()
-                phi = TypeSequence(o).constrain_and_bind_supertype_variables(
-                    TypeSequence(
-                        [
-                            a_bar,
-                            iterable_type[StackEffect([a_bar], [b_bar]),],
-                            StackEffect([a_bar], [b_bar]),
-                        ]
-                    ),
-                    set(),
-                )
-                assert b_bar in phi
-                current_subs, current_effect = (
-                    phi(S),
-                    phi(StackEffect(i, [b_bar])),
-                )
             elif isinstance(node, concat.parse.ListWordNode):
                 phi = S
                 collected_type = TypeSequence(o)
