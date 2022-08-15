@@ -92,7 +92,6 @@ class Lexer:
                 'or': 'OR',
                 'and': 'AND',
                 'not': 'NOT',
-                'assert': 'ASSERT',
                 'raise': 'RAISE',
                 'try': 'TRY',
                 'with': 'WITH',

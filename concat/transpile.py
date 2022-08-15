@@ -329,16 +329,6 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         ),
     )
 
-    # Converts an AssertWordNode to the Python 'lambda s,_: exec("assert
-    # s.pop()")'.
-    visitors.add_alternative_to(
-        'word',
-        'assert-word',
-        assert_type(concat.parse.AssertWordNode).then(
-            node_to_py_string('lambda s,_:exec("assert s.pop()")')
-        ),
-    )
-
     # Converts an RaiseWordNode to the Python 'lambda s,_: exec("raise s.pop()
     # from s.pop()")'.
     visitors.add_alternative_to(
