@@ -28,7 +28,6 @@ from typing import (
 from typing_extensions import Protocol
 import parsy
 import concat.parse
-import concat.operators
 
 
 if TYPE_CHECKING:
@@ -214,63 +213,7 @@ def infer(
         try:
             S, (i, o) = current_subs, current_effect
 
-            if isinstance(node, concat.operators.AddWordNode):
-                # rules:
-                # require object_type because the methods should return
-                # NotImplemented for most types
-                # FIXME: Make the rules safer... somehow
-
-                # ... a b => (... {__add__(object) -> s} t)
-                # ---
-                # a b + => (... s)
-
-                # ... a b => (... t {__radd__(object) -> s})
-                # ---
-                # a b + => (... s)
-                *rest, type1, type2 = current_effect.output
-                try_radd = False
-                try:
-                    add_type = type1.get_type_of_attribute('__add__')
-                except AttributeError:
-                    try_radd = True
-                else:
-                    if not isinstance(add_type, ObjectType):
-                        raise TypeError(
-                            '__add__ method of type {} is not of an object type, instead has type {}'.format(
-                                type1, add_type
-                            )
-                        )
-                    if add_type.head != py_function_type:
-                        raise TypeError(
-                            '__add__ method of type {} is not a Python function, instead it has type {}'.format(
-                                type1, add_type
-                            )
-                        )
-                    if [*add_type.type_arguments[0]] != [object_type]:
-                        raise TypeError(
-                            '__add__ method of type {} does not have type (object) -> `t, instead it has type {}'.format(
-                                type1, add_type
-                            )
-                        )
-                    current_effect = StackEffect(
-                        current_effect.input, [*rest, add_type.output],
-                    )
-                if try_radd:
-                    radd_type = type2.get_type_of_attribute('__radd__')
-                    if (
-                        not isinstance(radd_type, ObjectType)
-                        or radd_type.head != py_function_type
-                        or [*radd_type.type_arguments[0]] != [object_type]
-                    ):
-                        raise TypeError(
-                            '__radd__ method of type {} does not have type (object) -> `t, instead it has type {} (left operand is of type {})'.format(
-                                type2, radd_type, type1
-                            )
-                        )
-                    current_effect = StackEffect(
-                        current_effect.input, [*rest, radd_type.output],
-                    )
-            elif isinstance(node, concat.parse.PushWordNode):
+            if isinstance(node, concat.parse.PushWordNode):
                 S1, (i1, o1) = S, (i, o)
                 # special case for pushing an attribute accessor
                 child = node.children[0]
@@ -374,21 +317,6 @@ def infer(
                         )
                     ),
                 )
-            elif isinstance(node, concat.operators.InvertWordNode):
-                out_types = current_effect.output[:-1]
-                invert_attr_type = current_effect.output[
-                    -1
-                ].get_type_of_attribute('__invert__')
-                if not isinstance(invert_attr_type, PythonFunctionType):
-                    raise TypeError(
-                        '__invert__ of type {} must be a Python function'.format(
-                            current_effect.output[-1]
-                        )
-                    )
-                result_type = invert_attr_type.output
-                current_effect = StackEffect(
-                    current_effect.input, [*out_types, result_type]
-                )
             elif isinstance(node, concat.parse.FromImportStatementNode):
                 imported_name = node.asname or node.imported_name
                 # mutate type environment
@@ -436,35 +364,6 @@ def infer(
                             components, source_dir=source_dir
                         )
                     )
-            elif isinstance(node, concat.operators.SubtractWordNode):
-                # FIXME: We should check if the other operand supports __rsub__ if the
-                # first operand doesn't support __sub__.
-                other_operand_type_var = IndividualVariable()
-                result_type_var = IndividualVariable()
-                subtractable_interface = subtractable_type[
-                    other_operand_type_var, result_type_var
-                ]
-                seq_var = SequenceVariable()
-                final_subs = current_effect.output.constrain_and_bind_supertype_variables(
-                    TypeSequence(
-                        [
-                            seq_var,
-                            subtractable_interface,
-                            other_operand_type_var,
-                        ]
-                    ),
-                    set(),
-                    [],
-                )
-                assert seq_var in final_subs
-                current_subs, current_effect = (
-                    final_subs(current_subs),
-                    final_subs(
-                        StackEffect(
-                            current_effect.input, [seq_var, result_type_var]
-                        )
-                    ),
-                )
             elif isinstance(node, concat.parse.FuncdefStatementNode):
                 S = current_subs
                 f = current_effect
@@ -506,57 +405,6 @@ def infer(
                 effect = declared_type
                 # we *mutate* the type environment
                 gamma[name] = effect.generalized_wrt(S(gamma))
-            elif isinstance(
-                node, concat.operators.GreaterThanOrEqualToWordNode
-            ):
-                a_type, b_type = current_effect.output[-2:]
-                try:
-                    ge_type = a_type.get_type_of_attribute('__ge__')
-                    if not isinstance(ge_type, PythonFunctionType):
-                        raise TypeError(
-                            'method __ge__ of type {} should be a Python function'.format(
-                                ge_type
-                            )
-                        )
-                    _, current_subs = ge_type.select_overload([b_type])
-                except TypeError:
-                    le_type = b_type.get_type_of_attribute('__le__')
-                    if not isinstance(le_type, PythonFunctionType):
-                        raise TypeError(
-                            'method __le__ of type {} should be a Python function'.format(
-                                le_type
-                            )
-                        )
-                    _, current_subs = le_type.select_overload([a_type])
-                current_subs, current_effect = (
-                    current_subs,
-                    StackEffect(
-                        current_effect.input,
-                        TypeSequence([*current_effect.output[:-2], bool_type]),
-                    ),
-                )
-            elif isinstance(
-                node,
-                (
-                    concat.operators.IsWordNode,
-                    concat.operators.AndWordNode,
-                    concat.operators.OrWordNode,
-                    concat.operators.EqualToWordNode,
-                ),
-            ):
-                # TODO: I should be more careful here, since at least __eq__ can be
-                # deleted, if I remember correctly.
-                if not isinstance(
-                    current_effect.output[-1], IndividualType
-                ) or not isinstance(current_effect.output[-2], IndividualType):
-                    raise StackMismatchError(
-                        TypeSequence(current_effect.output),
-                        TypeSequence([object_type, object_type]),
-                    )
-                current_effect = StackEffect(
-                    current_effect.input,
-                    TypeSequence([*current_effect.output[:-2], bool_type]),
-                )
             elif isinstance(node, concat.parse.NumberWordNode):
                 if isinstance(node.value, int):
                     current_effect = StackEffect(i, [*o, int_type])
