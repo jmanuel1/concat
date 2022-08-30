@@ -552,7 +552,11 @@ def extension(parsers: ParserDict) -> None:
         funcdef_statement_parser, 'funcdef statement'
     )
 
-    decorator = parsers.token('AT') >> parsers.ref_parser('word')
+    decorator = parsers.token('NAME').bind(
+        lambda token: parsy.success(token)
+        if token.value == '@'
+        else parsy.fail('at sign (@)')
+    ) >> parsers.ref_parser('word')
 
     annotation_parser = (
         parsers.token('RARROW') >> parsers.ref_parser('word').many()

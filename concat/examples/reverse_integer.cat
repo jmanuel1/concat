@@ -23,4 +23,4 @@ def simple_str(obj:object -- string:str):
 def mag(n:int -- abs_n:int):
   [(),] None to_dict swap $abs py_call cast (int)
 
-get_input dup None swap to_int 0 >= $(num:str: (((0 1 -) None None to_slice) getitem)) $(num:str: ((None None 1 to_slice) getitem) '-' + (((0 1 -) None None to_slice) getitem)) choose cast (str) put_output
+get_input dup None swap to_int 0 >= $(num:str: (((0 1 -) None None to_slice) getitem)) $(num:str: ((None None 1 to_slice) getitem) cast (str) '-' + (((0 1 -) None None to_slice) getitem)) choose cast (str) put_output

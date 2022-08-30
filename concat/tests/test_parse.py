@@ -18,7 +18,7 @@ class TestSmallExamples(unittest.TestCase):
                 # We place a substitute stack effect parser in the dictionary
                 parsers['stack-effect-type'] = (
                     parsers.token('NAME').many()
-                    >> parsers.token('MINUS').many()
+                    >> parsers.token('MINUSMINUS')
                     >> parsers.token('NAME').many()
                 )
 

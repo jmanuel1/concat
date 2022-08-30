@@ -23,7 +23,19 @@ Location = Tuple[int, int]
 _TranspilerDict = concat.visitors.VisitorDict['concat.parse.Node', ast.AST]
 
 
-# AST Manipulation utilities
+# Concat AST Manipulation utilities
+
+
+def are_on_same_line_and_offset_by(
+    location_x: Location, location_y: Location, characters: int
+) -> bool:
+    return (
+        location_x[0] == location_y[0]
+        and location_y[1] - location_x[1] == characters
+    )
+
+
+# Python AST Manipulation utilities
 
 
 def pop_stack(index: int = -1) -> ast.Call:

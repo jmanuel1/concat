@@ -454,6 +454,7 @@ def infer(
                         ]
                     ),
                     set(),
+                    [],
                 )
                 assert seq_var in final_subs
                 current_subs, current_effect = (
@@ -566,7 +567,9 @@ def infer(
                 if node.value not in current_subs(gamma):
                     raise NameError(node)
                 type_of_name = current_subs(gamma)[node.value].instantiate()
-                type_of_name = type_of_name.get_type_of_attribute('__call__')
+                type_of_name = type_of_name.get_type_of_attribute(
+                    '__call__'
+                ).instantiate()
                 if not isinstance(type_of_name, StackEffect):
                     raise UnhandledNodeTypeError(
                         'name {} of type {} (repr {!r})'.format(
@@ -574,7 +577,7 @@ def infer(
                         )
                     )
                 constraint_subs = o1.constrain_and_bind_supertype_variables(
-                    type_of_name.input, set()
+                    type_of_name.input, set(), []
                 )
                 current_subs = constraint_subs(current_subs)
                 current_effect = current_subs(
@@ -586,7 +589,7 @@ def infer(
                 if quotation.input_stack_type is not None:
                     input_stack, _ = quotation.input_stack_type.to_type(gamma)
                     S = TypeSequence(o).constrain_and_bind_supertype_variables(
-                        input_stack, set(),
+                        input_stack, set(), []
                     )(S)
                 else:
                     input_stack = TypeSequence(o)
@@ -624,7 +627,7 @@ def infer(
                 R = TypeSequence(
                     out_types
                 ).constrain_and_bind_supertype_variables(
-                    attr_function_type.input, set(),
+                    attr_function_type.input, set(), []
                 )
                 current_subs, current_effect = (
                     R(S),
@@ -869,7 +872,11 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
 
     @parsy.generate
     def type_sequence_parser() -> Generator:
-        name = parsers.token('NAME')
+        name = parsers.token('NAME').bind(
+            lambda token: parsy.success(token)
+            if token.value != '*'
+            else parsy.fail('name that is not star (*)')
+        )
         individual_type_variable = (
             # FIXME: Keep track of individual type variables
             parsers.token('BACKTICK')
@@ -887,7 +894,14 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         ).map(_TypeSequenceIndividualTypeNode)
         items = item.many()
 
-        seq_var = parsers.token('STAR') >> name
+        seq_var = (
+            parsers.token('NAME').bind(
+                lambda token: parsy.success(token)
+                if token.value == '*'
+                else parsy.fail('star (*)')
+            )
+            >> name
+        )
         seq_var_parsed, i = yield parsy.seq(seq_var.optional(), items)
         seq_var_value = None
 
@@ -903,7 +917,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
 
     @parsy.generate
     def stack_effect_type_parser() -> Generator:
-        separator = parsers.token('MINUS').times(2)
+        separator = parsers.token('MINUSMINUS')
 
         stack_effect = parsy.seq(  # type: ignore
             parsers['type-sequence'] << separator, parsers['type-sequence']

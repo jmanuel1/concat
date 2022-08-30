@@ -5,6 +5,7 @@ from concat.typecheck.types import (
     ObjectType,
     StackEffect,
     TypeSequence,
+    addable_type,
     base_exception_type,
     bool_type,
     context_manager_type,
@@ -12,6 +13,7 @@ from concat.typecheck.types import (
     ellipsis_type,
     file_type,
     float_type,
+    geq_comparable_type,
     init_primitives,
     int_type,
     iterable_type,
@@ -212,6 +214,79 @@ types = {
         StackEffect(
             TypeSequence([_stack_type_var]),
             TypeSequence([_stack_type_var, not_implemented_type]),
+        ),
+    ),
+    # Addition type rules:
+    # require object_type because the methods should return
+    # NotImplemented for most types
+    # FIXME: Make the rules safer... somehow
+    # ... a b => (... {__add__(object) -> s} t)
+    # ---
+    # a b + => (... s)
+    # ... a b => (... t {__radd__(object) -> s})
+    # ---
+    # a b + => (... s)
+    # FIXME: Implement the second type rule
+    '+': ForAll(
+        [_stack_type_var, _c_var],
+        StackEffect(
+            TypeSequence(
+                [_stack_type_var, addable_type[_c_var,], object_type]
+            ),
+            TypeSequence([_stack_type_var, _c_var]),
+        ),
+    ),
+    # FIXME: We should check if the other operand supports __rsub__ if the
+    # first operand doesn't support __sub__.
+    '-': ForAll(
+        [_stack_type_var, _b_var, _c_var],
+        StackEffect(
+            TypeSequence(
+                [_stack_type_var, subtractable_type[_b_var, _c_var], _b_var]
+            ),
+            TypeSequence([_stack_type_var, _c_var]),
+        ),
+    ),
+    # Rule 1: first operand has __ge__(type(second operand))
+    # Rule 2: second operand has __le__(type(first operand))
+    # FIXME: Implement the second type rule
+    '>=': ForAll(
+        [_stack_type_var, _a_var, _b_var],
+        StackEffect(
+            TypeSequence(
+                [_stack_type_var, geq_comparable_type[_b_var,], _b_var]
+            ),
+            TypeSequence([_stack_type_var, bool_type]),
+        ),
+    ),
+    'is': ForAll(
+        [_stack_type_var],
+        StackEffect(
+            TypeSequence([_stack_type_var, object_type, object_type]),
+            TypeSequence([_stack_type_var, bool_type]),
+        ),
+    ),
+    'and': ForAll(
+        [_stack_type_var],
+        StackEffect(
+            TypeSequence([_stack_type_var, object_type, object_type]),
+            TypeSequence([_stack_type_var, bool_type]),
+        ),
+    ),
+    'or': ForAll(
+        [_stack_type_var],
+        StackEffect(
+            TypeSequence([_stack_type_var, object_type, object_type]),
+            TypeSequence([_stack_type_var, bool_type]),
+        ),
+    ),
+    # TODO: I should be more careful here, since at least __eq__ can be
+    # deleted, if I remember correctly.
+    '==': ForAll(
+        [_stack_type_var],
+        StackEffect(
+            TypeSequence([_stack_type_var, object_type, object_type]),
+            TypeSequence([_stack_type_var, bool_type]),
         ),
     ),
 }

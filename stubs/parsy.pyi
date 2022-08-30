@@ -61,6 +61,9 @@ class Parser(Generic[T, U]):
     def at_least(self, n: int) -> '_ParserOutputtingList[T, U]':
         ...
 
+    def bind(self, f: Callable[[U], 'Parser[T, V]']) -> 'Parser[T, V]':
+        ...
+
     def __lshift__(self, other: 'Parser[T, V]') -> 'Parser[T, U]':
         ...
 

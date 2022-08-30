@@ -82,7 +82,11 @@ class TestTypeChecker(unittest.TestCase):
         try_prog = '{!r} {!r} +\n'.format(a, b)
         tree = parse(try_prog)
         _, type = concat.typecheck.infer(
-            concat.typecheck.Environment(), tree.children, is_top_level=True,
+            concat.typecheck.Environment(
+                {'+': concat.typecheck.preamble_types.types['+']}
+            ),
+            tree.children,
+            is_top_level=True,
         )
         note(str(type))
         self.assertEqual(type, StackEffect([], [int_type]))
