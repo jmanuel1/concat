@@ -443,17 +443,6 @@ def extension(parsers: ParserDict) -> None:
         parsers.ref_parser('list-word'),
     )
 
-    parsers['word'] |= parsy.alt(parsers.ref_parser('operator-word'),)
-
-    parsers['operator-word'] = parsy.fail('operator')
-
-    from concat.operators import operators
-
-    for operator_name, token_type, node_type, _ in operators:
-        parser_name = operator_name + '-word'
-        parsers[parser_name] = parsers.token(token_type).map(node_type)
-        parsers['operator-word'] |= parsers.ref_parser(parser_name)
-
     # This parses a bytes word.
     # bytes word = BYTES ;
     parsers['bytes-word'] = parsers.token('BYTES').map(BytesWordNode)
