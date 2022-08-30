@@ -297,38 +297,6 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         """Converts a ListWordNode to a Python expression."""
         return iterable_word_visitor(node, ast.List, ctx=ast.Load())
 
-    visitors.add_alternative_to('word', 'operator-word', fail)
-
-    @visitors.add_alternative_to('operator-word', 'invert-word')
-    @assert_annotated_type
-    def invert_word_visitor(
-        node: concat.operators.InvertWordNode,
-    ) -> ast.expr:
-        py_node = cast(
-            ast.Expression,
-            ast.parse('lambda s,_:s.append(~s.pop())', mode='eval'),
-        ).body
-        py_node.lineno, py_node.col_offset = node.location
-        return py_node
-
-    for operator_desc in concat.operators.binary_operators:
-        operator_name, _, node_type, operator = operator_desc
-        visitors.add_alternative_to(
-            'operator-word',
-            operator_name + '-word',
-            assert_type(node_type).then(_binary_operator_visitor(operator)),
-        )
-
-    # NOTE: 'or' and 'and' are not short-circuited!
-
-    visitors.add_alternative_to(
-        'operator-word',
-        'not-word',
-        assert_type(concat.operators.NotWordNode).then(
-            node_to_py_string('lambda s,_:s.append(not s.pop())')
-        ),
-    )
-
     @visitors.add_alternative_to('statement', 'funcdef-statement')
     @assert_annotated_type
     def funcdef_statement_visitor(
@@ -417,13 +385,4 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
     # None.
     visitors['cast-word'] = assert_type(concat.parse.CastWordNode).then(
         node_to_py_string('lambda s,t:None')
-    )
-
-
-def _binary_operator_visitor(operator: str) -> Visitor[object, ast.expr]:
-    expression = 'lambda s,_:s.append((lambda a,b: a {} b)(s.pop(-2), s.pop()))'.format(
-        operator
-    )
-    return assert_type(concat.operators.OperatorWordNode).then(
-        node_to_py_string(expression)
     )

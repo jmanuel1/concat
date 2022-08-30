@@ -185,15 +185,3 @@ class TestSubVisitors(unittest.TestCase):
                 astunparse.unparse(py_node),
                 msg='keyword arguments were not transpiled',
             )
-
-    def test_subtract_word(self) -> None:
-        """Tests that subtract words are successfuly transpiled."""
-        minus = Token('MINUS', '-')
-        word = concat.operators.SubtractWordNode(minus)
-
-        for py_node in self._test_visitors(
-            word, {'word', 'operator-word', 'subtract-word'}, ast.expr
-        ):
-            self.assertIn(
-                '-', astunparse.unparse(py_node), msg='no subtraction operator'
-            )
