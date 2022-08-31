@@ -9,7 +9,6 @@ import concat.typecheck
 import concat.stdlib.importlib
 import concat.parse
 import concat.stdlib.types
-import concat.stdlib.continuations
 import concat.lex
 import concat.transpile
 import concat.execute
@@ -132,18 +131,9 @@ def print_exit_message() -> None:
 def repl(
     stack: List[object], stash: List[object], debug=False, initial_globals={}
 ) -> None:
-    stack.append(
-        lambda s, t: _repl_impl(
-            s,
-            t,
-            debug,
-            {
-                'return': concat.stdlib.continuations.do_return,
-                **initial_globals,
-            },
-        )
+    _repl_impl(
+        stack, stash, debug, {**initial_globals,},
     )
-    concat.stdlib.continuations.with_return(stack, stash)
     print_exit_message()
 
 
