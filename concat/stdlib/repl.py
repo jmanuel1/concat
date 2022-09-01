@@ -60,6 +60,7 @@ def _need_continuation(line: str) -> bool:
 
 
 def _read_until_complete_line() -> str:
+    # FIXME: Read from the 'file' command line argument if it's a tty.
     line = input()
     while _need_continuation(line):
         line += '\n' + input()

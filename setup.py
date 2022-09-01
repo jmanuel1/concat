@@ -27,9 +27,11 @@ setup(
     ],
     test_suite='nose.collector',
     tests_require=[
-        'nose',
-        'scripttest',
+        'coverage>=6.4.4,<7',
         'hypothesis==5.38.0',
+        'nose',
+        'pywinpty>=2.0.7,<3; platform_system=="Windows"',
+        'scripttest',
         'typing-extensions>=3.7.4,<4',
     ],
     extras_require={'dev': ['pre-commit>=2.6.0,<3', 'axblack==20220330']},
