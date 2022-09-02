@@ -73,14 +73,6 @@ Upload.
 
     twine upload dist/* [-r pypitest]
 
-Summer of Shipping *aspirational* project goals
--------------
-
-1. Simplify type checking or skip it all together (for now).
-2. Settle on some minimal core language to make functional. The language has
-   been growing a lot, and perhaps efforts should be more focused instead.
-3. Create an online demo.
-
 Related work
 ------------
 
