@@ -34,9 +34,17 @@ jobs:
         coverage run setup.py test
         coverage combine
         coverage xml
+        coverage lcov
     - name: Report test coverage to DeepSource
       uses: deepsourcelabs/test-coverage-action@master
       with:
         key: python
         coverage-file: coverage.xml
         dsn: ${{ secrets.DEEPSOURCE_DSN }}
+    - name: Coveralls
+      uses: coverallsapp/github-action@master
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        # https://github.com/coverallsapp/github-action/issues/55#issuecomment-1137870701
+        git-commit: ${{ github.event.pull_request.head.sha }}
+        path-to-lcov: ./coverage.lcov
