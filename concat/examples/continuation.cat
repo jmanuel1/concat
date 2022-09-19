@@ -1,0 +1,23 @@
+# IGNORE
+# IN: ''
+# OUT: '1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n'
+
+# from concat.stdlib.continuation import ContinuationMonad
+from concat.stdlib.continuation import do
+from concat.stdlib.continuation import call_with_current_continuation
+from concat.stdlib.execution import loop
+
+
+# FIXME: Support type arguments
+def ten_times(k:(int_type -- continuation_monad_type[none_type, int]) -- continuation_monad_type[none_type, int]):
+  # k
+  0 $(1 + over call .eval drop dup 10 <=) loop drop drop
+  $(None) cont
+
+def put_output(i:int -- ):
+  [(),] None to_dict swap $print py_call drop
+
+$(
+  ($ten_times call_with_current_continuation)
+  (put_output None return)
+) do .eval
