@@ -383,12 +383,10 @@ class TypeSequence(Type, Iterable['StackItemType']):
         """
         from concat.typecheck import Substitutions
 
-        if (
-            isinstance(supertype, SequenceVariable)
-            and supertype not in rigid_variables
-        ):
-            return Substitutions({supertype: self})
-        elif isinstance(supertype, TypeSequence):
+        if isinstance(supertype, SequenceVariable):
+            supertype = TypeSequence([supertype])
+
+        if isinstance(supertype, TypeSequence):
             if self._is_empty() and supertype._is_empty():
                 return Substitutions()
             elif (
@@ -406,14 +404,18 @@ class TypeSequence(Type, Iterable['StackItemType']):
                 raise StackMismatchError(self, supertype)
             elif not self._individual_types:
                 if (
+                    self._is_empty()
+                    and supertype._is_empty()
+                    or self._rest is supertype._rest
+                ):
+                    return Substitutions()
+                if (
                     self._rest
                     and supertype._rest
                     and not supertype._individual_types
                     and supertype._rest not in rigid_variables
                 ):
                     return Substitutions({supertype._rest: self._rest})
-                elif self._is_empty() and supertype._is_empty():
-                    return Substitutions()
                 elif (
                     self._is_empty()
                     and supertype._rest
@@ -483,11 +485,10 @@ class TypeSequence(Type, Iterable['StackItemType']):
     ) -> 'Substitutions':
         from concat.typecheck import Substitutions
 
-        if isinstance(supertype, SequenceVariable) and (
-            not self._rest or self._individual_types
-        ):
-            raise StackMismatchError(self, TypeSequence([supertype]))
-        elif isinstance(supertype, TypeSequence):
+        if isinstance(supertype, SequenceVariable):
+            supertype = TypeSequence([supertype])
+
+        if isinstance(supertype, TypeSequence):
             if self._is_empty() and supertype._is_empty():
                 return Substitutions()
             elif (
@@ -506,13 +507,17 @@ class TypeSequence(Type, Iterable['StackItemType']):
                 return Substitutions({self._rest: supertype})
             elif not self._individual_types:
                 if (
+                    self._is_empty()
+                    and supertype._is_empty()
+                    or self._rest is supertype._rest
+                ):
+                    return Substitutions()
+                if (
                     self._rest
                     and self._rest not in rigid_variables
                     and self._rest not in supertype.free_type_variables()
                 ):
                     return Substitutions({self._rest: supertype})
-                elif self._is_empty() and supertype._is_empty():
-                    return Substitutions()
                 elif (
                     self._is_empty()
                     and supertype._rest
