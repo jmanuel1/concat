@@ -17,9 +17,11 @@ class TestSmallExamples(unittest.TestCase):
 
                 # We place a substitute stack effect parser in the dictionary
                 parsers['stack-effect-type'] = (
-                    parsers.token('NAME').many()
+                    parsers.token('LPAR')
+                    >> parsers.token('NAME').many()
                     >> parsers.token('MINUSMINUS')
                     >> parsers.token('NAME').many()
+                    >> parsers.token('RPAR')
                 )
 
                 # for example programs, we only test acceptance

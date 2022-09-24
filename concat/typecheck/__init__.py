@@ -368,18 +368,11 @@ def infer(
                 S = current_subs
                 f = current_effect
                 name = node.name
-                declared_type: Optional[StackEffect]
-                if node.stack_effect:
-                    declared_type, _ = node.stack_effect.to_type(S(gamma))
-                    declared_type = S(declared_type)
-                else:
-                    # NOTE: To continue the "bidirectional" bent, we will require a
-                    # type annotation.
-                    # TODO: Make the return types optional?
-                    # FIXME: Should be a parse error.
-                    raise TypeError(
-                        'must have type annotation on function definition'
-                    )
+                # NOTE: To continue the "bidirectional" bent, we will require a
+                # type annotation.
+                # TODO: Make the return types optional?
+                declared_type, _ = node.stack_effect.to_type(S(gamma))
+                declared_type = S(declared_type)
                 recursion_env = gamma.copy()
                 recursion_env[name] = declared_type.generalized_wrt(S(gamma))
                 phi1, inferred_type = infer(
@@ -731,10 +724,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
             >> name
             >> parsy.success(None)
         )
-        lpar = parsers.token('LPAR')
-        rpar = parsers.token('RPAR')
-        nested_stack_effect = lpar >> parsers['stack-effect-type'] << rpar
-        type = parsers['type'] | individual_type_variable | nested_stack_effect
+        type = parsers['type'] | individual_type_variable_parser
 
         # TODO: Allow type-only items
         item = parsy.seq(
@@ -767,21 +757,14 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
     def stack_effect_type_parser() -> Generator:
         separator = parsers.token('MINUSMINUS')
 
-        stack_effect = parsy.seq(  # type: ignore
-            parsers['type-sequence'] << separator, parsers['type-sequence']
-        )
+        location = (yield parsers.token('LPAR')).start
 
-        i, o = yield stack_effect
+        i = yield parsers['type-sequence'] << separator
+        o = yield parsers['type-sequence']
 
-        # FIXME: Get the location
-        return StackEffectTypeNode((0, 0), i, o)
+        yield parsers.token('RPAR')
 
-    @parsy.generate
-    def intersection_type_parser() -> Generator:
-        yield parsers.token('AMPER')
-        type_1 = yield parsers['type']
-        type_2 = yield parsers['type']
-        return IntersectionTypeNode(type_1.location, type_1, type_2)
+        return StackEffectTypeNode(location, i, o)
 
     parsers['stack-effect-type'] = concat.parser_combinators.desc_cumulatively(
         stack_effect_type_parser, 'stack effect type'

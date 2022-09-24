@@ -292,7 +292,7 @@ class FuncdefStatementNode(StatementNode):
         annotation: Optional[Iterable[WordNode]],
         body: 'WordsOrStatements',
         location: 'Location',
-        stack_effect: Optional['StackEffectTypeNode'] = None,
+        stack_effect: 'StackEffectTypeNode',
     ):
         super().__init__()
         self.location = location
@@ -513,7 +513,7 @@ def extension(parsers: ParserDict) -> None:
     )
 
     # This parses a function definition.
-    # funcdef statement = DEF, NAME, [ LPAR, stack effect, RPAR ], decorator*,
+    # funcdef statement = DEF, NAME, stack effect, decorator*,
     #   [ annotation ], COLON, suite ;
     # decorator = AT, word ;
     # annotation = RARROW, word* ;
@@ -524,11 +524,7 @@ def extension(parsers: ParserDict) -> None:
     def funcdef_statement_parser() -> Generator:
         location = (yield parsers.token('DEF')).start
         name = yield parsers.token('NAME')
-        if (yield parsers.token('LPAR').optional()):
-            effect_ast = yield parsers['stack-effect-type']
-            yield parsers.token('RPAR')
-        else:
-            effect_ast = None
+        effect_ast = yield parsers['stack-effect-type']
         decorators = yield decorator.many()
         annotation = yield annotation_parser.optional()
         yield parsers.token('COLON')
