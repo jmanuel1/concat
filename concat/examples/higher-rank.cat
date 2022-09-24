@@ -1,5 +1,5 @@
 # IN: ''
-# OUT: "5\nhello\n"
+# OUT: "5\nhello\n7\n"
 from concat.stdlib.pyinterop import to_dict
 
 
@@ -7,8 +7,12 @@ def put_output(i:`t -- ):
   [(),] None to_dict swap $print py_call drop
 
 
+def remove_stack_polymorphism(f:forall `t *s. (*s i:`t -- *s) -- g:forall `t. (i:`t -- )):
+  ()
+
+
 def main(f:forall *s `t. (*s i:`t -- *s) -- ):
-  5 over call 'hello' swap call
+  5 over call 'hello' over call remove_stack_polymorphism 7 swap call
 
 
 $:~put_output main

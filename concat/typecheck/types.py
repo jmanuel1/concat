@@ -6,6 +6,7 @@ from concat.typecheck import (
 )
 import concat.typecheck
 from typing import (
+    AbstractSet,
     Optional,
     Dict,
     Iterable,
@@ -31,7 +32,7 @@ import builtins
 
 
 if TYPE_CHECKING:
-    from concat.typecheck import Substitutions
+    from concat.typecheck import Environment, Substitutions
 
 
 class Type(abc.ABC):
@@ -83,7 +84,7 @@ class Type(abc.ABC):
     def constrain_and_bind_supertype_variables(
         self,
         supertype: 'Type',
-        rigid_variables: Set['_Variable'],
+        rigid_variables: AbstractSet['_Variable'],
         subtyping_assumptions: List[Tuple['IndividualType', 'IndividualType']],
     ) -> 'Substitutions':
         pass
@@ -92,11 +93,15 @@ class Type(abc.ABC):
     def constrain_and_bind_subtype_variables(
         self,
         supertype: 'Type',
-        rigid_variables: Set['_Variable'],
+        rigid_variables: AbstractSet['_Variable'],
         subtyping_assumptions: List[Tuple['IndividualType', 'IndividualType']],
     ) -> 'Substitutions':
         pass
 
+    # QUESTION: Should I remove this? Should I not distinguish between subtype
+    # and supertype variables in the other two constraint methods? I should
+    # look bidirectional typing with polymorphism/generics. Maybe 'Complete and
+    # Easy'?
     def constrain(self, supertype: 'Type') -> None:
         if not self.is_subtype_of(supertype):
             raise TypeError(
@@ -110,9 +115,6 @@ class Type(abc.ABC):
 class IndividualType(Type, abc.ABC):
     def to_for_all(self) -> Type:
         return ForAll([], self)
-
-    def __and__(self, other: object) -> 'IndividualType':
-        raise NotImplementedError('take advantage of constraints instead')
 
     def is_subtype_of(self, supertype: Type) -> bool:
         if isinstance(supertype, _OptionalType):
@@ -152,7 +154,7 @@ class IndividualVariable(_Variable, IndividualType):
     def constrain_and_bind_supertype_variables(
         self,
         supertype: Type,
-        rigid_variables: Set['_Variable'],
+        rigid_variables: AbstractSet['_Variable'],
         subtyping_assumptions: List[Tuple[IndividualType, IndividualType]],
     ) -> 'Substitutions':
         from concat.typecheck import Substitutions
@@ -187,7 +189,7 @@ class IndividualVariable(_Variable, IndividualType):
     def constrain_and_bind_subtype_variables(
         self,
         supertype: Type,
-        rigid_variables: Set['_Variable'],
+        rigid_variables: AbstractSet['_Variable'],
         subtyping_assumptions: List[Tuple[IndividualType, IndividualType]],
     ) -> 'Substitutions':
         from concat.typecheck import Substitutions
@@ -248,7 +250,7 @@ class SequenceVariable(_Variable):
     def constrain_and_bind_supertype_variables(
         self,
         supertype: Type,
-        rigid_variables: Set['_Variable'],
+        rigid_variables: AbstractSet['_Variable'],
         subtyping_assumptions: List[Tuple['IndividualType', 'IndividualType']],
     ) -> 'Substitutions':
         from concat.typecheck import Substitutions
@@ -273,7 +275,7 @@ class SequenceVariable(_Variable):
     def constrain_and_bind_subtype_variables(
         self,
         supertype: Type,
-        rigid_variables: Set['_Variable'],
+        rigid_variables: AbstractSet['_Variable'],
         subtyping_assumptions: List[Tuple['IndividualType', 'IndividualType']],
     ) -> 'Substitutions':
         from concat.typecheck import Substitutions
@@ -372,7 +374,7 @@ class TypeSequence(Type, Iterable['StackItemType']):
     def constrain_and_bind_supertype_variables(
         self,
         supertype: Type,
-        rigid_variables: Set['_Variable'],
+        rigid_variables: AbstractSet['_Variable'],
         subtyping_assumptions: List[Tuple['IndividualType', 'IndividualType']],
     ) -> 'Substitutions':
         """Check that self is a subtype of supertype.
@@ -480,7 +482,7 @@ class TypeSequence(Type, Iterable['StackItemType']):
     def constrain_and_bind_subtype_variables(
         self,
         supertype: Type,
-        rigid_variables: Set['_Variable'],
+        rigid_variables: AbstractSet['_Variable'],
         subtyping_assumptions: List[Tuple['IndividualType', 'IndividualType']],
     ) -> 'Substitutions':
         from concat.typecheck import Substitutions
@@ -638,14 +640,11 @@ class _Function(IndividualType):
     def __iter__(self) -> Iterator['TypeSequence']:
         return iter((self.input, self.output))
 
-    def generalized_wrt(self, gamma: Dict[str, Type]) -> Type:
+    def generalized_wrt(self, gamma: 'Environment') -> Type:
         return ObjectType(
             IndividualVariable(),
             {'__call__': self,},
-            list(
-                self.free_type_variables()
-                - _free_type_variables_of_mapping(gamma)
-            ),
+            list(self.free_type_variables() - gamma.free_type_variables()),
         )
 
     def can_be_complete_program(self) -> bool:
@@ -718,7 +717,7 @@ class _Function(IndividualType):
     def constrain_and_bind_supertype_variables(
         self,
         supertype: Type,
-        rigid_variables: Set['_Variable'],
+        rigid_variables: AbstractSet['_Variable'],
         subtyping_assumptions: List[Tuple[IndividualType, IndividualType]],
     ) -> 'Substitutions':
         if not isinstance(supertype, StackEffect):
@@ -738,7 +737,7 @@ class _Function(IndividualType):
     def constrain_and_bind_subtype_variables(
         self,
         supertype: Type,
-        rigid_variables: Set['_Variable'],
+        rigid_variables: AbstractSet['_Variable'],
         subtyping_assumptions: List[Tuple[IndividualType, IndividualType]],
     ) -> 'Substitutions':
         if not isinstance(supertype, StackEffect):
@@ -835,7 +834,7 @@ class QuotationType(_Function):
     def constrain_and_bind_supertype_variables(
         self,
         supertype: Type,
-        rigid_variables: Set['_Variable'],
+        rigid_variables: AbstractSet['_Variable'],
         subtyping_assumptions: List[Tuple[IndividualType, IndividualType]],
     ) -> 'Substitutions':
         if (
@@ -859,7 +858,7 @@ class QuotationType(_Function):
     def constrain_and_bind_subtype_variables(
         self,
         supertype: Type,
-        rigid_variables: Set['_Variable'],
+        rigid_variables: AbstractSet['_Variable'],
         subtyping_assumptions: List[Tuple[IndividualType, IndividualType]],
     ) -> 'Substitutions':
         if (
@@ -911,7 +910,7 @@ def inst(sigma: _Function) -> IndividualType:
 StackItemType = Union[SequenceVariable, IndividualType]
 
 
-def _free_type_variables_of_mapping(
+def free_type_variables_of_mapping(
     attributes: Mapping[str, Type]
 ) -> OrderedSet[_Variable]:
     ftv: OrderedSet[_Variable] = OrderedSet([])
@@ -1083,7 +1082,7 @@ class ObjectType(IndividualType):
     def constrain_and_bind_supertype_variables(
         self,
         supertype: Type,
-        rigid_variables: Set['_Variable'],
+        rigid_variables: AbstractSet['_Variable'],
         subtyping_assumptions: List[Tuple[IndividualType, IndividualType]],
     ) -> 'Substitutions':
         from concat.typecheck import Substitutions
@@ -1105,27 +1104,11 @@ class ObjectType(IndividualType):
 
         # To support higher-rank polymorphism, polymorphic types are subtypes
         # of their instances.
-        if self._arity != 0:
-            subtyping_assumptions_copy = subtyping_assumptions[:]
-            try:
-                return self.instantiate().constrain_and_bind_supertype_variables(
-                    supertype, rigid_variables, subtyping_assumptions
-                )
-            except TypeError:
-                pass
-            finally:
-                subtyping_assumptions = subtyping_assumptions_copy
 
         if isinstance(supertype, StackEffect):
-            if self._arity != 0:
-                raise TypeError(
-                    'type constructor {} expected at least one argument and cannot be a stack effect (expected effect {})'.format(
-                        self, supertype
-                    )
-                )
-
             subtyping_assumptions.append((self, supertype))
 
+            self = self.instantiate()
             # We know self is not a type constructor here, so there's no need
             # to worry about variable binding
             return self.get_type_of_attribute(
@@ -1135,12 +1118,12 @@ class ObjectType(IndividualType):
             )
         elif not isinstance(supertype, ObjectType):
             raise NotImplementedError(supertype)
-        if self._arity != supertype._arity:
+        if self._arity < supertype._arity:
             raise TypeError(
-                '{} and {} do not have the same arity'.format(self, supertype)
+                '{} is not as polymorphic as {}'.format(self, supertype)
             )
-        # every object type with zero arity is a subtype of object_type
-        if self._arity == 0 and supertype == object_type:
+        # every object type is a subtype of object_type
+        if supertype == object_type:
             return Substitutions()
         # Don't forget that there's nominal subtyping too.
         if supertype._nominal:
@@ -1177,8 +1160,8 @@ class ObjectType(IndividualType):
         sub = Substitutions()
         # We must not bind any type parameters in self or supertype! To support
         # higher-rank polymorphism, let's instantiate both types. At this
-        # point, they should have the same arity.
-        assert self._arity == supertype._arity
+        # point, self should be at least as polymorphic as supertype.
+        assert self._arity >= supertype._arity
         self = self.instantiate()
         supertype = supertype.instantiate()
         for name in supertype._attributes:
@@ -1193,7 +1176,7 @@ class ObjectType(IndividualType):
     def constrain_and_bind_subtype_variables(
         self,
         supertype: Type,
-        rigid_variables: Set['_Variable'],
+        rigid_variables: AbstractSet['_Variable'],
         subtyping_assumptions: List[Tuple[IndividualType, IndividualType]],
     ) -> 'Substitutions':
         from concat.typecheck import Substitutions
@@ -1216,27 +1199,11 @@ class ObjectType(IndividualType):
 
         # To support higher-rank polymorphism, polymorphic types are subtypes
         # of their instances.
-        if self._arity != 0:
-            subtyping_assumptions_copy = subtyping_assumptions[:]
-            try:
-                return self.instantiate().constrain_and_bind_subtype_variables(
-                    supertype, rigid_variables, subtyping_assumptions
-                )
-            except TypeError:
-                pass
-            finally:
-                subtyping_assumptions = subtyping_assumptions_copy
 
         if isinstance(supertype, StackEffect):
-            if self._arity != 0:
-                raise TypeError(
-                    'type constructor {} expected at least one argument and cannot be a stack effect (expected effect {})'.format(
-                        self, supertype
-                    )
-                )
-
             subtyping_assumptions.append((self, supertype))
 
+            self = self.instantiate()
             # We know self is not a type constructor here, so there's no need
             # to worry about variable binding
             return self.get_type_of_attribute(
@@ -1246,12 +1213,12 @@ class ObjectType(IndividualType):
             )
         elif not isinstance(supertype, ObjectType):
             raise NotImplementedError(supertype)
-        if self._arity != supertype._arity:
+        if self._arity < supertype._arity:
             raise TypeError(
-                '{} and {} do not have the same arity'.format(self, supertype)
+                '{} is not as polymorphic as {}'.format(self, supertype)
             )
-        # every object type with zero arity is a subtype of object_type
-        if self._arity == 0 and supertype == object_type:
+        # every object type is a subtype of object_type
+        if supertype == object_type:
             return Substitutions()
         # Don't forget that there's nominal subtyping too.
         if supertype._nominal:
@@ -1288,8 +1255,8 @@ class ObjectType(IndividualType):
         sub = Substitutions()
         # We must not bind any type parameters in self or supertype! To support
         # higher-rank polymorphism, let's instantiate both types. At this
-        # point, they should have the same arity.
-        assert self._arity == supertype._arity
+        # point, self should be at least as polymorphic as supertype.
+        assert self._arity >= supertype._arity
         self = self.instantiate()
         supertype = supertype.instantiate()
         for name in supertype._attributes:
@@ -1322,7 +1289,7 @@ class ObjectType(IndividualType):
         )
 
     def free_type_variables(self) -> OrderedSet[_Variable]:
-        ftv = _free_type_variables_of_mapping(self.attributes)
+        ftv = free_type_variables_of_mapping(self.attributes)
         for arg in self.type_arguments:
             ftv |= arg.free_type_variables()
         # QUESTION: Include supertypes?
@@ -1613,19 +1580,10 @@ class PythonFunctionType(ObjectType):
     def constrain_and_bind_supertype_variables(
         self,
         supertype: Type,
-        rigid_variables: Set['_Variable'],
+        rigid_variables: AbstractSet['_Variable'],
         subtyping_assumptions: List[Tuple[IndividualType, IndividualType]],
     ) -> 'Substitutions':
         from concat.typecheck import Substitutions
-
-        if self._arity != 0 and supertype._arity == 0:
-            subtyping_assumptions_copy = subtyping_assumptions[:]
-            try:
-                return self.instantiate().constrain_and_bind_supertype_variables(
-                    supertype, rigid_variables, subtyping_assumptions
-                )
-            finally:
-                subtyping_assumptions[:] = subtyping_assumptions_copy
 
         sub = super().constrain_and_bind_supertype_variables(
             supertype, rigid_variables, subtyping_assumptions
@@ -1633,7 +1591,7 @@ class PythonFunctionType(ObjectType):
 
         if (
             isinstance(supertype, PythonFunctionType)
-            and supertype._arity == self._arity
+            and supertype._arity <= self._arity
         ):
             self = self.instantiate()
             supertype = supertype.instantiate()
@@ -1680,19 +1638,10 @@ class PythonFunctionType(ObjectType):
     def constrain_and_bind_subtype_variables(
         self,
         supertype: Type,
-        rigid_variables: Set['_Variable'],
+        rigid_variables: AbstractSet['_Variable'],
         subtyping_assumptions: List[Tuple[IndividualType, IndividualType]],
     ) -> 'Substitutions':
         from concat.typecheck import Substitutions
-
-        if self._arity != 0 and supertype._arity == 0:
-            subtyping_assumptions_copy = subtyping_assumptions[:]
-            try:
-                return self.instantiate().constrain_and_bind_subtype_variables(
-                    supertype, rigid_variables, subtyping_assumptions
-                )
-            finally:
-                subtyping_assumptions[:] = subtyping_assumptions_copy
 
         sub = super().constrain_and_bind_subtype_variables(
             supertype, rigid_variables, subtyping_assumptions
@@ -1700,7 +1649,7 @@ class PythonFunctionType(ObjectType):
 
         if (
             isinstance(supertype, PythonFunctionType)
-            and supertype._arity == self._arity
+            and supertype._arity <= self._arity
         ):
             self = self.instantiate()
             supertype = supertype.instantiate()

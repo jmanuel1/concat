@@ -33,6 +33,7 @@ import concat.parse
 
 if TYPE_CHECKING:
     import concat.astutils
+    from concat.orderedset import OrderedSet
     from concat.typecheck.types import _Variable
 
 
@@ -152,6 +153,7 @@ from concat.typecheck.types import (
     bool_type,
     context_manager_type,
     ellipsis_type,
+    free_type_variables_of_mapping,
     int_type,
     init_primitives,
     invertible_type,
@@ -176,6 +178,9 @@ class Environment(Dict[str, Type]):
 
     def apply_substitution(self, sub: 'Substitutions') -> 'Environment':
         return Environment({name: sub(t) for name, t in self.items()})
+
+    def free_type_variables(self) -> 'OrderedSet[_Variable]':
+        return free_type_variables_of_mapping(self)
 
 
 def check(
@@ -397,7 +402,13 @@ def infer(
                 # the declared outputs. Thus, inferred_type.output should be a subtype
                 # declared_type.output.
                 try:
-                    inferred_type.output.constrain(declared_type.output)
+                    S = inferred_type.output.constrain_and_bind_subtype_variables(
+                        declared_type.output,
+                        S(recursion_env).free_type_variables(),
+                        [],
+                    )(
+                        S
+                    )
                 except TypeError:
                     message = (
                         'declared function type {} is not compatible with '
