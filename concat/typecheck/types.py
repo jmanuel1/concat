@@ -1108,15 +1108,15 @@ class ObjectType(IndividualType):
         if isinstance(supertype, StackEffect):
             subtyping_assumptions.append((self, supertype))
 
-            self = self.instantiate()
-            # We know self is not a type constructor here, so there's no need
-            # to worry about variable binding
-            return self.get_type_of_attribute(
+            instantiated_self = self.instantiate()
+            # We know instantiated_self is not a type constructor here, so
+            # there's no need to worry about variable binding
+            return instantiated_self.get_type_of_attribute(
                 '__call__'
             ).constrain_and_bind_supertype_variables(
                 supertype, rigid_variables, subtyping_assumptions
             )
-        elif not isinstance(supertype, ObjectType):
+        if not isinstance(supertype, ObjectType):
             raise NotImplementedError(supertype)
         if self._arity < supertype._arity:
             raise TypeError(
@@ -1162,10 +1162,10 @@ class ObjectType(IndividualType):
         # higher-rank polymorphism, let's instantiate both types. At this
         # point, self should be at least as polymorphic as supertype.
         assert self._arity >= supertype._arity
-        self = self.instantiate()
+        instantiated_self = self.instantiate()
         supertype = supertype.instantiate()
         for name in supertype._attributes:
-            type = self.get_type_of_attribute(name)
+            type = instantiated_self.get_type_of_attribute(name)
             sub = sub(type).constrain_and_bind_supertype_variables(
                 sub(supertype.get_type_of_attribute(name)),
                 rigid_variables,
@@ -1203,15 +1203,15 @@ class ObjectType(IndividualType):
         if isinstance(supertype, StackEffect):
             subtyping_assumptions.append((self, supertype))
 
-            self = self.instantiate()
+            instantiated_self = self.instantiate()
             # We know self is not a type constructor here, so there's no need
             # to worry about variable binding
-            return self.get_type_of_attribute(
+            return instantiated_self.get_type_of_attribute(
                 '__call__'
             ).constrain_and_bind_subtype_variables(
                 supertype, rigid_variables, subtyping_assumptions
             )
-        elif not isinstance(supertype, ObjectType):
+        if not isinstance(supertype, ObjectType):
             raise NotImplementedError(supertype)
         if self._arity < supertype._arity:
             raise TypeError(
@@ -1257,10 +1257,10 @@ class ObjectType(IndividualType):
         # higher-rank polymorphism, let's instantiate both types. At this
         # point, self should be at least as polymorphic as supertype.
         assert self._arity >= supertype._arity
-        self = self.instantiate()
+        instantiated_self = self.instantiate()
         supertype = supertype.instantiate()
         for name in supertype._attributes:
-            type = self.get_type_of_attribute(name)
+            type = instantiated_self.get_type_of_attribute(name)
             sub = type.constrain_and_bind_subtype_variables(
                 supertype.get_type_of_attribute(name),
                 rigid_variables,
@@ -1593,7 +1593,7 @@ class PythonFunctionType(ObjectType):
             isinstance(supertype, PythonFunctionType)
             and supertype._arity <= self._arity
         ):
-            self = self.instantiate()
+            instantiated_self = self.instantiate()
             supertype = supertype.instantiate()
 
             # ObjectType constrains the attributes, not the type arguments
@@ -1604,7 +1604,10 @@ class PythonFunctionType(ObjectType):
             # parameters at this point.
 
             # Support overloading the subtype.
-            for overload in [(self.input, self.output), *self._overloads]:
+            for overload in [
+                (instantiated_self.input, instantiated_self.output),
+                *instantiated_self._overloads,
+            ]:
                 try:
                     subtyping_assumptions_copy = subtyping_assumptions[:]
                     self_input_types = TypeSequence(overload[0])
@@ -1617,7 +1620,7 @@ class PythonFunctionType(ObjectType):
                         sub
                     )
                     sub = sub(
-                        self.output
+                        instantiated_self.output
                     ).constrain_and_bind_supertype_variables(
                         sub(supertype.output),
                         rigid_variables,
@@ -1651,14 +1654,17 @@ class PythonFunctionType(ObjectType):
             isinstance(supertype, PythonFunctionType)
             and supertype._arity <= self._arity
         ):
-            self = self.instantiate()
+            instantiated_self = self.instantiate()
             supertype = supertype.instantiate()
 
             # ObjectType constrains the attributes, not the type arguments
             # directly, so we'll doo that here. This isn't problematic because
             # we know the variance of the arguments here.
 
-            for overload in [(self.input, self.output), *self._overloads]:
+            for overload in [
+                (instantiated_self.input, instantiated_self.output),
+                *instantiated_self._overloads,
+            ]:
                 try:
                     subtyping_assumptions_copy = subtyping_assumptions[:]
                     self_input_types = TypeSequence(overload[0])
@@ -1671,7 +1677,7 @@ class PythonFunctionType(ObjectType):
                         sub
                     )
                     sub = sub(
-                        self.output
+                        instantiated_self.output
                     ).constrain_and_bind_subtype_variables(
                         sub(supertype.output),
                         rigid_variables,

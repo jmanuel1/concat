@@ -272,7 +272,9 @@ def infer(
                     )
                 else:
                     raise UnhandledNodeTypeError(
-                        'quoted word {} (repr {!r})'.format(child, child)
+                        'quoted word {child} (repr {child!r})'.format(
+                            child=child
+                        )
                     )
             elif isinstance(node, concat.parse.ListWordNode):
                 phi = S
@@ -723,6 +725,8 @@ class StackEffectTypeNode(IndividualTypeNode):
 
 
 class _IndividualVariableNode(IndividualTypeNode):
+    """The AST type for individual type variables."""
+
     def __init__(self, name: Token) -> None:
         super().__init__(name.start)
         self._name = name.value
@@ -733,14 +737,14 @@ class _IndividualVariableNode(IndividualTypeNode):
         # QUESTION: Should callers be expected to have already introduced the
         # name into the context?
         if self._name in env:
-            type = env[self._name]
-            if not isinstance(type, IndividualVariable):
+            ty = env[self._name]
+            if not isinstance(ty, IndividualVariable):
                 error = TypeError(
-                    '{} is not an individual type variable'.format(self._name)
+                    f'{self._name} is not an individual type variable'
                 )
                 error.location = self.location
                 raise error
-            return type, env
+            return ty, env
 
         env = env.copy()
         var = IndividualVariable()
@@ -753,6 +757,8 @@ class _IndividualVariableNode(IndividualTypeNode):
 
 
 class _SequenceVariableNode(TypeNode):
+    """The AST type for sequence type variables."""
+
     def __init__(self, name: Token) -> None:
         super().__init__(name.start)
         self._name = name.value
@@ -763,14 +769,14 @@ class _SequenceVariableNode(TypeNode):
         # QUESTION: Should callers be expected to have already introduced the
         # name into the context?
         if self._name in env:
-            type = env[self._name]
-            if not isinstance(type, SequenceVariable):
+            ty = env[self._name]
+            if not isinstance(ty, SequenceVariable):
                 error = TypeError(
-                    '{} is not an sequence type variable'.format(self._name)
+                    f'{self._name} is not an sequence type variable'
                 )
                 error.location = self.location
                 raise error
-            return type, env
+            return ty, env
 
         env = env.copy()
         var = SequenceVariable()
@@ -783,52 +789,54 @@ class _SequenceVariableNode(TypeNode):
 
 
 class _ForallTypeNode(TypeNode):
+    """The AST type for universally quantified types."""
+
     def __init__(
         self,
         location: 'concat.astutils.Location',
         type_variables: Sequence[
             Union[_IndividualVariableNode, _SequenceVariableNode]
         ],
-        type: TypeNode,
+        ty: TypeNode,
     ) -> None:
         super().__init__(location)
         self._type_variables = type_variables
-        self._type = type
+        self._type = ty
 
     def to_type(self, env: Environment) -> Tuple[Type, Environment]:
         temp_env = env.copy()
-        vars = []
+        variables = []
         for var in self._type_variables:
             parameter, temp_env = var.to_type(temp_env)
-            vars.append(parameter)
-        type, _ = self._type.to_type(temp_env)
-        forall_type = ForAll(vars, type)
+            variables.append(parameter)
+        ty, _ = self._type.to_type(temp_env)
+        forall_type = ForAll(variables, ty)
         return forall_type, env
 
 
 def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
     @parsy.generate
     def non_star_name_parser() -> Generator:
-        name = yield parsers.token('NAME')
+        name = yield concat.parse.token('NAME')
         if name.value == '*':
             yield parsy.fail('name that is not star (*)')
         return name
 
     @parsy.generate
     def named_type_parser() -> Generator:
-        name_token = yield parsers.token('NAME')
+        name_token = yield concat.parse.token('NAME')
         return NamedTypeNode(name_token.start, name_token.value)
 
     @parsy.generate
     def individual_type_variable_parser() -> Generator:
-        yield parsers.token('BACKTICK')
+        yield concat.parse.token('BACKTICK')
         name = yield non_star_name_parser
 
         return _IndividualVariableNode(name)
 
     @parsy.generate
     def sequence_type_variable_parser() -> Generator:
-        star = yield parsers.token('NAME')
+        star = yield concat.parse.token('NAME')
         if star.value != '*':
             yield parsy.fail('star (*)')
         name = yield non_star_name_parser
@@ -841,7 +849,8 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
 
         # TODO: Allow type-only items
         item = parsy.seq(
-            non_star_name_parser, (parsers.token('COLON') >> type).optional()
+            non_star_name_parser,
+            (concat.parse.token('COLON') >> type).optional(),
         ).map(_TypeSequenceIndividualTypeNode)
         items = item.many()
 
@@ -849,7 +858,6 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         seq_var_parsed: Optional[_SequenceVariableNode]
         seq_var_parsed = yield seq_var.optional()
         i = yield items
-        seq_var_value = None
 
         if seq_var_parsed is None and i:
             location = i[0].location
@@ -862,14 +870,14 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
 
     @parsy.generate
     def stack_effect_type_parser() -> Generator:
-        separator = parsers.token('MINUSMINUS')
+        separator = concat.parse.token('MINUSMINUS')
 
-        location = (yield parsers.token('LPAR')).start
+        location = (yield concat.parse.token('LPAR')).start
 
         i = yield parsers['type-sequence'] << separator
         o = yield parsers['type-sequence']
 
-        yield parsers.token('RPAR')
+        yield concat.parse.token('RPAR')
 
         return StackEffectTypeNode(location, i, o)
 
@@ -880,16 +888,16 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
     @parsy.generate
     def generic_type_parser() -> Generator:
         type = yield parsers['nonparameterized-type']
-        yield parsers.token('LSQB')
+        yield concat.parse.token('LSQB')
         type_arguments = yield parsers['type'].sep_by(
-            parsers.token('COMMA'), min=1
+            concat.parse.token('COMMA'), min=1
         )
-        yield parsers.token('RSQB')
+        yield concat.parse.token('RSQB')
         return _GenericTypeNode(type.location, type, type_arguments)
 
     @parsy.generate
     def forall_type_parser() -> Generator:
-        forall = yield parsers.token('NAME')
+        forall = yield concat.parse.token('NAME')
         if forall.value != 'forall':
             yield parsy.fail('the word "forall"')
 
@@ -897,11 +905,11 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
             individual_type_variable_parser | sequence_type_variable_parser
         ).at_least(1)
 
-        yield parsers.token('DOT')
+        yield concat.parse.token('DOT')
 
-        type = yield parsers['type']
+        ty = yield parsers['type']
 
-        return _ForallTypeNode(forall.start, type_variables, type)
+        return _ForallTypeNode(forall.start, type_variables, ty)
 
     # TODO: Parse type variables
     parsers['nonparameterized-type'] = parsy.alt(

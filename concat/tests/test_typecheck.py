@@ -203,9 +203,7 @@ class TestStackEffectParser(unittest.TestCase):
                 try:
                     effect = build_parsers()['stack-effect-type'].parse(tokens)
                 except parsy.ParseError as e:
-                    self.fail(
-                        'could not parse {}\n{}'.format(effect_string, e)
-                    )
+                    self.fail(f'could not parse {effect_string}\n{e}')
                 env = Environment(concat.typecheck.preamble_types.types)
                 actual = effect.to_type(env)[0].generalized_wrt(env)
                 expected = self.examples[example].generalized_wrt(env)
