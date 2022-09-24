@@ -7,6 +7,7 @@ The type inference algorithm was originally based on the one described in
 import abc
 import builtins
 import collections.abc
+from concat.lex import Token
 import importlib
 import sys
 from typing import (
@@ -215,11 +216,18 @@ def infer(
 
             if isinstance(node, concat.parse.PushWordNode):
                 S1, (i1, o1) = S, (i, o)
-                # special case for pushing an attribute accessor
                 child = node.children[0]
+                if isinstance(child, concat.parse.FreezeWordNode):
+                    should_instantiate = False
+                    child = child.word
+                else:
+                    should_instantiate = True
+                # special case for pushing an attribute accessor
                 if isinstance(child, concat.parse.AttributeWordNode):
                     top = o1[-1]
                     attr_type = top.get_type_of_attribute(child.value)
+                    if should_instantiate:
+                        attr_type = attr_type.instantiate()
                     rest_types = o1[:-1]
                     current_subs, current_effect = (
                         S1,
@@ -229,16 +237,15 @@ def infer(
                 elif isinstance(child, concat.parse.NameWordNode):
                     if child.value not in gamma:
                         raise NameError(child)
-                    name_type = gamma[child.value].instantiate()
+                    name_type = gamma[child.value]
+                    if should_instantiate:
+                        name_type = name_type.instantiate()
                     current_effect = StackEffect(
                         current_effect.input,
                         [*current_effect.output, current_subs(name_type)],
                     )
-                else:
-                    if (
-                        isinstance(child, concat.parse.QuoteWordNode)
-                        and child.input_stack_type is not None
-                    ):
+                elif isinstance(child, concat.parse.QuoteWordNode):
+                    if child.input_stack_type is not None:
                         input_stack, _ = child.input_stack_type.to_type(gamma)
                     else:
                         # The majority of quotations I've written don't comsume
@@ -257,6 +264,10 @@ def infer(
                             S2(TypeSequence(i1)),
                             [*S2(TypeSequence(o1)), QuotationType(fun_type)],
                         ),
+                    )
+                else:
+                    raise UnhandledNodeTypeError(
+                        'quoted word {} (repr {!r})'.format(child, child)
                     )
             elif isinstance(node, concat.parse.ListWordNode):
                 phi = S
@@ -611,7 +622,7 @@ class TypeSequenceNode(TypeNode):
     def __init__(
         self,
         location: Optional[concat.astutils.Location],
-        seq_var: Optional[str],
+        seq_var: Optional['_SequenceVariableNode'],
         individual_type_items: Iterable[_TypeSequenceIndividualTypeNode],
     ) -> None:
         super().__init__(location or (-1, -1))
@@ -623,17 +634,18 @@ class TypeSequenceNode(TypeNode):
         if self._sequence_variable is None:
             # implicit stack polymorphism
             sequence.append(SequenceVariable())
-        elif self._sequence_variable not in env:
+        elif self._sequence_variable.name not in env:
             env = env.copy()
-            env[self._sequence_variable] = SequenceVariable()
-            sequence.append(env[self._sequence_variable])
+            var = SequenceVariable()
+            env[self._sequence_variable.name] = var
+            sequence.append(var)
         for type_node in self._individual_type_items:
             type, env = type_node.to_type(env)
             sequence.append(type)
         return TypeSequence(sequence), env
 
     @property
-    def sequence_variable(self) -> Optional[str]:
+    def sequence_variable(self) -> Optional['_SequenceVariableNode']:
         return self._sequence_variable
 
     @property
@@ -671,19 +683,21 @@ class StackEffectTypeNode(IndividualTypeNode):
         b_bar = a_bar
         new_env = env.copy()
         if self.input_sequence_variable is not None:
-            if self.input_sequence_variable in new_env:
+            if self.input_sequence_variable.name in new_env:
                 a_bar = cast(
-                    SequenceVariable, new_env[self.input_sequence_variable],
+                    SequenceVariable,
+                    new_env[self.input_sequence_variable.name],
                 )
-            new_env[self.input_sequence_variable] = a_bar
+            new_env[self.input_sequence_variable.name] = a_bar
         if self.output_sequence_variable is not None:
-            if self.output_sequence_variable in new_env:
+            if self.output_sequence_variable.name in new_env:
                 b_bar = cast(
-                    SequenceVariable, new_env[self.output_sequence_variable],
+                    SequenceVariable,
+                    new_env[self.output_sequence_variable.name],
                 )
             else:
                 b_bar = SequenceVariable()
-                new_env[self.output_sequence_variable] = b_bar
+                new_env[self.output_sequence_variable.name] = b_bar
 
         in_types = []
         for item in self.input:
@@ -697,14 +711,97 @@ class StackEffectTypeNode(IndividualTypeNode):
         return StackEffect([a_bar, *in_types], [b_bar, *out_types]), new_env
 
 
+class _IndividualVariableNode(IndividualTypeNode):
+    def __init__(self, name: Token) -> None:
+        super().__init__(name.start)
+        self._name = name.value
+
+    def to_type(
+        self, env: Environment
+    ) -> Tuple[IndividualVariable, Environment]:
+        # QUESTION: Should callers be expected to have already introduced the
+        # name into the context?
+        if self._name in env:
+            type = env[self._name]
+            if not isinstance(type, IndividualVariable):
+                error = TypeError(
+                    '{} is not an individual type variable'.format(self._name)
+                )
+                error.location = self.location
+                raise error
+            return type, env
+
+        env = env.copy()
+        var = IndividualVariable()
+        env[self._name] = var
+        return var, env
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+
+class _SequenceVariableNode(TypeNode):
+    def __init__(self, name: Token) -> None:
+        super().__init__(name.start)
+        self._name = name.value
+
+    def to_type(
+        self, env: Environment
+    ) -> Tuple[SequenceVariable, Environment]:
+        # QUESTION: Should callers be expected to have already introduced the
+        # name into the context?
+        if self._name in env:
+            type = env[self._name]
+            if not isinstance(type, SequenceVariable):
+                error = TypeError(
+                    '{} is not an sequence type variable'.format(self._name)
+                )
+                error.location = self.location
+                raise error
+            return type, env
+
+        env = env.copy()
+        var = SequenceVariable()
+        env[self._name] = var
+        return var, env
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+
+class _ForallTypeNode(TypeNode):
+    def __init__(
+        self,
+        location: 'concat.astutils.Location',
+        type_variables: Sequence[
+            Union[_IndividualVariableNode, _SequenceVariableNode]
+        ],
+        type: TypeNode,
+    ) -> None:
+        super().__init__(location)
+        self._type_variables = type_variables
+        self._type = type
+
+    def to_type(self, env: Environment) -> Tuple[Type, Environment]:
+        temp_env = env.copy()
+        vars = []
+        for var in self._type_variables:
+            parameter, temp_env = var.to_type(temp_env)
+            vars.append(parameter)
+        type, _ = self._type.to_type(temp_env)
+        forall_type = ForAll(vars, type)
+        return forall_type, env
+
+
 def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
     @parsy.generate
-    def attribute_type_parser() -> Generator:
-        location = (yield parsers.token('DOT')).start
-        name = (yield parsers.token('NAME')).value
-        yield parsers.token('COLON')
-        type = yield parsers['type']
-        raise NotImplementedError('better think about the syntax of this')
+    def non_star_name_parser() -> Generator:
+        name = yield parsers.token('NAME')
+        if name.value == '*':
+            yield parsy.fail('name that is not star (*)')
+        return name
 
     @parsy.generate
     def named_type_parser() -> Generator:
@@ -712,46 +809,45 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         return NamedTypeNode(name_token.start, name_token.value)
 
     @parsy.generate
+    def individual_type_variable_parser() -> Generator:
+        yield parsers.token('BACKTICK')
+        name = yield non_star_name_parser
+
+        return _IndividualVariableNode(name)
+
+    @parsy.generate
+    def sequence_type_variable_parser() -> Generator:
+        star = yield parsers.token('NAME')
+        if star.value != '*':
+            yield parsy.fail('star (*)')
+        name = yield non_star_name_parser
+
+        return _SequenceVariableNode(name)
+
+    @parsy.generate
     def type_sequence_parser() -> Generator:
-        name = parsers.token('NAME').bind(
-            lambda token: parsy.success(token)
-            if token.value != '*'
-            else parsy.fail('name that is not star (*)')
-        )
-        individual_type_variable = (
-            # FIXME: Keep track of individual type variables
-            parsers.token('BACKTICK')
-            >> name
-            >> parsy.success(None)
-        )
         type = parsers['type'] | individual_type_variable_parser
 
         # TODO: Allow type-only items
         item = parsy.seq(
-            name, (parsers.token('COLON') >> type).optional()
+            non_star_name_parser, (parsers.token('COLON') >> type).optional()
         ).map(_TypeSequenceIndividualTypeNode)
         items = item.many()
 
-        seq_var = (
-            parsers.token('NAME').bind(
-                lambda token: parsy.success(token)
-                if token.value == '*'
-                else parsy.fail('star (*)')
-            )
-            >> name
-        )
-        seq_var_parsed, i = yield parsy.seq(seq_var.optional(), items)
+        seq_var = sequence_type_variable_parser
+        seq_var_parsed: Optional[_SequenceVariableNode]
+        seq_var_parsed = yield seq_var.optional()
+        i = yield items
         seq_var_value = None
 
         if seq_var_parsed is None and i:
             location = i[0].location
         elif seq_var_parsed is not None:
-            location = seq_var_parsed.start
-            seq_var_value = seq_var_parsed.value
+            location = seq_var_parsed.location
         else:
             location = None
 
-        return TypeSequenceNode(location, seq_var_value, i)
+        return TypeSequenceNode(location, seq_var_parsed, i)
 
     @parsy.generate
     def stack_effect_type_parser() -> Generator:
@@ -780,14 +876,24 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         yield parsers.token('RSQB')
         return _GenericTypeNode(type.location, type, type_arguments)
 
+    @parsy.generate
+    def forall_type_parser() -> Generator:
+        forall = yield parsers.token('NAME')
+        if forall.value != 'forall':
+            yield parsy.fail('the word "forall"')
+
+        type_variables = yield (
+            individual_type_variable_parser | sequence_type_variable_parser
+        ).at_least(1)
+
+        yield parsers.token('DOT')
+
+        type = yield parsers['type']
+
+        return _ForallTypeNode(forall.start, type_variables, type)
+
     # TODO: Parse type variables
     parsers['nonparameterized-type'] = parsy.alt(
-        concat.parser_combinators.desc_cumulatively(
-            intersection_type_parser, 'intersection type'
-        ),
-        concat.parser_combinators.desc_cumulatively(
-            attribute_type_parser, 'attribute type'
-        ),
         concat.parser_combinators.desc_cumulatively(
             named_type_parser, 'named type'
         ),
@@ -795,6 +901,10 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
     )
 
     parsers['type'] = parsy.alt(
+        # NOTE: There's a parsing ambiguity that might come back to bite me...
+        concat.parser_combinators.desc_cumulatively(
+            forall_type_parser, 'forall type'
+        ),
         concat.parser_combinators.desc_cumulatively(
             generic_type_parser, 'generic type'
         ),
@@ -867,27 +977,26 @@ def _generate_module_type(
 
 
 def _ensure_type(
-    typename: Union[Optional[NamedTypeNode], StackEffectTypeNode],
-    env: Environment,
-    obj_name: str,
-) -> Tuple[Type, Environment]:
-    type: Type
-    if obj_name in env:
+    typename: Optional[TypeNode], env: Environment, obj_name: Optional[str],
+) -> Tuple[StackItemType, Environment]:
+    type: StackItemType
+    if obj_name and obj_name in env:
         type = cast(StackItemType, env[obj_name])
     elif typename is None:
         # NOTE: This could lead type varibles in the output of a function that
         # are unconstrained. In other words, it would basically become an Any
         # type.
         type = IndividualVariable()
-    elif isinstance(
-        typename, (_GenericTypeNode, NamedTypeNode, StackEffectTypeNode)
-    ):
-        type, env = typename.to_type(env)
+    elif isinstance(typename, TypeNode):
+        type, env = cast(
+            Tuple[StackItemType, Environment], typename.to_type(env)
+        )
     else:
         raise NotImplementedError(
             'Cannot turn {!r} into a type'.format(typename)
         )
-    env[obj_name] = type
+    if obj_name:
+        env[obj_name] = type
     return type, env
 
 

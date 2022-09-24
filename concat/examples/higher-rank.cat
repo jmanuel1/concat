@@ -1,0 +1,14 @@
+# IN: ''
+# OUT: "5\nhello\n"
+from concat.stdlib.pyinterop import to_dict
+
+
+def put_output(i:`t -- ):
+  [(),] None to_dict swap $print py_call drop
+
+
+def main(f:forall *s `t. (*s i:`t -- *s) -- ):
+  5 over call 'hello' swap call
+
+
+$:~put_output main

@@ -120,6 +120,22 @@ class CastWordNode(WordNode):
         )
 
 
+class FreezeWordNode(WordNode):
+    def __init__(self, location: 'Location', word: WordNode) -> None:
+        super().__init__()
+        self.location = location
+        self.children = [word]
+        self.word = word
+
+    def __str__(self) -> str:
+        return ':~{}'.format(self.word)
+
+    def __repr__(self) -> str:
+        return '{}({!r}, {!r})'.format(
+            type(self).__qualname__, self.location, self.word
+        )
+
+
 class PushWordNode(WordNode):
     def __init__(self, child: WordNode):
         super().__init__()
@@ -426,10 +442,15 @@ def extension(parsers: ParserDict) -> None:
     parsers['quote-word'] = quote_word_parser
 
     # This parses a push word into a node.
-    # push word = DOLLARSIGN, word ;
+    # push word = DOLLARSIGN, (word | freeze word) ;
+    # TODO: raise a parse error 'Cannot apply a word of polymorphic type. Maybe
+    # try pushing the function and applying `call` to it?' for freeze words
+    # outside a push.
     word = parsers.ref_parser('word')
     dollarSign = parsers.token('DOLLARSIGN')
-    parsers['push-word'] = dollarSign >> word.map(PushWordNode)
+    parsers['push-word'] = dollarSign >> (
+        parsers.ref_parser('freeze-word') | word
+    ).map(PushWordNode)
 
     # Parsers an attribute word.
     # attribute word = DOT, NAME ;
@@ -669,3 +690,30 @@ def extension(parsers: ParserDict) -> None:
     parsers['cast-word'] = concat.parser_combinators.desc_cumulatively(
         cast_word_parser, 'cast word'
     )
+
+    @parsy.generate
+    def tilde_parser() -> Generator:
+        name = yield parsers.token('NAME')
+        if name.value != '~':
+            yield parsy.fail('a tilde (~)')
+        return name
+
+    @parsy.generate
+    def freeze_word_parser() -> Generator:
+        location = (yield parsers.token('COLON')).start
+        yield tilde_parser
+        word = yield (parsers['name-word'] | parsers['attribute-word'])
+        return FreezeWordNode(location, word)
+
+    # This parses a freeze word.
+    # freeze word = COLON, TILDE, (name word | attr word) ;
+    # The freeze word prevents instantiation of type variables in the word that
+    # follows it. Inspiration: https://arxiv.org/pdf/2004.00396.pdf ("FreezeML:
+    # Complete and Easy Type Inference for First-Class Polymorphism")
+    parsers['freeze-word'] = concat.parser_combinators.desc_cumulatively(
+        freeze_word_parser, 'freeze word'
+    )
+
+    # TODO: Have an error message for called freeze words in particular. This
+    # causes the parser to loop.
+    # parsers['word'] |= parsers['freeze-word'].should_fail('not a freeze word, which has polymorphic type')

@@ -12,6 +12,7 @@ from typing import (
     Iterator,
     Sequence,
     Tuple,
+    TypeVar,
     Union,
     List,
     Iterator,
@@ -919,6 +920,7 @@ def init_primitives():
 
 
 TypeArguments = Sequence[Union[StackItemType, TypeSequence]]
+_T = TypeVar('_T')
 
 
 class ObjectType(IndividualType):
@@ -1095,7 +1097,21 @@ class ObjectType(IndividualType):
                     self, supertype
                 )
             )
-        elif isinstance(supertype, StackEffect):
+
+        # To support higher-rank polymorphism, polymorphic types are subtypes
+        # of their instances.
+        if self._arity != 0:
+            subtyping_assumptions_copy = subtyping_assumptions[:]
+            try:
+                return self.instantiate().constrain_and_bind_supertype_variables(
+                    supertype, rigid_variables, subtyping_assumptions
+                )
+            except TypeError:
+                pass
+            finally:
+                subtyping_assumptions = subtyping_assumptions_copy
+
+        if isinstance(supertype, StackEffect):
             if self._arity != 0:
                 raise TypeError(
                     'type constructor {} expected at least one argument and cannot be a stack effect (expected effect {})'.format(
@@ -1154,14 +1170,14 @@ class ObjectType(IndividualType):
         # don't constrain the type arguments, constrain those based on
         # the attributes
         sub = Substitutions()
+        # We must not bind any type parameters in self or supertype! To support
+        # higher-rank polymorphism, let's instantiate both types. At this
+        # point, they should have the same arity.
+        assert self._arity == supertype._arity
+        self = self.instantiate()
+        supertype = supertype.instantiate()
         for name in supertype._attributes:
             type = self.get_type_of_attribute(name)
-            # We must not bind any type parameters in self or supertype!
-            rigid_variables = (
-                rigid_variables
-                | set(self.type_parameters)
-                | set(supertype.type_parameters)
-            )
             sub = sub(type).constrain_and_bind_supertype_variables(
                 sub(supertype.get_type_of_attribute(name)),
                 rigid_variables,
@@ -1192,7 +1208,21 @@ class ObjectType(IndividualType):
                     self, supertype
                 )
             )
-        elif isinstance(supertype, StackEffect):
+
+        # To support higher-rank polymorphism, polymorphic types are subtypes
+        # of their instances.
+        if self._arity != 0:
+            subtyping_assumptions_copy = subtyping_assumptions[:]
+            try:
+                return self.instantiate().constrain_and_bind_subtype_variables(
+                    supertype, rigid_variables, subtyping_assumptions
+                )
+            except TypeError:
+                pass
+            finally:
+                subtyping_assumptions = subtyping_assumptions_copy
+
+        if isinstance(supertype, StackEffect):
             if self._arity != 0:
                 raise TypeError(
                     'type constructor {} expected at least one argument and cannot be a stack effect (expected effect {})'.format(
@@ -1251,14 +1281,14 @@ class ObjectType(IndividualType):
         # don't constrain the type arguments, constrain those based on
         # the attributes
         sub = Substitutions()
+        # We must not bind any type parameters in self or supertype! To support
+        # higher-rank polymorphism, let's instantiate both types. At this
+        # point, they should have the same arity.
+        assert self._arity == supertype._arity
+        self = self.instantiate()
+        supertype = supertype.instantiate()
         for name in supertype._attributes:
             type = self.get_type_of_attribute(name)
-            # We must not bind any type parameters in self or supertype!
-            rigid_variables = (
-                rigid_variables
-                | set(self.type_parameters)
-                | set(supertype.type_parameters)
-            )
             sub = type.constrain_and_bind_subtype_variables(
                 supertype.get_type_of_attribute(name),
                 rigid_variables,
@@ -1368,7 +1398,7 @@ class ObjectType(IndividualType):
 
         return result
 
-    def instantiate(self) -> 'ObjectType':
+    def instantiate(self: _T) -> _T:
         # Avoid overwriting the type arguments if type is already instantiated.
         if self._arity == 0:
             return self
@@ -1583,6 +1613,15 @@ class PythonFunctionType(ObjectType):
     ) -> 'Substitutions':
         from concat.typecheck import Substitutions
 
+        if self._arity != 0 and supertype._arity == 0:
+            subtyping_assumptions_copy = subtyping_assumptions[:]
+            try:
+                return self.instantiate().constrain_and_bind_supertype_variables(
+                    supertype, rigid_variables, subtyping_assumptions
+                )
+            finally:
+                subtyping_assumptions[:] = subtyping_assumptions_copy
+
         sub = super().constrain_and_bind_supertype_variables(
             supertype, rigid_variables, subtyping_assumptions
         )
@@ -1591,8 +1630,9 @@ class PythonFunctionType(ObjectType):
             isinstance(supertype, PythonFunctionType)
             and supertype._arity == self._arity
         ):
-            if self._arity != 0:
-                raise NotImplementedError('constructor subtyping')
+            self = self.instantiate()
+            supertype = supertype.instantiate()
+
             # ObjectType constrains the attributes, not the type arguments
             # directly, so we'll doo that here. This isn't problematic because
             # we know the variance of the arguments here.
@@ -1640,6 +1680,15 @@ class PythonFunctionType(ObjectType):
     ) -> 'Substitutions':
         from concat.typecheck import Substitutions
 
+        if self._arity != 0 and supertype._arity == 0:
+            subtyping_assumptions_copy = subtyping_assumptions[:]
+            try:
+                return self.instantiate().constrain_and_bind_subtype_variables(
+                    supertype, rigid_variables, subtyping_assumptions
+                )
+            finally:
+                subtyping_assumptions[:] = subtyping_assumptions_copy
+
         sub = super().constrain_and_bind_subtype_variables(
             supertype, rigid_variables, subtyping_assumptions
         )
@@ -1648,8 +1697,9 @@ class PythonFunctionType(ObjectType):
             isinstance(supertype, PythonFunctionType)
             and supertype._arity == self._arity
         ):
-            if self._arity != 0:
-                raise NotImplementedError('constructor subtyping')
+            self = self.instantiate()
+            supertype = supertype.instantiate()
+
             # ObjectType constrains the attributes, not the type arguments
             # directly, so we'll doo that here. This isn't problematic because
             # we know the variance of the arguments here.
