@@ -179,9 +179,12 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
     @assert_annotated_type
     def push_word_visitor(node: concat.parse.PushWordNode) -> ast.expr:
         """Converts a PushWordNode to a Python lambda abstraction."""
+        pushed_node = node.children[0]
+        if isinstance(pushed_node, concat.parse.FreezeWordNode):
+            pushed_node = pushed_node.word
         child = Choice(
             visitors['pushed-word-special-case'], visitors['word']
-        ).visit(list(node.children)[0])
+        ).visit(pushed_node)
         args = ast.arguments(
             args=[ast.arg('stack', None), ast.arg('stash', None)],
             vararg=None,

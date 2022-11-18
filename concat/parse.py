@@ -45,6 +45,7 @@ from typing import (
 import concat.lex
 import concat.astutils
 from concat.parser_combinators import desc_cumulatively
+from concat.parser_dict import ParserDict
 import parsy
 
 if TYPE_CHECKING:
@@ -118,6 +119,25 @@ class CastWordNode(WordNode):
         return '{}({!r}, {!r})'.format(
             type(self).__qualname__, self.type, self.location
         )
+
+
+class FreezeWordNode(WordNode):
+    """The AST type for freeze words.
+
+    Freeze words prevent a polymorphic term's type from being instantiated.
+    """
+
+    def __init__(self, location: 'Location', word: WordNode) -> None:
+        super().__init__()
+        self.location = location
+        self.children = [word]
+        self.word = word
+
+    def __str__(self) -> str:
+        return f':~{self.word}'
+
+    def __repr__(self) -> str:
+        return f'{type(self).__qualname__}({self.location!r}, {self.word!r})'
 
 
 class PushWordNode(WordNode):
@@ -212,29 +232,6 @@ class AttributeWordNode(WordNode):
 T = TypeVar('T')
 
 
-class ParserDict(Dict[str, parsy.Parser]):
-    def __init__(self) -> None:
-        # These parsers act on lists of tokens.
-        pass
-
-    def extend_with(self: T, extension: Callable[[T], None]) -> None:
-        extension(self)
-
-    def parse(self, tokens: Sequence['concat.lex.Token']) -> TopLevelNode:
-        return self['top-level'].parse(list(tokens))
-
-    def token(self, typ: str) -> parsy.Parser:
-        description = '{} token'.format(typ)
-        return parsy.test_item(lambda token: token.type == typ, description)
-
-    def ref_parser(self, name: str) -> parsy.Parser:
-        @parsy.generate
-        def parser():
-            return (yield self[name])
-
-        return parser
-
-
 if TYPE_CHECKING:
     from concat.typecheck import StackEffectTypeNode
 
@@ -292,7 +289,7 @@ class FuncdefStatementNode(StatementNode):
         annotation: Optional[Iterable[WordNode]],
         body: 'WordsOrStatements',
         location: 'Location',
-        stack_effect: Optional['StackEffectTypeNode'] = None,
+        stack_effect: 'StackEffectTypeNode',
     ):
         super().__init__()
         self.location = location
@@ -354,6 +351,11 @@ class ClassdefStatementNode(StatementNode):
         self.keyword_args = keyword_args
 
 
+def token(typ: str) -> parsy.Parser:
+    description = f'{typ} token'
+    return parsy.test_item(lambda token: token.type == typ, description)
+
+
 def extension(parsers: ParserDict) -> None:
     # This parses the top level of a file.
     # top level =
@@ -361,8 +363,8 @@ def extension(parsers: ParserDict) -> None:
     #   ENDMARKER ;
     @parsy.generate
     def top_level_parser() -> Generator[parsy.Parser, Any, TopLevelNode]:
-        encoding = yield parsers.token('ENCODING')
-        newline = parsers.token('NEWLINE')
+        encoding = yield token('ENCODING')
+        newline = token('NEWLINE')
         statement = parsers['statement']
         word = parsers['word']
         children = yield (word | statement | newline).many()
@@ -371,7 +373,7 @@ def extension(parsers: ParserDict) -> None:
             for child in children
             if not isinstance(child, concat.lex.Token)
         ]
-        yield parsers.token('ENDMARKER')
+        yield token('ENDMARKER')
         return TopLevelNode(encoding, children)
 
     parsers['top-level'] = desc_cumulatively(top_level_parser, 'top level')
@@ -401,40 +403,45 @@ def extension(parsers: ParserDict) -> None:
         'number-word'
     ) | parsers.ref_parser('string-word')
 
-    parsers['name-word'] = parsers.token('NAME').map(NameWordNode)
+    parsers['name-word'] = token('NAME').map(NameWordNode)
 
-    parsers['number-word'] = parsers.token('NUMBER').map(NumberWordNode)
+    parsers['number-word'] = token('NUMBER').map(NumberWordNode)
 
-    parsers['string-word'] = parsers.token('STRING').map(StringWordNode)
+    parsers['string-word'] = token('STRING').map(StringWordNode)
 
     # This parses a quotation.
     # quote word = LPAR, word*, RPAR ;
     @parsy.generate('quote word')
     def quote_word_parser() -> Generator[parsy.Parser, Any, QuoteWordNode]:
-        lpar = yield parsers.token('LPAR')
+        lpar = yield token('LPAR')
         if 'type-sequence' in parsers:
-            input_stack_type_parser = parsers[
-                'type-sequence'
-            ] << parsers.token('COLON')
+            input_stack_type_parser = parsers['type-sequence'] << token(
+                'COLON'
+            )
             input_stack_type = yield input_stack_type_parser.optional()
         else:
             input_stack_type = None
         children = yield parsers['word'].many()
-        yield parsers.token('RPAR')
+        yield token('RPAR')
         return QuoteWordNode(children, lpar.start, input_stack_type)
 
     parsers['quote-word'] = quote_word_parser
 
     # This parses a push word into a node.
-    # push word = DOLLARSIGN, word ;
+    # push word = DOLLARSIGN, (word | freeze word) ;
+    # TODO: raise a parse error 'Cannot apply a word of polymorphic type. Maybe
+    # try pushing the function and applying `call` to it?' for freeze words
+    # outside a push.
     word = parsers.ref_parser('word')
-    dollarSign = parsers.token('DOLLARSIGN')
-    parsers['push-word'] = dollarSign >> word.map(PushWordNode)
+    dollarSign = token('DOLLARSIGN')
+    parsers['push-word'] = dollarSign >> (
+        parsers.ref_parser('freeze-word') | word
+    ).map(PushWordNode)
 
     # Parsers an attribute word.
     # attribute word = DOT, NAME ;
-    dot = parsers.token('DOT')
-    name = parsers.token('NAME')
+    dot = token('DOT')
+    name = token('NAME')
     parsers['attribute-word'] = dot >> name.map(AttributeWordNode)
 
     parsers['literal-word'] |= parsy.alt(
@@ -445,16 +452,16 @@ def extension(parsers: ParserDict) -> None:
 
     # This parses a bytes word.
     # bytes word = BYTES ;
-    parsers['bytes-word'] = parsers.token('BYTES').map(BytesWordNode)
+    parsers['bytes-word'] = token('BYTES').map(BytesWordNode)
 
     def iterable_word_parser(
         delimiter: str, cls: Type[IterableWordNode], desc: str
     ) -> 'parsy.Parser[Token, IterableWordNode]':
         @parsy.generate
         def parser() -> Generator:
-            location = (yield parsers.token('L' + delimiter)).start
+            location = (yield token('L' + delimiter)).start
             element_words = yield word_list_parser
-            yield parsers.token('R' + delimiter)
+            yield token('R' + delimiter)
             return cls(element_words, location)
 
         return concat.parser_combinators.desc_cumulatively(parser, desc)
@@ -474,15 +481,11 @@ def extension(parsers: ParserDict) -> None:
     # word list = (COMMA | word+, COMMA | word+, (COMMA, word+)+, [ COMMA ]) ;
     @parsy.generate('word list')
     def word_list_parser() -> Generator:
-        empty: 'parsy.Parser[Token, List[Words]]' = parsers.token(
-            'COMMA'
-        ).result([])
-        singleton = parsy.seq(
-            parsers['word'].at_least(1) << parsers.token('COMMA')
-        )
+        empty: 'parsy.Parser[Token, List[Words]]' = token('COMMA').result([])
+        singleton = parsy.seq(parsers['word'].at_least(1) << token('COMMA'))
         multiple_element = (
-            parsers['word'].at_least(1).sep_by(parsers.token('COMMA'), min=2)
-            << parsers.token('COMMA').optional()
+            parsers['word'].at_least(1).sep_by(token('COMMA'), min=2)
+            << token('COMMA').optional()
         )
         element_words = yield (multiple_element | singleton | empty)
         return element_words
@@ -495,25 +498,21 @@ def extension(parsers: ParserDict) -> None:
     from concat.astutils import flatten
 
     parsers['target-words'] = (
-        parsers.ref_parser('target-word').sep_by(parsers.token('COMMA'), min=1)
-        << parsers.token('COMMA').optional()
+        parsers.ref_parser('target-word').sep_by(token('COMMA'), min=1)
+        << token('COMMA').optional()
     ).map(flatten)
 
     parsers['target-word'] = parsy.alt(
         parsers.ref_parser('name-word'),
-        parsers.token('LPAR')
-        >> parsers.ref_parser('target-words')
-        << parsers.token('RPAR'),
-        parsers.token('LSQB')
-        >> parsers.ref_parser('target-words')
-        << parsers.token('RSQB'),
+        token('LPAR') >> parsers.ref_parser('target-words') << token('RPAR'),
+        token('LSQB') >> parsers.ref_parser('target-words') << token('RSQB'),
         parsers.ref_parser('attribute-word'),
         parsers.ref_parser('subscription-word'),
         parsers.ref_parser('slice-word'),
     )
 
     # This parses a function definition.
-    # funcdef statement = DEF, NAME, [ LPAR, stack effect, RPAR ], decorator*,
+    # funcdef statement = DEF, NAME, stack effect, decorator*,
     #   [ annotation ], COLON, suite ;
     # decorator = AT, word ;
     # annotation = RARROW, word* ;
@@ -522,16 +521,12 @@ def extension(parsers: ParserDict) -> None:
     # The stack effect syntax is defined within the typecheck module.
     @parsy.generate
     def funcdef_statement_parser() -> Generator:
-        location = (yield parsers.token('DEF')).start
-        name = yield parsers.token('NAME')
-        if (yield parsers.token('LPAR').optional()):
-            effect_ast = yield parsers['stack-effect-type']
-            yield parsers.token('RPAR')
-        else:
-            effect_ast = None
+        location = (yield token('DEF')).start
+        name = yield token('NAME')
+        effect_ast = yield parsers['stack-effect-type']
         decorators = yield decorator.many()
         annotation = yield annotation_parser.optional()
-        yield parsers.token('COLON')
+        yield token('COLON')
         body = yield suite
         return FuncdefStatementNode(
             name, decorators, annotation, body, location, effect_ast
@@ -541,29 +536,27 @@ def extension(parsers: ParserDict) -> None:
         funcdef_statement_parser, 'funcdef statement'
     )
 
-    decorator = parsers.token('NAME').bind(
+    decorator = token('NAME').bind(
         lambda token: parsy.success(token)
         if token.value == '@'
         else parsy.fail('at sign (@)')
     ) >> parsers.ref_parser('word')
 
-    annotation_parser = (
-        parsers.token('RARROW') >> parsers.ref_parser('word').many()
-    )
+    annotation_parser = token('RARROW') >> parsers.ref_parser('word').many()
 
     @parsy.generate
     def suite():
         words = parsers['word'].at_least(1)
         statement = parsy.seq(parsers['statement'])
         block_content = (
-            parsers['word'] << parsers.token('NEWLINE').optional()
-            | parsers['statement'] << parsers.token('NEWLINE')
+            parsers['word'] << token('NEWLINE').optional()
+            | parsers['statement'] << token('NEWLINE')
         ).at_least(1)
         indented_block = (
-            parsers.token('NEWLINE').optional()
-            >> parsers.token('INDENT')
+            token('NEWLINE').optional()
+            >> token('INDENT')
             >> block_content
-            << parsers.token('DEDENT')
+            << token('DEDENT')
         )
         return (yield indented_block | statement | words)
 
@@ -571,8 +564,8 @@ def extension(parsers: ParserDict) -> None:
 
     @parsy.generate('module')
     def module():
-        name = parsers.token('NAME').map(operator.attrgetter('value'))
-        return '.'.join((yield name.sep_by(parsers.token('DOT'), min=1)))
+        name = token('NAME').map(operator.attrgetter('value'))
+        return '.'.join((yield name.sep_by(token('DOT'), min=1)))
 
     # These following parsers parse import statements.
     # import statement = IMPORT, module, [ AS, NAME ]
@@ -583,11 +576,11 @@ def extension(parsers: ParserDict) -> None:
 
     @parsy.generate('import statement')
     def import_statement_parser() -> Generator:
-        location = (yield parsers.token('IMPORT')).start
+        location = (yield token('IMPORT')).start
         module_name = yield module
-        asname_parser = parsers.token('NAME').map(operator.attrgetter('value'))
+        asname_parser = token('NAME').map(operator.attrgetter('value'))
         asname = None
-        if (yield parsers.token('AS').optional()):
+        if (yield token('AS').optional()):
             asname = yield asname_parser
         return ImportStatementNode(module_name, asname, location)
 
@@ -595,18 +588,18 @@ def extension(parsers: ParserDict) -> None:
 
     @parsy.generate('relative module')
     def relative_module():
-        dot = parsers.token('DOT').map(operator.attrgetter('value'))
+        dot = token('DOT').map(operator.attrgetter('value'))
         return (yield (dot.many().concat() + module) | dot.at_least(1))
 
     @parsy.generate('from-import statement')
     def from_import_statement_parser() -> Generator:
-        location = (yield parsers.token('FROM')).start
+        location = (yield token('FROM')).start
         module = yield relative_module
-        name_parser = parsers.token('NAME').map(operator.attrgetter('value'))
+        name_parser = token('NAME').map(operator.attrgetter('value'))
         # TODO: Support importing multiple names at once
-        imported_name = yield parsers.token('IMPORT') >> name_parser
+        imported_name = yield token('IMPORT') >> name_parser
         asname = None
-        if (yield parsers.token('AS').optional()):
+        if (yield token('AS').optional()):
             asname = yield name_parser
         return FromImportStatementNode(module, imported_name, asname, location)
 
@@ -614,10 +607,10 @@ def extension(parsers: ParserDict) -> None:
 
     @parsy.generate('from-import-star statement')
     def from_import_star_statement_parser() -> Generator:
-        location = (yield parsers.token('FROM')).start
+        location = (yield token('FROM')).start
         module_name = yield module
-        yield parsers.token('IMPORT')
-        yield parsers.token('STAR')
+        yield token('IMPORT')
+        yield token('STAR')
         return FromImportStarStatementNode(module_name, location)
 
     parsers['import-statement'] |= from_import_star_statement_parser
@@ -629,12 +622,12 @@ def extension(parsers: ParserDict) -> None:
     # keyword arg = NAME, EQUAL, word ;
     @parsy.generate('classdef statement')
     def classdef_statement_parser():
-        location = (yield parsers.token('CLASS')).start
-        name_token = yield parsers.token('NAME')
+        location = (yield token('CLASS')).start
+        name_token = yield token('NAME')
         decorators = yield decorator.many()
         bases_list = yield bases.optional()
         keyword_args = yield keyword_arg.map(tuple).many()
-        yield parsers.token('COLON')
+        yield token('COLON')
         body = yield suite
         return ClassdefStatementNode(
             name_token.value,
@@ -652,8 +645,7 @@ def extension(parsers: ParserDict) -> None:
     )
 
     keyword_arg = parsy.seq(
-        parsers.token('NAME').map(operator.attrgetter('value'))
-        << parsers.token('EQUAL'),
+        token('NAME').map(operator.attrgetter('value')) << token('EQUAL'),
         parsers.ref_parser('word'),
     )
 
@@ -661,10 +653,10 @@ def extension(parsers: ParserDict) -> None:
 
     @parsy.generate
     def cast_word_parser() -> Generator:
-        location = (yield parsers.token('CAST')).start
-        yield parsers.token('LPAR')
+        location = (yield token('CAST')).start
+        yield token('LPAR')
         type_ast = yield parsers['type']
-        yield parsers.token('RPAR')
+        yield token('RPAR')
         return CastWordNode(type_ast, location)
 
     # This parses a cast word.
@@ -673,3 +665,32 @@ def extension(parsers: ParserDict) -> None:
     parsers['cast-word'] = concat.parser_combinators.desc_cumulatively(
         cast_word_parser, 'cast word'
     )
+
+    @parsy.generate
+    def tilde_parser() -> Generator:
+        name = yield token('NAME')
+        if name.value != '~':
+            yield parsy.fail('a tilde (~)')
+        return name
+
+    @parsy.generate
+    def freeze_word_parser() -> Generator:
+        location = (yield token('COLON')).start
+        yield tilde_parser
+        word = yield parsers['name-word'] | parsers['attribute-word']
+        return FreezeWordNode(location, word)
+
+    # This parses a freeze word.
+    # freeze word = COLON, TILDE, (name word | attr word) ;
+    # The freeze word prevents instantiation of type variables in the word that
+    # follows it. Inspiration: https://arxiv.org/pdf/2004.00396.pdf ("FreezeML:
+    # Complete and Easy Type Inference for First-Class Polymorphism")
+    parsers['freeze-word'] = concat.parser_combinators.desc_cumulatively(
+        freeze_word_parser, 'freeze word'
+    )
+
+    # TODO: Have an error message for called freeze words in particular. This
+    # causes the parser to loop.
+    # parsers['word'] |= parsers['freeze-word'].should_fail(
+    #     'not a freeze word, which has polymorphic type'
+    # )
