@@ -473,6 +473,7 @@ class TypeSequence(Type, Iterable['StackItemType']):
                 except StackMismatchError:
                     raise StackMismatchError(self, supertype)
             else:
+                # TODO: Add info about occurs check and rigid variables.
                 raise StackMismatchError(self, supertype)
         else:
             raise TypeError(
@@ -720,6 +721,13 @@ class _Function(IndividualType):
         rigid_variables: AbstractSet['_Variable'],
         subtyping_assumptions: List[Tuple[IndividualType, IndividualType]],
     ) -> 'Substitutions':
+        from concat.typecheck import Substitutions
+
+        if (
+            isinstance(supertype, IndividualVariable)
+            and supertype not in rigid_variables
+        ):
+            return Substitutions({supertype: self})
         if not isinstance(supertype, StackEffect):
             raise TypeError(
                 '{} is not a subtype of {}'.format(self, supertype)
@@ -1803,6 +1811,8 @@ addable_type.set_internal_name('addable_type')
 bool_type = ObjectType(_x, {}, nominal=True)
 bool_type.set_internal_name('bool_type')
 
+# QUESTION: Allow comparison methods to return any object?
+
 _other_type = IndividualVariable()
 geq_comparable_type = ObjectType(
     _x,
@@ -1810,6 +1820,20 @@ geq_comparable_type = ObjectType(
     [_other_type],
 )
 geq_comparable_type.set_internal_name('geq_comparable_type')
+
+leq_comparable_type = ObjectType(
+    _x,
+    {'__le__': py_function_type[TypeSequence([_other_type]), bool_type]},
+    [_other_type],
+)
+leq_comparable_type.set_internal_name('leq_comparable_type')
+
+lt_comparable_type = ObjectType(
+    _x,
+    {'__lt__': py_function_type[TypeSequence([_other_type]), bool_type]},
+    [_other_type],
+)
+lt_comparable_type.set_internal_name('lt_comparable_type')
 
 _int_add_type = py_function_type[TypeSequence([object_type]), _x]
 
@@ -1821,6 +1845,7 @@ int_type = ObjectType(
         '__sub__': _int_add_type,
         '__invert__': py_function_type[TypeSequence([]), _x],
         '__le__': py_function_type[TypeSequence([_x]), bool_type],
+        '__lt__': py_function_type[TypeSequence([_x]), bool_type],
         '__ge__': py_function_type[TypeSequence([_x]), bool_type],
     },
     nominal=True,
@@ -1982,3 +2007,9 @@ subscriptable_type = ObjectType(
     },
     [_index_type_var, _result_type_var],
 )
+
+_answer_type_var = IndividualVariable()
+continuation_monad_type = ObjectType(
+    _x, {}, [_result_type_var, _answer_type_var], nominal=True
+)
+continuation_monad_type.set_internal_name('continuation_monad_type')

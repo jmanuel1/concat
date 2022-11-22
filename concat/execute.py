@@ -155,6 +155,8 @@ def _do_preamble(globals: Dict[str, object], should_log_stacks=False) -> None:
     # Operators
     globals.setdefault('is', lambda s, _: s.append(s.pop() is s.pop()))
     globals.setdefault('>=', lambda s, _: s.append(s.pop(-2) >= s.pop()))
+    globals.setdefault('<=', lambda s, _: s.append(s.pop(-2) <= s.pop()))
+    globals.setdefault('<', lambda s, _: s.append(s.pop(-2) < s.pop()))
     globals.setdefault('-', lambda s, _: s.append(s.pop(-2) - s.pop()))
     globals.setdefault('+', lambda s, _: s.append(s.pop(-2) + s.pop()))
 

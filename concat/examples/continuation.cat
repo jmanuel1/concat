@@ -1,23 +1,42 @@
-# IGNORE
 # IN: ''
 # OUT: '1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n'
 
-# from concat.stdlib.continuation import ContinuationMonad
-from concat.stdlib.continuation import do
+# TODO: Multiple imports in single statement
+from concat.stdlib.continuation import ContinuationMonad
 from concat.stdlib.continuation import call_with_current_continuation
-from concat.stdlib.execution import loop
+from concat.stdlib.continuation import eval_cont
+from concat.stdlib.continuation import cont_pure
+from concat.stdlib.continuation import bind_cont
+from concat.stdlib.continuation import cont_from_cps
+from concat.stdlib.pyinterop import to_dict
+# from concat.stdlib.execution import loop  # FIXME: This line should cause an error when there's no @@types in that module
 
 
-# FIXME: Support type arguments
-def ten_times(k:(int_type -- continuation_monad_type[none_type, int]) -- continuation_monad_type[none_type, int]):
+def abort(k:forall *s. (*s x:`a -- *s n:none) -- n:none):
+  drop None
+
+
+# FIXME: I'm pretty sure the generic continuation monad types are a bit screwed
+# up here. The type definition should enforce the variance of the type
+# arguments.
+
+
+def ten_times(k:forall *s. (*s i:int -- *s c:ContinuationMonad[none, int]) -- c:ContinuationMonad[none, none]):
   # k
-  0 $(1 + over call .eval drop dup 10 <=) loop drop drop
-  $(None) cont
+  0 $(k:forall *s. (*s i:int -- *s c:ContinuationMonad[none, int]) n:int:
+    1 + dup pick call eval_cont drop dup 10 <
+  ) loop drop drop
+  $:~abort cont_from_cps
+
 
 def put_output(i:int -- ):
   [(),] None to_dict swap $print py_call drop
 
-$(
-  ($ten_times call_with_current_continuation)
-  (put_output None return)
-) do .eval
+
+def put_output_cont(i:int -- c:ContinuationMonad[none, none]):
+  put_output None cont_pure
+
+
+($:~ten_times call_with_current_continuation)
+$:~put_output_cont bind_cont  # QUESTION: Allow polymorphic quotations so you don't have to define an auxiliary function?
+eval_cont
