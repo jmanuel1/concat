@@ -19,7 +19,8 @@ module.exports = class Concat {
         start: token.start[1],
         end: token.end[1],
         value: token.value,
-        type: { type: token.type }
+        type: { type: token.type },
+        isKeyword: token.is_keyword
       };
     });
 

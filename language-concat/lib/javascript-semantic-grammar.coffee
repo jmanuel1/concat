@@ -73,15 +73,19 @@ class JavaScriptSemanticGrammar extends Grammar
 
   tokenScopes: (token, text) ->
     if token.type.type is "NAME"
-      colorIndexScope = "color-index-" + @colorIndex(text)
-      return "identifier." + colorIndexScope
+      if ["None", "True", "False", "Ellipsis", "...", "NotImplemented"].includes(token.value)
+        return "identifier.constant"
+      return "identifier"
     else if token.type.type is "COMMENT"
       return "comment"
-    else if ["DEF", "IMPORT", "FROM", "AS", "CLASS", "CAST"].includes(token.type.type)
+    else if token.isKeyword
       return "keyword"
     else if token.type.type is "NUMBER"
-      return "number"
+      return "constant.numeric"
     else if token.type.type is "STRING"
+      firstQuoteIndex = Math.max(token.value.indexOf("'"), token.value.indexOf('"'))
+      if /r/i.test(token.value.slice(0, firstQuoteIndex))
+        return "string.regexp"
       return "string"
     return null
 

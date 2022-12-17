@@ -64,7 +64,7 @@ sys.argv = [sys.argv[0], *rest]
 
 if args.tokenize:
     code = args.file.read()
-    tokens = concat.lex.tokenize(code)
+    tokens = concat.lex.tokenize(code, should_preserve_comments=True)
     json.dump(tokens, sys.stdout, cls=concat.lex.TokenEncoder)
     exit()
 
