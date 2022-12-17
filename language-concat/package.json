@@ -1,0 +1,14 @@
+{
+  "name": "language-concat",
+  "main": "./lib/main",
+  "version": "0.1.0",
+  "description": "Syntax highlighting for Concat",
+  "repository": "https://github.com/jmanuel1/concat",
+  "license": "MIT",
+  "engines": {
+    "atom": ">=1.57.0 <2.0.0"
+  },
+  "dependencies": {
+    "jquery": "^2"
+  }
+}

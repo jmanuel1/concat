@@ -1,6 +1,7 @@
 import concat.astutils
 import dataclasses
 import io
+import json
 import tokenize as py_tokenize
 from typing import Iterator, List, Optional, Tuple
 
@@ -19,6 +20,13 @@ class Token:
     value: str = ''
     start: 'concat.astutils.Location' = (0, 0)
     end: 'concat.astutils.Location' = (0, 0)
+
+
+class TokenEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Token):
+            return obj.__dict__
+        return super().default(self, obj)
 
 
 def tokenize(code: str) -> List[Token]:
