@@ -18,13 +18,13 @@ import {
 // TODO: Use a dummy textmate grammar instead.
 const Grammar = Object.getPrototypeOf(
   Object.getPrototypeOf(atom.grammars.getGrammars()[0])
-).constructor as new (registry: any, options: any) => Grammar;
-const Concat = require("./concat.js");
+).constructor as new (registry: GrammarRegistry, options: any) => Grammar;
+import Concat from "./concat";
 
 module.exports =
   // QUESTION: Can I just implement the Grammar interface instead?
   JavaScriptSemanticGrammar = class JavaScriptSemanticGrammar extends Grammar {
-    private concat: typeof Concat;
+    private concat: Concat;
     private registry: GrammarRegistry;
     private textEditorsObserver?: Disposable;
 
@@ -119,6 +119,7 @@ module.exports =
             state.changeObserver = editor
               .getBuffer()
               .onDidStopChanging((event) => {
+                // Note: Not fast enough to use editor.onDidChange
                 this.markTokens(event.changes, state);
               });
             concatTextEditors.set(editor, state);
