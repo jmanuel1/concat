@@ -14,10 +14,10 @@ module.exports = class Concat {
       windowsHide: true
     });
     const tokens = JSON.parse(stdout);
-    const remainingTokens = tokens.filter(token => token.start[0] === 1).map(token => {
+    const remainingTokens = tokens.map(token => {
       return {
-        start: token.start[1],
-        end: token.end[1],
+        start: token.start,
+        end: token.end,
         value: token.value,
         type: { type: token.type },
         isKeyword: token.is_keyword

@@ -19,17 +19,12 @@ class JavaScriptSemanticGrammar extends Grammar
     name = "Concat"
     scopeName = "source.concat"
     @concat = new Concat()
-    super(registry, {name, scopeName, fileTypes: ["cat"],
-      # contentRegex: /\bdef\s+\w+\(.*--.*\):|\$\.|\bcast\s*\(\w+\)/
-    })
+    super(registry, {name, scopeName, fileTypes: ["cat"]})
     @registry = registry.textmateRegistry
-    # @fileTypes = [".cat"]
-    # @contentRegex = /\bdef\s+\w+\(.*--.*\):|\$\.|\bcast\s*\(\w+\)/
+    @startMarkingTokens()
 
-  # Ensures that grammar takes precedence over standard JavaScript grammar
-  getScore: ->
-    return 0
-
+  destroy: ->
+    @textEditorsObserver?.destroy()
 
   acornTokenize: (line) ->
     tokens = []
@@ -74,53 +69,73 @@ class JavaScriptSemanticGrammar extends Grammar
   tokenScopes: (token, text) ->
     if token.type.type is "NAME"
       if ["None", "True", "False", "Ellipsis", "...", "NotImplemented"].includes(token.value)
-        return "identifier.constant"
-      return "identifier"
+        return ["identifier", "constant"]
+      return ["identifier"]
     else if token.type.type is "COMMENT"
-      return "comment"
+      return ["comment"]
     else if token.isKeyword
-      return "keyword"
+      return ["keyword"]
     else if token.type.type is "NUMBER"
-      return "constant.numeric"
+      return ["constant", "numeric"]
     else if token.type.type is "STRING"
-      firstQuoteIndex = Math.max(token.value.indexOf("'"), token.value.indexOf('"'))
+      firstQuoteIndex = Math.min(token.value.indexOf("'"), token.value.indexOf('"'))
       if /r/i.test(token.value.slice(0, firstQuoteIndex))
-        return "string.regexp"
-      return "string"
+        return ["string", "regexp"]
+      return ["string"]
     return null
 
   tokenizeLine: (line, ruleStack, firstLine = false) ->
     tags = []
     tokens = []
+    return { line, tags, tokens, ruleStack: [] }
 
-    outerRegistry = @registry
-    console.log outerRegistry
-    addToken = (text, scopes = null) ->
-      fullScopes = "source.concat" + (if scopes? then ("." + scopes) else "")
-      tags.push outerRegistry.startIdForScope(fullScopes)
-      tags.push text.length
-      tags.push outerRegistry.endIdForScope(fullScopes)
-      tokens.push { value: text, scopes: [fullScopes] }
+  startMarkingTokens: ->
+    concatTextEditors = new Map()
+    @textEditorsObserver = atom.workspace.observeTextEditors((editor) =>
+      grammarObserver = editor.observeGrammar((grammar) =>
+        if grammar is @
+          state = {markers: [], buffer: editor.getBuffer(), editor}
+          # initial highlight
+          @markTokens(null, state)
+          state.changeObserver = editor.getBuffer().onDidStopChanging((event) =>
+            @markTokens(event.changes, state))
+          concatTextEditors.set(
+            editor,
+            state
+          )
+        else
+          concatTextEditors.get(editor)?.changeObserver?.dispose()
+          concatTextEditors.get(editor)?.markers?.forEach((marker) -> marker.destroy())
+          concatTextEditors.delete(editor)
+      )
+      destroyObserver = editor.onDidDestroy(->
+        grammarObserver.dispose()
+        destroyObserver.dispose()
+      )
+    )
 
-    acornStartOffset = 0
-    if ruleStack? and "unterminated_comment" in ruleStack
-      # Help Acorn tokenize multi-line comments correctly
-      commentEnd = line.indexOf("*/")
-      if commentEnd is -1
-        # Multi-line comment continues
-        addToken line, "comment"
-        return { line: line, tags: tags, tokens: tokens, ruleStack: ruleStack }
-      else
-        # Make Acorn skip over partial comment
-        acornStartOffset = commentEnd + 2
-        addToken line.substring(0, acornStartOffset), "comment"
+  markTokens: (changes, state) ->
+    @markTokensForChange(changes, state)
 
-    acornLine = line.substring(acornStartOffset)
+  markTokensForChange: (change, state) ->
+    state.markers.forEach((marker) -> marker.destroy())
+    state.markers = []
+    text = state.editor.getText()
 
-    tokenizeResult = @acornTokenize(acornLine)
+    tokens = []
+
+    addToken = (text, range, scopes = null) ->
+      tokens.push { value: text, scopes, range }
+
+    tokenizeResult = @acornTokenize(text)
     acornTokens = tokenizeResult.tokens
     # Comment tokens might have been inserted in the wrong place
-    acornTokens.sort((a, b) -> a.start - b.start)
+    acornTokens.sort((a, b) ->
+      cmp = a.start[0] - b.start[0]
+      if cmp != 0
+        return cmp
+      return a.start[1] - b.start[1]
+    )
 
     tokenPos = 0
     for token in acornTokens
@@ -128,18 +143,17 @@ class JavaScriptSemanticGrammar extends Grammar
       text = token.value
       tokenScopes = @tokenScopes(token, text)
       console.log tokenScopes
+      range = [[token.start[0] - 1, token.start[1]], [token.end[0] - 1, token.end[1]]]
+      console.log token.start, token.end, range
       if tokenScopes?
-        if token.start > tokenPos
-          addToken acornLine.substring(tokenPos, token.start)
-        addToken text, tokenScopes
+        addToken text, range, tokenScopes
         tokenPos = token.end
 
-    if tokenPos < acornLine.length
-      addToken acornLine.substring(tokenPos)
-
-    if tokens.length is 0
-      addToken ""
-
-    console.log tokens
-
-    return { line: line, tags: tags, tokens: tokens, ruleStack: tokenizeResult.rules }
+    for processedToken in tokens
+      # we destroy the markers ourselves
+      marker = state.buffer.markRange(processedToken.range, {invalidate: "never"})
+      state.markers.push(marker)
+      processedToken.scopes.forEach((scope) ->
+        cssClass = "syntax--" + scope
+        state.editor.decorateMarker(marker, {type: "text", class: cssClass})
+      )
