@@ -79,8 +79,7 @@ module.exports =
         const singleQuoteIndex = token.value.indexOf("'");
         const doubleQuoteIndex = token.value.indexOf('"');
         let firstQuoteIndex: number;
-        if (singleQuoteIndex < 0)
-          firstQuoteIndex = doubleQuoteIndex;
+        if (singleQuoteIndex < 0) firstQuoteIndex = doubleQuoteIndex;
         else if (doubleQuoteIndex < 0) {
           firstQuoteIndex = singleQuoteIndex;
         } else {
@@ -142,10 +141,13 @@ module.exports =
       return this.markTokensForChange(changes, state);
     }
 
+    destroyMarkers(markers: DisplayMarker[]): void {
+      markers.forEach((marker) => marker.destroy());
+      markers.splice(0, markers.length);
+    }
+
     async markTokensForChange(change, state) {
       let range;
-      state.markers.forEach((marker) => marker.destroy());
-      state.markers = [];
       let text = state.editor.getText();
 
       const tokens = [];
@@ -173,23 +175,22 @@ module.exports =
         }
       }
 
-      const result = [];
+      // Destroy the markers as late as possible to prevent a flash of unhighlighted text.
+      this.destroyMarkers(state.markers);
+
       for (let processedToken of tokens) {
         // we destroy the markers ourselves
         var marker = state.buffer.markRange(processedToken.range, {
           invalidate: "never",
         });
         state.markers.push(marker);
-        result.push(
-          processedToken.scopes.forEach(function (scope) {
-            const cssClass = "syntax--" + scope;
-            state.editor.decorateMarker(marker, {
-              type: "text",
-              class: cssClass,
-            });
-          })
-        );
+        processedToken.scopes.forEach(function (scope) {
+          const cssClass = "syntax--" + scope;
+          state.editor.decorateMarker(marker, {
+            type: "text",
+            class: cssClass,
+          });
+        });
       }
-      return result;
     }
   };
