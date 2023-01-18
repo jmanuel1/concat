@@ -6,15 +6,13 @@
 //
 // Released under the terms of the MIT License (http://opensource.org/licenses/MIT)
 
-const JavaScriptSemanticGrammar = require("./javascript-semantic-grammar");
+import ConcatGrammar from "./concat-grammar";
 
-let grammar = null;
+let grammar: ConcatGrammar | null = null;
 
 module.exports = {
   activate(state) {
-    atom.grammars.addGrammar(
-      (grammar = new JavaScriptSemanticGrammar(atom.grammars))
-    );
+    atom.grammars.addGrammar((grammar = new ConcatGrammar(atom.grammars)));
   },
 
   deactivate() {

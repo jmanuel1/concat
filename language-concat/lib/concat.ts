@@ -6,8 +6,16 @@ const { promisify } = require("util");
 const execFile = promisify(nodeExecFile);
 const exists = promisify(nodeExists);
 
+export interface Token {
+  start: [number, number],
+  end: [number, number],
+  value: string,
+  type: {type: string},
+  isKeyword: boolean
+}
+
 export default class Concat {
-  async *tokenize(line, editor) {
+  async *tokenize(line, editor): AsyncIterable<Token> {
     const promise = execFile(
       await this.findPython(editor),
       ["-m", "concat", "--tokenize"],
