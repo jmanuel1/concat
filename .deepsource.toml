@@ -27,6 +27,3 @@ enabled = true
   module_system = "commonjs"
   dialect = "typescript"
   skip_doc_coverage = ["function-declaration", "function-expression", "arrow-function-expression", "method-definition"]
-
-[[transformers]]
-name = "prettier"
