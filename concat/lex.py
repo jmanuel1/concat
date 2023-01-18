@@ -25,10 +25,12 @@ class Token:
 
 
 class TokenEncoder(json.JSONEncoder):
+    """Extension of the default JSON Encoder that supports Token objects."""
+
     def default(self, obj):
         if isinstance(obj, Token):
             return obj.__dict__
-        return super().default(self, obj)
+        return super().default(obj)
 
 
 def tokenize(code: str, should_preserve_comments: bool = False) -> List[Token]:
@@ -54,10 +56,18 @@ class Lexer:
     Use token() to get the next token.
     """
 
+    def __init__(self) -> None:
+        self.data: str
+        self.tokens: Optional[Iterator[py_tokenize.TokenInfo]]
+        self.lineno: int
+        self.lexpos: int
+        self._concat_token_iterator: Iterator['Token']
+        self._should_preserve_comments: bool
+
     def input(self, data: str, should_preserve_comments: bool = False) -> None:
         """Initialize the Lexer object with the data to tokenize."""
         self.data = data
-        self.tokens: Optional[Iterator[py_tokenize.TokenInfo]] = None
+        self.tokens = None
         self.lineno = 1
         self.lexpos = 0
         self._concat_token_iterator = self._tokens()

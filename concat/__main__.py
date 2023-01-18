@@ -66,7 +66,7 @@ if args.tokenize:
     code = args.file.read()
     tokens = concat.lex.tokenize(code, should_preserve_comments=True)
     json.dump(tokens, sys.stdout, cls=concat.lex.TokenEncoder)
-    exit()
+    sys.exit()
 
 # interactive mode
 if args.file.isatty():
@@ -75,12 +75,11 @@ else:
     try:
         python_ast = transpile(args.file.read(), os.path.dirname(filename))
     except concat.typecheck.StaticAnalysisError as e:
-        # print('Static Analysis Error:\n')
-        # print(e, 'in line:')
-        # if e.location:
-        #     print(get_line_at(args.file, e.location), end='')
-        #     print(' ' * e.location[1] + '^')
-        raise
+        print('Static Analysis Error:\n')
+        print(e, 'in line:')
+        if e.location:
+            print(get_line_at(args.file, e.location), end='')
+            print(' ' * e.location[1] + '^')
     except concat.parse.ParseError as e:
         print('Parse Error:')
         print(e)
