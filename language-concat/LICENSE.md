@@ -1,3 +1,4 @@
+Copyright © 2022-2023 Jason Manuel (<jama.indo@hotmail.com>)
 Copyright © 2014-2015 Philipp Emanuel Weidmann (<pew@worldwidemann.com>)
 
 Permission is hereby granted, free of charge, to any person obtaining
