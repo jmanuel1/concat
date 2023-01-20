@@ -19,7 +19,7 @@ export interface Token {
  */
 export default class Concat {
   async *tokenize(line, editor): AsyncIterable<Token> {
-    const { stdout } = await this.execFoundPython(
+    const { stdout } = await Concat.execFoundPython(
       editor,
       ["-m", "concat", "--tokenize"],
       {
@@ -58,7 +58,7 @@ export default class Concat {
       .concat(["python"]);
   }
 
-  async execFoundPython(
+  static async execFoundPython(
     editor: TextEditor,
     args: string[],
     options: ExecFileOptions & ObjectEncodingOptions,
@@ -89,5 +89,5 @@ export default class Concat {
 }
 
 function isErrnoException(error: Error): error is NodeJS.ErrnoException {
-  return !!(error as NodeJS.ErrnoException).code;
+  return Boolean((error as NodeJS.ErrnoException).code);
 }
