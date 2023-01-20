@@ -1,33 +1,33 @@
-const { execFile: nodeExecFile } = require("child_process");
-const { exists: nodeExists } = require("fs");
-const { join } = require("path");
-const { promisify } = require("util");
+import { execFile as nodeExecFile, ExecFileOptions } from "child_process";
+import { ObjectEncodingOptions } from "fs";
+import { join } from "path";
+import { promisify } from "util";
+import { TextEditor } from "atom";
 
 const execFile = promisify(nodeExecFile);
-const exists = promisify(nodeExists);
 
 export interface Token {
-  start: [number, number],
-  end: [number, number],
-  value: string,
-  type: {type: string},
-  isKeyword: boolean
+  start: [number, number];
+  end: [number, number];
+  value: string;
+  type: { type: string };
+  isKeyword: boolean;
 }
 
+/**
+ * Class to interact with the Concat executable.
+ */
 export default class Concat {
   async *tokenize(line, editor): AsyncIterable<Token> {
-    const promise = execFile(
-      await this.findPython(editor),
+    const { stdout } = await this.execFoundPython(
+      editor,
       ["-m", "concat", "--tokenize"],
       {
         encoding: "utf-8",
         windowsHide: true,
-      }
+      },
+      line
     );
-    const process = promise.child;
-    process.stdin.write(line);
-    process.stdin.end();
-    const { stdout } = await promise;
     const tokens = JSON.parse(stdout);
     const remainingTokens = tokens.map((token) => {
       return {
@@ -44,19 +44,50 @@ export default class Concat {
     }
   }
 
-  async findPython(editor) {
+  static collectPossiblePythonPaths(editor: TextEditor): string[] {
     const virtualEnvPaths = ["env/Scripts/python.exe", "env/bin/python"];
-    if (!editor)
-      throw new Error("You need a text editor to find the path to Python.");
+    if (!editor) return ["python"];
     const editorPath = editor.getPath();
+    if (!editorPath) {
+      return ["python"];
+    }
     const [projectPath, _] = atom.project.relativizePath(editorPath);
-    if (!projectPath) return "python";
-    for (let path of virtualEnvPaths) {
-      path = join(projectPath, path);
-      if (await exists(path)) {
-        return path;
+    if (!projectPath) return ["python"];
+    return virtualEnvPaths
+      .map((path) => join(projectPath, path))
+      .concat(["python"]);
+  }
+
+  async execFoundPython(
+    editor: TextEditor,
+    args: string[],
+    options: ExecFileOptions & ObjectEncodingOptions,
+    input: string
+  ): Promise<{ stdout: string }> {
+    for (const pythonPath of Concat.collectPossiblePythonPaths(editor)) {
+      const promise = execFile(pythonPath, args, options);
+      const process = promise.child;
+
+      const notFoundPromise = new Promise<{ stdout: string }>((_, reject) =>
+        process.on("error", (error) => {
+          reject(error);
+        })
+      );
+      process.stdin?.write(input);
+      process.stdin?.end();
+      try {
+        return await Promise.race([promise, notFoundPromise]);
+      } catch (error) {
+        if (isErrnoException(error) && error.code === "ENOENT") {
+          continue;
+        }
+        throw error;
       }
     }
-    return "python";
+    throw new Error("No Python installation found.");
   }
+}
+
+function isErrnoException(error: Error): error is NodeJS.ErrnoException {
+  return !!(error as NodeJS.ErrnoException).code;
 }

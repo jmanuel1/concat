@@ -12,16 +12,16 @@ import {
   DisplayMarker,
   TextBuffer,
   TextEditor,
-  RangeCompatible
+  RangeCompatible,
 } from "atom";
 // TODO: Use a dummy textmate grammar instead.
-const Grammar = Object.getPrototypeOf(
+const GrammarClass = Object.getPrototypeOf(
   Object.getPrototypeOf(atom.grammars.getGrammars()[0])
-).constructor as new (registry: GrammarRegistry, options: any) => Grammar;
-import Concat, {Token} from "./concat";
+).constructor as new (registry: GrammarRegistry, options: unknown) => Grammar;
+import Concat, { Token } from "./concat";
 
 // QUESTION: Can I just implement the Grammar interface instead?
-export default class ConcatGrammar extends Grammar {
+export default class ConcatGrammar extends GrammarClass {
   private concat: Concat;
   private registry: GrammarRegistry;
   private textEditorsObserver?: Disposable;
@@ -43,7 +43,7 @@ export default class ConcatGrammar extends Grammar {
     const tokens: Token[] = [];
 
     const tokenizer = this.concat.tokenize(line, editor);
-    for await (let token of tokenizer) {
+    for await (const token of tokenizer) {
       if (token.type.type === "eof") {
         break;
       }
@@ -52,7 +52,7 @@ export default class ConcatGrammar extends Grammar {
     return { tokens };
   }
 
-  tokenScopes(token, text) {
+  static tokenScopes(token) {
     if (token.type.type === "NAME") {
       if (
         ["None", "True", "False", "Ellipsis", "...", "NotImplemented"].includes(
@@ -86,19 +86,15 @@ export default class ConcatGrammar extends Grammar {
     return null;
   }
 
-  override tokenizeLine(line, ruleStack, firstLine) {
-    if (firstLine == null) {
-      firstLine = false;
-    }
-    const tags = [];
-    const tokens = [];
-    return { line, tags, tokens, ruleStack: [] };
-  }
+  // override tokenizeLine(line, ruleStack, firstLine) {
+  //   const tags = [];
+  //   const tokens = [];
+  //   return { line, tags, tokens, ruleStack: [] };
+  // }
 
   startMarkingTokens() {
     const concatTextEditors = new Map();
     this.textEditorsObserver = atom.workspace.observeTextEditors((editor) => {
-      let destroyObserver;
       const grammarObserver = editor.observeGrammar((grammar) => {
         if (grammar === this) {
           const state: {
@@ -124,7 +120,7 @@ export default class ConcatGrammar extends Grammar {
           concatTextEditors.delete(editor);
         }
       });
-      destroyObserver = editor.onDidDestroy(function () {
+      const destroyObserver = editor.onDidDestroy(() => {
         grammarObserver.dispose();
         destroyObserver.dispose();
       });
@@ -135,7 +131,7 @@ export default class ConcatGrammar extends Grammar {
     return this.markTokensForChange(changes, state);
   }
 
-  destroyMarkers(markers: DisplayMarker[]): void {
+  static destroyMarkers(markers: DisplayMarker[]): void {
     markers.forEach((marker) => marker.destroy());
     markers.splice(0, markers.length);
   }
@@ -144,36 +140,37 @@ export default class ConcatGrammar extends Grammar {
     let range;
     let text = state.editor.getText();
 
-    const tokens: {value: string, scopes: string[] | null, range: RangeCompatible}[] = [];
-
-    const addToken = (text, range, scopes: string[] | null = null) =>
-      tokens.push({ value: text, scopes, range });
+    const tokens: {
+      value: string;
+      scopes: string[] | null;
+      range: RangeCompatible;
+    }[] = [];
 
     const tokenizeResult = await this.acornTokenize(text, state.editor);
     const acornTokens = tokenizeResult.tokens;
 
-    for (let token of acornTokens) {
+    for (const token of acornTokens) {
       text = token.value;
-      const tokenScopes = this.tokenScopes(token, text);
+      const tokenScopes = ConcatGrammar.tokenScopes(token);
       range = [
         [token.start[0] - 1, token.start[1]],
         [token.end[0] - 1, token.end[1]],
       ];
-      if (tokenScopes != null) {
-        addToken(text, range, tokenScopes);
+      if (tokenScopes) {
+        tokens.push({ value: text, scopes: tokenScopes, range });
       }
     }
 
     // Destroy the markers as late as possible to prevent a flash of unhighlighted text.
-    this.destroyMarkers(state.markers);
+    ConcatGrammar.destroyMarkers(state.markers);
 
-    for (let processedToken of tokens) {
+    for (const processedToken of tokens) {
       // we destroy the markers ourselves
-      var marker = state.buffer.markRange(processedToken.range, {
+      const marker = state.buffer.markRange(processedToken.range, {
         invalidate: "never",
       });
       state.markers.push(marker);
-      processedToken.scopes?.forEach(function (scope) {
+      processedToken.scopes?.forEach((scope) => {
         const cssClass = "syntax--" + scope;
         state.editor.decorateMarker(marker, {
           type: "text",

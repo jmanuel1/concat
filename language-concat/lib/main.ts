@@ -11,7 +11,7 @@ import ConcatGrammar from "./concat-grammar";
 let grammar: ConcatGrammar | null = null;
 
 module.exports = {
-  activate(state) {
+  activate() {
     atom.grammars.addGrammar((grammar = new ConcatGrammar(atom.grammars)));
   },
 
