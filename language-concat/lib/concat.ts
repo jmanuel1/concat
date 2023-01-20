@@ -18,7 +18,7 @@ export interface Token {
  * Class to interact with the Concat executable.
  */
 export default class Concat {
-  async *tokenize(line, editor): AsyncIterable<Token> {
+  static async *tokenize(line, editor): AsyncIterable<Token> {
     const { stdout } = await Concat.execFoundPython(
       editor,
       ["-m", "concat", "--tokenize"],

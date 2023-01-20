@@ -39,10 +39,10 @@ export default class ConcatGrammar extends GrammarClass {
     this.textEditorsObserver?.dispose();
   }
 
-  async acornTokenize(line: string, editor: TextEditor) {
+  static async acornTokenize(line: string, editor: TextEditor) {
     const tokens: Token[] = [];
 
-    const tokenizer = this.concat.tokenize(line, editor);
+    const tokenizer = Concat.tokenize(line, editor);
     for await (const token of tokenizer) {
       if (token.type.type === "eof") {
         break;
@@ -104,12 +104,12 @@ export default class ConcatGrammar extends GrammarClass {
             changeObserver?: Disposable;
           } = { markers: [], buffer: editor.getBuffer(), editor };
           // initial highlight
-          this.markTokens(null, state);
+          ConcatGrammar.markTokens(null, state);
           state.changeObserver = editor
             .getBuffer()
             .onDidStopChanging((event) => {
               // Note: Not fast enough to use editor.onDidChange
-              this.markTokens(event.changes, state);
+              ConcatGrammar.markTokens(event.changes, state);
             });
           concatTextEditors.set(editor, state);
         } else {
@@ -127,8 +127,8 @@ export default class ConcatGrammar extends GrammarClass {
     });
   }
 
-  markTokens(changes, state) {
-    return this.markTokensForChange(changes, state);
+  static markTokens(changes, state) {
+    return ConcatGrammar.markTokensForChange(changes, state);
   }
 
   static destroyMarkers(markers: DisplayMarker[]): void {
@@ -136,7 +136,7 @@ export default class ConcatGrammar extends GrammarClass {
     markers.splice(0, markers.length);
   }
 
-  async markTokensForChange(change, state) {
+  static async markTokensForChange(change, state) {
     let range;
     let text = state.editor.getText();
 
@@ -146,7 +146,10 @@ export default class ConcatGrammar extends GrammarClass {
       range: RangeCompatible;
     }[] = [];
 
-    const tokenizeResult = await this.acornTokenize(text, state.editor);
+    const tokenizeResult = await ConcatGrammar.acornTokenize(
+      text,
+      state.editor
+    );
     const acornTokens = tokenizeResult.tokens;
 
     for (const token of acornTokens) {
