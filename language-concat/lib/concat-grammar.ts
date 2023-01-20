@@ -153,15 +153,12 @@ export default class ConcatGrammar extends Grammar {
     const acornTokens = tokenizeResult.tokens;
 
     for (let token of acornTokens) {
-      console.log(token);
       text = token.value;
       const tokenScopes = this.tokenScopes(token, text);
-      console.log(tokenScopes);
       range = [
         [token.start[0] - 1, token.start[1]],
         [token.end[0] - 1, token.end[1]],
       ];
-      console.log(token.start, token.end, range);
       if (tokenScopes != null) {
         addToken(text, range, tokenScopes);
       }
