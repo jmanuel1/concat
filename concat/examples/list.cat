@@ -1,0 +1,15 @@
+# IN: ''
+# OUT: '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]\n'
+
+from concat.stdlib.pyinterop import to_dict
+
+
+def one_to_ten( -- range:list[int]):
+  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+
+def put_output(l:list[int] -- ):
+  [(),] None to_dict swap $print py_call drop
+
+
+one_to_ten put_output
