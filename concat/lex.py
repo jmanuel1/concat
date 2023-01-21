@@ -1,8 +1,9 @@
 import concat.astutils
 import dataclasses
 import io
+import json
 import tokenize as py_tokenize
-from typing import Iterator, List, Optional, Tuple
+from typing import Iterator, List, Optional, Tuple, Union
 
 
 @dataclasses.dataclass
@@ -13,17 +14,28 @@ class Token:
     self.value - token value, as string.
     self.start - starting position of token in source, as (line, col)
     self.end - ending position of token in source, as (line, col)
+    self.is_keyword - whether the token represents a keyword
     """
 
     type: str = ''
     value: str = ''
     start: 'concat.astutils.Location' = (0, 0)
     end: 'concat.astutils.Location' = (0, 0)
+    is_keyword: bool = False
 
 
-def tokenize(code: str) -> List[Token]:
+class TokenEncoder(json.JSONEncoder):
+    """Extension of the default JSON Encoder that supports Token objects."""
+
+    def default(self, obj):
+        if isinstance(obj, Token):
+            return obj.__dict__
+        return super().default(obj)
+
+
+def tokenize(code: str, should_preserve_comments: bool = False) -> List[Token]:
     lexer = Lexer()
-    lexer.input(code)
+    lexer.input(code, should_preserve_comments)
     tokens = []
     while True:
         token = lexer.token()
@@ -33,8 +45,11 @@ def tokenize(code: str) -> List[Token]:
     return tokens
 
 
-TokenTuple = Tuple[
-    str, str, 'concat.astutils.Location', 'concat.astutils.Location'
+TokenTuple = Union[
+    Tuple[str, str, 'concat.astutils.Location', 'concat.astutils.Location'],
+    Tuple[
+        str, str, 'concat.astutils.Location', 'concat.astutils.Location', bool
+    ],
 ]
 
 
@@ -44,13 +59,22 @@ class Lexer:
     Use token() to get the next token.
     """
 
-    def input(self, data: str) -> None:
+    def __init__(self) -> None:
+        self.data: str
+        self.tokens: Optional[Iterator[py_tokenize.TokenInfo]]
+        self.lineno: int
+        self.lexpos: int
+        self._concat_token_iterator: Iterator['Token']
+        self._should_preserve_comments: bool
+
+    def input(self, data: str, should_preserve_comments: bool = False) -> None:
         """Initialize the Lexer object with the data to tokenize."""
         self.data = data
-        self.tokens: Optional[Iterator[py_tokenize.TokenInfo]] = None
+        self.tokens = None
         self.lineno = 1
         self.lexpos = 0
         self._concat_token_iterator = self._tokens()
+        self._should_preserve_comments = should_preserve_comments
 
     def token(self) -> Optional['Token']:
         """Return the next token as a Token object."""
@@ -91,6 +115,11 @@ class Lexer:
             for tok in tokens_to_massage:
                 if tok.type in {'NL', 'COMMENT'}:
                     self._update_position(tok)
+                    if (
+                        self._should_preserve_comments
+                        and tok.type == 'COMMENT'
+                    ):
+                        yield tok
                     continue
                 elif tok.type == 'ERRORTOKEN':
                     if tok.value == ' ':
@@ -100,6 +129,7 @@ class Lexer:
                         tok.type = 'DOLLARSIGN'
                 elif tok.value in {'def', 'import', 'from'}:
                     tok.type = tok.value.upper()
+                    tok.is_keyword = True
                 elif tok.type != 'NAME' and tok.value in {
                     '...',
                     '-',
@@ -137,11 +167,10 @@ class Lexer:
                 self._update_position(tok)
 
                 if tok.type == 'NAME':
-                    type_map = {
-                        'as': 'AS',
-                        'class': 'CLASS',
-                    }
-                    tok.type = type_map.get(tok.value, tok.type)
+                    type_map = {'as': 'AS', 'class': 'CLASS', 'cast': 'CAST'}
+                    if tok.value in type_map:
+                        tok.type = type_map.get(tok.value)
+                        tok.is_keyword = True
                 elif tok.type == 'STRING' and self.__is_bytes_literal(
                     tok.value
                 ):
@@ -149,9 +178,6 @@ class Lexer:
                 elif tok.type == 'ERRORTOKEN' and tok.value == '`':
                     tok.type = 'BACKTICK'
 
-                if tok.type == 'NAME':
-                    type_map = {'cast': 'CAST'}
-                    tok.type = type_map.get(tok.value, tok.type)
                 yield tok
 
     def _update_position(self, tok: 'Token') -> None:

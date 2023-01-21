@@ -1,15 +1,17 @@
 """The Concat Implementation."""
 
 
+import argparse
 from concat.transpile import transpile
 import concat.astutils
-import concat.typecheck
-import concat.stdlib.repl
 import concat.execute
-import argparse
+import concat.lex
+import concat.stdlib.repl
+import concat.typecheck
+import io
+import json
 import os.path
 import sys
-import io
 from typing import Callable, IO, AnyStr, TextIO
 
 
@@ -47,12 +49,24 @@ arg_parser.add_argument(
     default=False,
     help='turn stack debugging on',
 )
+arg_parser.add_argument(
+    '--tokenize',
+    action='store_true',
+    default=False,
+    help='tokenize input from the given file and print the tokens as a JSON array',
+)
 
 # We should pass any unknown args onto the program we're about to run. There
 # might be a better way to go about this, but I think this is fine for now.
 args, rest = arg_parser.parse_known_args()
 sys.argv = [sys.argv[0], *rest]
 
+
+if args.tokenize:
+    code = args.file.read()
+    tokens = concat.lex.tokenize(code, should_preserve_comments=True)
+    json.dump(tokens, sys.stdout, cls=concat.lex.TokenEncoder)
+    sys.exit()
 
 # interactive mode
 if args.file.isatty():

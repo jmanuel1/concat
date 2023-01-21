@@ -1,4 +1,4 @@
-from typing import Generator, List
+from typing import List
 
 
 class Quotation(list):
