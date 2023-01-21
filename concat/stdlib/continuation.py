@@ -18,6 +18,11 @@ _R = TypeVar('_R')
 
 
 class ContinuationMonad(Generic[_R, _A]):
+    """The continuation monad, implemented as a Python class.
+
+    The Concat interface to this type is defined separately.
+    """
+
     def __init__(self, run: Callable[[Callable[[_A], _R]], _R]) -> None:
         self._run = run
 
@@ -204,7 +209,7 @@ def call_with_current_continuation(
     def python_function(
         k: Callable[[_B], ContinuationMonad[_R, _C]]
     ) -> ContinuationMonad[_R, _B]:
-        def concat_function(stack: List[object], stash: List[object]) -> None:
+        def concat_function(stack: List[object], _: List[object]) -> None:
             stack.append(k(cast(_B, stack.pop())))
 
         # I think using the same stacks is safe because the type of `f` should
@@ -218,13 +223,13 @@ def call_with_current_continuation(
     )
 
 
-def eval_cont(stack: List[object], stash: List[object]) -> None:
+def eval_cont(stack: List[object], _: List[object]) -> None:
     cont = cast(ContinuationMonad, stack.pop())
     result = cont._run(lambda x: x)
     stack.append(result)
 
 
-def cont_pure(stack: List[object], stash: List[object]) -> None:
+def cont_pure(stack: List[object], _: List[object]) -> None:
     value = stack.pop()
     result = ContinuationMonad[NoReturn, object].pure(value)
     stack.append(result)
@@ -250,7 +255,7 @@ def cont_from_cps(stack: List[object], stash: List[object]) -> None:
     concat_run = cast(ConcatFunction, stack.pop())
 
     def python_run(python_k: Callable[[_B], _R]) -> _R:
-        def concat_k(stack: List[object], stash: List[object]) -> None:
+        def concat_k(stack: List[object], _: List[object]) -> None:
             b = cast(_B, stack.pop())
             stack.append(python_k(b))
 

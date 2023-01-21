@@ -290,6 +290,16 @@ types = {
             TypeSequence([_stack_type_var, bool_type]),
         ),
     ),
+    # FIXME: Implement the second type rule
+    '<=': ForAll(
+        [_stack_type_var, _b_var],
+        StackEffect(
+            TypeSequence(
+                [_stack_type_var, leq_comparable_type[_b_var,], _b_var]
+            ),
+            TypeSequence([_stack_type_var, bool_type]),
+        ),
+    ),
     'is': ForAll(
         [_stack_type_var],
         StackEffect(
