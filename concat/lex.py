@@ -3,7 +3,7 @@ import dataclasses
 import io
 import json
 import tokenize as py_tokenize
-from typing import Iterator, List, Optional, Tuple
+from typing import Iterator, List, Optional, Tuple, Union
 
 
 @dataclasses.dataclass
@@ -45,8 +45,11 @@ def tokenize(code: str, should_preserve_comments: bool = False) -> List[Token]:
     return tokens
 
 
-TokenTuple = Tuple[
-    str, str, 'concat.astutils.Location', 'concat.astutils.Location'
+TokenTuple = Union[
+    Tuple[str, str, 'concat.astutils.Location', 'concat.astutils.Location'],
+    Tuple[
+        str, str, 'concat.astutils.Location', 'concat.astutils.Location', bool
+    ],
 ]
 
 
