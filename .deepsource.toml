@@ -15,3 +15,15 @@ enabled = true
 [[analyzers]]
 name = "test-coverage"
 enabled = true
+
+[[analyzers]]
+name = "javascript"
+enabled = true
+
+  [analyzers.meta]
+  plugins = []
+  dependency_file_paths = ["language-concat/"]
+  environment = ["nodejs"]
+  module_system = "commonjs"
+  dialect = "typescript"
+  skip_doc_coverage = ["function-declaration", "function-expression", "arrow-function-expression", "method-definition"]

@@ -1,0 +1,30 @@
+{
+  "name": "language-concat",
+  "main": "./lib/main",
+  "version": "0.1.0",
+  "description": "Syntax highlighting for Concat",
+  "repository": "https://github.com/jmanuel1/concat",
+  "license": "MIT",
+  "engines": {
+    "atom": ">=1.57.0 <2.0.0"
+  },
+  "dependencies": {
+    "atom-ts-transpiler": "^1.5.3",
+    "typescript": "^4.9.4"
+  },
+  "atomTranspilers": [
+    {
+      "transpiler": "atom-ts-transpiler",
+      "glob": "{!(node_modules)/**/,}*.ts?(x)",
+      "options": {
+        "compilerOptions": {},
+        "cacheKeyFiles": [],
+        "verbose": false
+      }
+    }
+  ],
+  "devDependencies": {
+    "@types/atom": "^1.40.11",
+    "@types/node": "^18.11.18"
+  }
+}
