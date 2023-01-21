@@ -17,6 +17,8 @@ from concat.typecheck.types import (
     init_primitives,
     int_type,
     iterable_type,
+    leq_comparable_type,
+    lt_comparable_type,
     list_type,
     module_type,
     none_type,
@@ -159,6 +161,21 @@ types = {
         },
         [_rest_var, _seq_var],
     ),
+    'loop': ForAll(
+        [_rest_var],
+        StackEffect(
+            TypeSequence(
+                [
+                    _rest_var,
+                    StackEffect(
+                        TypeSequence([_rest_var]),
+                        TypeSequence([_rest_var, bool_type]),
+                    ),
+                ]
+            ),
+            TypeSequence([_rest_var]),
+        ),
+    ),
     'True': ObjectType(
         _a_var,
         {'__call__': StackEffect([_rest_var], [_rest_var, bool_type])},
@@ -188,6 +205,7 @@ types = {
     'int': int_type,
     'float': float_type,
     'file': file_type,
+    'none': none_type,
     'None': ForAll(
         [_stack_type_var],
         StackEffect(
@@ -251,10 +269,33 @@ types = {
     # Rule 2: second operand has __le__(type(first operand))
     # FIXME: Implement the second type rule
     '>=': ForAll(
-        [_stack_type_var, _a_var, _b_var],
+        [_stack_type_var, _b_var],
         StackEffect(
             TypeSequence(
                 [_stack_type_var, geq_comparable_type[_b_var,], _b_var]
+            ),
+            TypeSequence([_stack_type_var, bool_type]),
+        ),
+    ),
+    # Rule 1: first operand has __lt__(type(second operand))
+    # Rule 2: second operand has __gt__(type(first operand))
+    # FIXME: Implement the second type rule
+    # Also look at Python's note about when reflected method get's priority.
+    '<': ForAll(
+        [_stack_type_var, _b_var],
+        StackEffect(
+            TypeSequence(
+                [_stack_type_var, lt_comparable_type[_b_var,], _b_var]
+            ),
+            TypeSequence([_stack_type_var, bool_type]),
+        ),
+    ),
+    # FIXME: Implement the second type rule
+    '<=': ForAll(
+        [_stack_type_var, _b_var],
+        StackEffect(
+            TypeSequence(
+                [_stack_type_var, leq_comparable_type[_b_var,], _b_var]
             ),
             TypeSequence([_stack_type_var, bool_type]),
         ),
