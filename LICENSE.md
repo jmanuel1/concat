@@ -38,3 +38,17 @@ All files are under the MIT license unless otherwise specified.
 **Our `desc_cumulatively` parser combinator is based on the source code of
 `parsy.desc`. [Parsy is under its own
 license.](https://github.com/python-parsy/parsy/blob/master/LICENSE)**
+
+---
+
+Some text is copied from the JSON-RPC specification.
+
+Copyright (C) 2007-2010 by the JSON-RPC Working Group
+
+This document and translations of it may be used to implement JSON-RPC, it may
+be copied and furnished to others, and derivative works that comment on or
+otherwise explain it or assist in its implementation may be prepared, copied,
+published and distributed, in whole or in part, without restriction of any kind,
+provided that the above copyright notice and this paragraph are included on all
+such copies and derivative works. However, this document itself may not
+bemodified in any way.
