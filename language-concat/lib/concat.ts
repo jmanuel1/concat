@@ -44,17 +44,22 @@ export default class Concat {
     }
   }
 
-  static collectPossiblePythonPaths(editor: TextEditor): string[] {
+  static collectPossiblePythonPaths(editor: TextEditor | string): string[] {
     const virtualEnvPaths = ["env/Scripts/python.exe", "env/bin/python"];
-    if (!editor) return ["python"];
-    const editorPath = editor.getPath();
-    if (!editorPath) {
-      return ["python"];
+    let projectPath: string | null;
+    if (typeof editor === "string") {
+      projectPath = editor;
+    } else {
+      if (!editor) return ["python"];
+      const editorPath = editor.getPath();
+      if (!editorPath) {
+        return ["python"];
+      }
+      [projectPath] = atom.project.relativizePath(editorPath);
     }
-    const [projectPath, _] = atom.project.relativizePath(editorPath);
-    if (!projectPath) return ["python"];
+    if (projectPath === null) return ["python"];
     return virtualEnvPaths
-      .map((path) => join(projectPath, path))
+      .map((path) => join(projectPath!, path))
       .concat(["python"]);
   }
 

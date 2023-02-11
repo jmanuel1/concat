@@ -13,7 +13,7 @@ from typing import (
 )
 
 
-class _Error(Enum):
+class Error(Enum):
     # Error messages are copied from the JSON-RPC spec. Attribution is in
     # LICENSE.md
 
@@ -30,6 +30,15 @@ class _Error(Enum):
 
 
 Handler = Callable[[Optional[Union[dict, list]]], object]
+_ReceiveMessageHook = Callable[
+    [
+        Mapping[str, object],
+        Callable[[object], None],
+        Callable[[int, str], None],
+        Callable[[], None],
+    ],
+    None,
+]
 
 
 class Server:
@@ -45,6 +54,13 @@ class Server:
 
     def __init__(self) -> None:
         self._methods: MutableMapping[str, Handler] = {}
+        self._receive_message_hook: _ReceiveMessageHook = (
+            lambda _, _2, _3, _4: None
+        )
+        # TODO: Some refactoring required to get this hook working.
+        self._send_message_hook: _ReceiveMessageHook = (
+            lambda _, _2, _3, _4: None
+        )
 
     @overload
     def handle(self, arg: Handler) -> Handler:
@@ -68,6 +84,12 @@ class Server:
         self._methods[method] = arg
         return arg
 
+    def set_receive_message_hook(self, callback: _ReceiveMessageHook) -> None:
+        self._receive_message_hook = callback
+
+    def set_send_message_hook(self, callback: _ReceiveMessageHook) -> None:
+        self._send_message_hook = callback
+
     def start(self, requests: Iterable[str]) -> Iterable[str]:
         def parse_requests():
             for request in requests:
@@ -76,7 +98,7 @@ class Server:
                 except json.JSONDecodeError:
                     yield json.dumps(
                         self._create_error_response(
-                            None, _Error.INVALID_JSON.value
+                            None, Error.INVALID_JSON.value
                         ),
                         sort_keys=True,
                     )
@@ -105,7 +127,7 @@ class Server:
             if not isinstance(request_object, dict):
                 return json.dumps(
                     self._create_error_response(
-                        None, _Error.INVALID_REQUEST.value
+                        None, Error.INVALID_REQUEST.value
                     ),
                     sort_keys=True,
                 )
@@ -121,7 +143,7 @@ class Server:
                 if correlation_id is not self._missing_id_sentinel:
                     return json.dumps(
                         self._create_error_response(
-                            correlation_id, _Error.INVALID_REQUEST.value
+                            correlation_id, Error.INVALID_REQUEST.value
                         ),
                         sort_keys=True,
                     )
@@ -129,6 +151,33 @@ class Server:
             error = self._typecheck_parameters(parameters, correlation_id)
             if error is not None:
                 return error
+            intercepted_response = None
+            should_drop = False
+
+            def succeed(body: object) -> None:
+                nonlocal intercepted_response
+                intercepted_response = self._create_success_response(
+                    correlation_id, body
+                )
+
+            def fail(code: int, message: str) -> None:
+                nonlocal intercepted_response
+                intercepted_response = self._create_error_response(
+                    correlation_id, (code, message)
+                )
+
+            def drop() -> None:
+                nonlocal should_drop
+                should_drop = True
+
+            self._receive_message_hook(request_object, succeed, fail, drop)
+            if should_drop:
+                return None
+            if (
+                intercepted_response is not None
+                and correlation_id is not self._missing_id_sentinel
+            ):
+                return json.dumps(intercepted_response, sort_keys=True)
             response = self._call_method_and_create_response(
                 method, parameters, correlation_id
             )
@@ -137,7 +186,7 @@ class Server:
             if correlation_id is not self._missing_id_sentinel:
                 return json.dumps(
                     self._create_error_response(
-                        correlation_id, _Error.INTERNAL_ERROR.value
+                        correlation_id, Error.INTERNAL_ERROR.value
                     ),
                     sort_keys=True,
                 )
@@ -148,9 +197,7 @@ class Server:
     ) -> Optional[str]:
         if not request_object:
             return json.dumps(
-                self._create_error_response(
-                    None, _Error.INVALID_REQUEST.value
-                ),
+                self._create_error_response(None, Error.INVALID_REQUEST.value),
                 sort_keys=True,
             )
         responses = list(self._process_requests(request_object))
@@ -165,11 +212,11 @@ class Server:
         if request_object.get('jsonrpc') != '2.0':
             if correlation_id is self._missing_id_sentinel:
                 error = self._create_error_response(
-                    None, _Error.VERSION_2_0_ONLY.value
+                    None, Error.VERSION_2_0_ONLY.value
                 )
             else:
                 error = self._create_error_response(
-                    correlation_id, _Error.VERSION_2_0_ONLY.value
+                    correlation_id, Error.VERSION_2_0_ONLY.value
                 )
             return json.dumps(error, sort_keys=True)
         return None
@@ -180,11 +227,11 @@ class Server:
         if not isinstance(parameters, (dict, list)) and parameters is not None:
             if correlation_id is self._missing_id_sentinel:
                 error = self._create_error_response(
-                    None, _Error.INVALID_REQUEST.value
+                    None, Error.INVALID_REQUEST.value
                 )
             else:
                 error = self._create_error_response(
-                    correlation_id, _Error.INVALID_REQUEST.value
+                    correlation_id, Error.INVALID_REQUEST.value
                 )
             return json.dumps(error, sort_keys=True)
         return None
@@ -257,7 +304,7 @@ class Server:
         try:
             handler = self._methods[method]
         except KeyError:
-            raise _MethodCallError(_Error.METHOD_NOT_FOUND)
+            raise _MethodCallError(Error.METHOD_NOT_FOUND)
         try:
             return handler(parameters)
         except Exception as e:
@@ -268,15 +315,20 @@ class Server:
     _missing_id_sentinel = object()
 
 
+def is_request(message: Mapping[str, object]) -> bool:
+    correlation_id = message.get('id', Server._missing_id_sentinel)
+    return correlation_id is not Server._missing_id_sentinel
+
+
 class _MethodCallError(Exception):
-    def __init__(self, error: _Error) -> None:
+    def __init__(self, error: Error) -> None:
         super().__init__()
         self.error = error
 
 
 class InvalidParametersError(_MethodCallError):
     def __init__(self) -> None:
-        super().__init__(_Error.INVALID_PARAMS)
+        super().__init__(Error.INVALID_PARAMS)
 
 
 class _ApplicationDefinedError(Exception):
