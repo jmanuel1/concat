@@ -1,8 +1,65 @@
 import concat.jsonrpc
 from enum import Enum, IntEnum
 from io import TextIOWrapper
+import json
+import logging
+import logging.handlers
+import pathlib
 import re
+from datetime import datetime, timezone
+import traceback
 from typing import BinaryIO, Callable, Dict, Mapping, Optional, Union, cast
+
+
+class _LogRecordEncoder(json.JSONEncoder):
+    """A JSON Encoder that supports logging.LogRecord objects."""
+
+    def default(self, obj: object):
+        if isinstance(obj, logging.LogRecord):
+            return {
+                'name': obj.name,
+                'message': obj.getMessage(),
+                # arguments for the formatting string don't need to be in the JSON
+                'level_name': obj.levelname,
+                'path_name': obj.pathname,
+                'file_name': obj.filename,
+                'module': obj.module,
+                'exception': (
+                    traceback.format_exception(*obj.exc_info)
+                    if obj.exc_info
+                    else None
+                ),
+                'line_number': obj.lineno,
+                'function_name': obj.funcName,
+                'created': datetime.fromtimestamp(
+                    obj.created, timezone.utc
+                ).isoformat(),
+                'thread': obj.thread,
+                'thread_name': obj.threadName,
+                'process_name': obj.processName,
+                'process': obj.process,
+            }
+        return super().default(obj)
+
+
+class _JSONFormatter(logging.Formatter):
+    """A logging formatter for producing structured JSON logs."""
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    def format(self, record: logging.LogRecord) -> str:
+        return json.dumps(record, cls=_LogRecordEncoder)
+
+
+_logger = logging.getLogger(__name__)
+_logger_path = pathlib.Path(__file__) / '../lsp.log'
+_log_handler = logging.handlers.RotatingFileHandler(
+    _logger_path, maxBytes=1048576, backupCount=1
+)
+_log_handler.setFormatter(_JSONFormatter())
+_logger.addHandler(_log_handler)
+_logger.setLevel(logging.DEBUG)
 
 
 class _Error(Enum):
@@ -42,77 +99,57 @@ class Server:
         )
 
     def start(self, requests: BinaryIO, responses: BinaryIO) -> int:
-        with open('lsp.log', 'a') as _log_file:
-            self._log_file = _log_file
-            # Don't wrap the requests file in a TextIOWrapper to read the
-            # headers since it requires buffering.
-            headers_response_file = TextIOWrapper(
-                responses, encoding='ascii', newline='\r\n', write_through=True
-            )
-            content_response_file = TextIOWrapper(
-                responses, encoding='utf-8', newline='', write_through=True
-            )
+        # Don't wrap the requests file in a TextIOWrapper to read the
+        # headers since it requires buffering.
+        headers_response_file = TextIOWrapper(
+            responses, encoding='ascii', newline='\r\n', write_through=True
+        )
+        content_response_file = TextIOWrapper(
+            responses, encoding='utf-8', newline='', write_through=True
+        )
 
-            def request_generator():
-                while not requests.closed and not self._should_exit:
-                    _log_file.write('reading next message\n')
-                    _log_file.flush()
-                    _log_file.write('reading headers\n')
-                    _log_file.flush()
-                    headers = self._read_headers(requests)
-                    _log_file.write('read headers\n')
-                    _log_file.flush()
-                    content_type = headers.content_type()
-                    content_part = requests.read(
-                        headers.content_length_in_bytes()
+        def request_generator():
+            while not requests.closed and not self._should_exit:
+                _logger.debug('reading next message')
+                _logger.debug('reading headers')
+                headers = self._read_headers(requests)
+                _logger.info('read headers')
+                content_type = headers.content_type()
+                content_part = requests.read(headers.content_length_in_bytes())
+                _logger.info(repr(headers))
+                if not self._charset_regex.search(content_type):
+                    _logger.error('unsupported charset')
+                    error_json = '{"jsonrpc": "2.0", "error": {"code": -32600, "message": "Request body must be encoded in UTF-8"}, "id": null}'
+                    headers_response_file.writelines(
+                        [
+                            'Content-Type: application/vscode-jsonrpc; charset=utf-8',
+                            f'Content-Length: {len(error_json.encode(encoding="utf-8"))}',
+                            '',
+                        ]
                     )
-                    _log_file.writelines([str(headers), ''])
-                    _log_file.flush()
-                    if not self._charset_regex.search(content_type):
-                        _log_file.write('unsupported charset\n')
-                        _log_file.flush()
-                        error_json = '{"jsonrpc": "2.0", "error": {"code": -32600, "message": "Request body must be encoded in UTF-8"}, "id": null}'
-                        headers_response_file.writelines(
-                            [
-                                'Content-Type: application/vscode-jsonrpc; charset=utf-8',
-                                f'Content-Length: {len(error_json.encode(encoding="utf-8"))}',
-                                '',
-                            ]
-                        )
-                        content_response_file.write(error_json)
-                        continue
-                    decoded_content = str(content_part, encoding='utf-8')
-                    _log_file.write('request content:\n')
-                    _log_file.writelines([decoded_content, '\n'])
-                    _log_file.flush()
-                    yield decoded_content
+                    content_response_file.write(error_json)
+                    continue
+                decoded_content = str(content_part, encoding='utf-8')
+                _logger.info('request content: ' + repr(decoded_content))
+                yield decoded_content
 
-            rpc_responses = self._rpc_server.start(request_generator())
-            for response in rpc_responses:
-                self._log_file.write('response:\n')
-                self._log_file.flush()
-                headers_response_file.writelines(
-                    [
-                        # 'Content-Type: application/vscode-jsonrpc; charset=utf-8\n',
-                        f'Content-Length: {len(response.encode(encoding="utf-8"))}\n',
-                        '\n',
-                    ]
-                )
-                self._log_file.writelines(
-                    [
-                        # 'Content-Type: application/vscode-jsonrpc; charset=utf-8\n',
-                        f'Content-Length: {len(response.encode(encoding="utf-8"))}\n',
-                        '\n',
-                    ]
-                )
-                content_response_file.write(response)
-                responses.flush()
-                self._log_file.write(response + '\n')
-                self._log_file.flush()
-                if self._has_received_initialize_request:
-                    self._has_responded_to_initialize_request = True
+        rpc_responses = self._rpc_server.start(request_generator())
+        for response in rpc_responses:
+            _logger.info(
+                f'response:\nContent-Length: {len(response.encode(encoding="utf-8"))}\n\n{response}'
+            )
+            headers_response_file.writelines(
+                [
+                    f'Content-Length: {len(response.encode(encoding="utf-8"))}\n',
+                    '\n',
+                ]
+            )
+            content_response_file.write(response)
+            responses.flush()
+            if self._has_received_initialize_request:
+                self._has_responded_to_initialize_request = True
 
-            return 0 if self._has_received_shutdown_request else 1
+        return 0 if self._has_received_shutdown_request else 1
 
     def _initialize(self, _) -> Dict[str, object]:
         self._has_received_initialize_request = True
@@ -174,10 +211,9 @@ class Server:
             concat.jsonrpc.is_request(message)
             and self._has_received_shutdown_request
         ):
-            self._log_file.write(
+            _logger.error(
                 f'has recieved shutdown, cannot respond to {message!r}\n'
             )
-            self._log_file.flush()
             fail(*concat.jsonrpc.Error.INVALID_REQUEST.value)
             return
         if (
@@ -186,25 +222,22 @@ class Server:
         ):
             return
         if concat.jsonrpc.is_request(message):
-            self._log_file.write(
+            _logger.error(
                 f'has not been told to initialize, cannot respond to {message!r}\n'
             )
-            self._log_file.flush()
             fail(*_Error.SERVER_NOT_INITIALIZED.value)
             return
         if message.get('method') != 'exit':
-            self._log_file.write(f'dropping received message: {message!r}\n')
-            self._log_file.flush()
+            _logger.warn(f'dropping received message: {message!r}\n')
             drop()
 
     def _send_message_hook(
         self, message: Mapping[str, object], _, _1, drop: Callable[[], None]
     ) -> None:
         if self._has_responded_to_initialize_request:
-            self._log_file.write(
+            _logger.debug(
                 f'has responded to initialize, can respond to {message!r}\n'
             )
-            self._log_file.flush()
             return
         if message.get('method') in [
             'window/showMessage',
@@ -213,13 +246,11 @@ class Server:
             'window/showMessageRequest',
             '$/progress',
         ]:
-            self._log_file.write(
+            _logger.debug(
                 f'has not responded to initialize, but respond to {message!r}\n'
             )
-            self._log_file.flush()
             return
-        self._log_file.write(f'dropping sent message: {message!r}\n')
-        self._log_file.flush()
+        _logger.debug(f'dropping sent message: {message!r}\n')
         drop()
 
     def _read_headers(self, requests: BinaryIO) -> '_Headers':
@@ -227,36 +258,28 @@ class Server:
         while True:
             lines = ''
             while not requests.closed:
-                self._log_file.write('reading header line\n')
-                self._log_file.flush()
+                _logger.debug('reading header line')
                 line = str(requests.readline(), encoding='ascii')
-                self._log_file.write(f'{line!r}\n')
-                self._log_file.flush()
+                _logger.debug(f'{line!r}\n')
                 if not line:
-                    self._log_file.write('end of file while reading headers\n')
-                    self._log_file.flush()
+                    _logger.warn('end of file while reading headers')
                     self._should_exit = True
                     break
                 if line == '\r\n':
-                    self._log_file.write('end of headers\n')
-                    self._log_file.flush()
+                    _logger.debug('end of headers')
                     break
                 lines += line
-            self._log_file.write('headers:\n' + lines + '\n')
-            self._log_file.flush()
+            _logger.debug('headers:\n' + lines)
             pos = 0
             while pos < len(lines):
-                self._log_file.write('trying to parse header\n')
-                self._log_file.flush()
+                _logger.debug('trying to parse header')
                 match = self._terminated_header_field_regex.match(lines, pos)
                 if not match:
                     break
-                self._log_file.write(str(match))
-                self._log_file.flush()
+                _logger.debug(str(match))
                 headers[match['name']] = match['value']
                 pos = match.end()
-            self._log_file.write('end of headers')
-            self._log_file.flush()
+            _logger.debug('end of headers')
             return headers
 
     _ows = r'[ \t]*'
