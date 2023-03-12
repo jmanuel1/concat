@@ -15,7 +15,7 @@ class ConcatLanguageClient extends AutoLanguageClient {
   }
 
   override startServerProcess(projectPath: string) {
-    atom.config.set('core.debugLSP', true);
+    atom.config.set("core.debugLSP", true);
     return super.spawn(
       Concat.collectPossiblePythonPaths(projectPath)[0],
       ["-m", "concat.lsp"],

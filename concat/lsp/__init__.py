@@ -1,73 +1,25 @@
 import concat.jsonrpc
+from concat.lex import tokenize
 from enum import Enum, IntEnum
 from io import TextIOWrapper
-import json
 import logging
 import logging.handlers
-import pathlib
 import re
-from datetime import datetime, timezone
-import traceback
-from typing import BinaryIO, Callable, Dict, Mapping, Optional, Union, cast
-
-
-class _LogRecordEncoder(json.JSONEncoder):
-    """A JSON Encoder that supports logging.LogRecord objects."""
-
-    def default(self, obj: object):
-        if isinstance(obj, logging.LogRecord):
-            return {
-                'name': obj.name,
-                'message': obj.getMessage(),
-                # arguments for the formatting string don't need to be in the JSON
-                'level_name': obj.levelname,
-                'path_name': obj.pathname,
-                'file_name': obj.filename,
-                'module': obj.module,
-                'exception': (
-                    traceback.format_exception(*obj.exc_info)
-                    if obj.exc_info
-                    else None
-                ),
-                'line_number': obj.lineno,
-                'function_name': obj.funcName,
-                'created': datetime.fromtimestamp(
-                    obj.created, timezone.utc
-                ).isoformat(),
-                'thread': obj.thread,
-                'thread_name': obj.threadName,
-                'process_name': obj.processName,
-                'process': obj.process,
-            }
-        return super().default(obj)
-
-
-class _JSONFormatter(logging.Formatter):
-    """A logging formatter for producing structured JSON logs."""
-
-    def __init__(self) -> None:
-        super().__init__()
-
-    def format(self, record: logging.LogRecord) -> str:
-        return json.dumps(record, cls=_LogRecordEncoder)
+import tokenize as py_tokenize
+from typing import (
+    BinaryIO,
+    Callable,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Union,
+    cast,
+)
 
 
 _logger = logging.getLogger(__name__)
-_logger_path = pathlib.Path(__file__) / '../lsp.log'
-_log_handler = logging.handlers.RotatingFileHandler(
-    _logger_path, maxBytes=1048576, backupCount=1
-)
-_log_handler.setFormatter(_JSONFormatter())
-_logger.addHandler(_log_handler)
-_logger.setLevel(logging.DEBUG)
-
-
-class _Error(Enum):
-    SERVER_NOT_INITIALIZED = (-32002, 'The server must be initialized.')
-
-
-class _TextDocumentSyncKind(IntEnum):
-    FULL = 1
+_logger.addHandler(logging.NullHandler())
 
 
 class Server:
@@ -165,19 +117,31 @@ class Server:
         self._should_exit = True
 
     def _get_server_capabilities(self) -> Dict[str, object]:
-        return {'textDocumentSync': _TextDocumentSyncKind.FULL.value}
+        return {
+            'textDocumentSync': _TextDocumentSyncKind.FULL.value,
+            'positionEncoding': _PositionEncodingKind.UTF16.value,
+        }
 
     def _did_open_text_document(
         self, params: Optional[Union[dict, list]]
     ) -> None:
+        _logger.debug('did open text document')
         if not isinstance(params, dict):
             raise concat.jsonrpc.InvalidParametersError
         text_document_item = params['textDocument']
+        _logger.debug(f'opened text document item: {text_document_item}')
         if not isinstance(text_document_item, dict):
+            _logger.error('text document item is not an object')
             raise concat.jsonrpc.InvalidParametersError
-        self._text_documents[text_document_item['uri']] = _TextDocumentItem(
-            **text_document_item
+        text_document = _TextDocumentItem(text_document_item)
+        _logger.debug(f'text document object: {text_document!r}')
+        self._text_documents[text_document_item['uri']] = text_document
+        _logger.debug(
+            f'about to compute diagnostics for {text_document_item["uri"]}'
         )
+        text_document.diagnose()
+        _logger.debug('about to publish diagnostics')
+        self._publish_diagnostics()
 
     def _did_change_text_document(
         self, params: Optional[Union[dict, list]]
@@ -189,6 +153,9 @@ class Server:
         version = versioned_text_document_identifier['version']
         new_full_content = params['contentChanges'][0]['text']
         self._text_documents[uri].update(version, new_full_content)
+        self._text_documents[uri].diagnose()
+        _logger.debug('about to publish diagnostics')
+        self._publish_diagnostics()
 
     def _did_close_text_document(
         self, params: Optional[Union[dict, list]]
@@ -198,7 +165,22 @@ class Server:
         text_document_identifier = params['textDocument']
         uri = text_document_identifier['uri']
         self._text_documents[uri].close()
+        # TODO: Diagnostics will be cleared for this document. This is fine
+        # because Concat doesn't really have a full module system or a project
+        # system, yet.
+        self._publish_diagnostics()
         del self._text_documents[uri]
+
+    def _publish_diagnostics(self) -> None:
+        for uri, document in self._text_documents.items():
+            diags = []
+            for d in document.diagnostics:
+                diags.append(d.to_json())
+            _logger.debug(f'publishing diagnostics for {uri}')
+            self._rpc_server.notify(
+                'textDocument/publishDiagnostics',
+                {'uri': uri, 'diagnostics': diags},
+            )
 
     def _receive_message_hook(
         self,
@@ -319,16 +301,110 @@ class _Headers(Dict[str, str]):
         super().__setitem__(name.lower(), value)
 
 
+class _Position:
+    def __init__(self, line: int, character: int) -> None:
+        self._line = line
+        # PositionEncodingKind determines how the character offset is
+        # interpreted. It defaults to UTF-16 offsets.
+        self._character = character
+
+    def to_json(self) -> dict:
+        return {'line': self._line, 'character': self._character}
+
+
+def index_to_utf16_code_unit_offset(string: str, index: int) -> int:
+    offset = 0
+    for i, char in enumerate(string):
+        if i == index:
+            return offset
+        # https://en.wikipedia.org/wiki/UTF-16#U+0000_to_U+D7FF_and_U+E000_to_U+FFFF
+        offset += 1 if ord(char) <= 0xFFFF else 2
+    return offset
+
+
+class _Range:
+    def __init__(self, start: _Position, end: _Position) -> None:
+        self._start = start
+        self._end = end
+
+    def to_json(self) -> dict:
+        return {'start': self._start.to_json(), 'end': self._end.to_json()}
+
+
+class _Diagnostic:
+    def __init__(self, range_: _Range, message: str) -> None:
+        self._range = range_
+        self._message = message
+
+    def to_json(self) -> dict:
+        return {'range': self._range.to_json(), 'message': self._message}
+
+
 class _TextDocumentItem:
     def __init__(self, dictionary: Dict[str, object]) -> None:
         self._uri = cast(str, dictionary['uri'])
         self._language_id = cast(str, dictionary['languageId'])
         self._version = cast(int, dictionary['version'])
         self._text = cast(str, dictionary['text'])
+        self.diagnostics: List[_Diagnostic] = []
 
     def update(self, version: int, text: str) -> None:
         self._version = version
         self._text = text
 
     def close(self) -> None:
-        pass
+        self.diagnostics = []
+
+    def diagnose(self) -> None:
+        self.diagnostics = self._diagnose()
+
+    def _diagnose(self) -> List[_Diagnostic]:
+        text_lines = self._text.splitlines(keepends=True)
+        try:
+            tokens = tokenize(self._text)
+        except py_tokenize.TokenError as e:
+            message = e.args[0]
+            line, column = e.args[1]
+            utf16_column_offset = (
+                0
+                if line > len(text_lines)
+                else index_to_utf16_code_unit_offset(
+                    text_lines[line - 1], column
+                )
+            )
+            position = _Position(line - 1, utf16_column_offset)
+            range_ = _Range(position, position)
+            return [_Diagnostic(range_, message)]
+        diagnostics = []
+        for token in tokens:
+            if token.type == 'ERRORTOKEN':
+                _logger.debug(f'error token: {token!r}')
+                _logger.debug(f'text_lines length: {len(text_lines)}')
+                start_position = _Position(
+                    token.start[0] - 1,
+                    index_to_utf16_code_unit_offset(
+                        text_lines[token.start[0] - 1], token.start[1]
+                    ),
+                )
+                end_position = _Position(
+                    token.end[0] - 1,
+                    index_to_utf16_code_unit_offset(
+                        text_lines[token.end[0] - 1], token.end[1]
+                    ),
+                )
+                range_ = _Range(start_position, end_position)
+                message = 'Invalid token'
+                diagnostics.append(_Diagnostic(range_, message))
+        return diagnostics
+
+
+class _Error(Enum):
+    SERVER_NOT_INITIALIZED = (-32002, 'The server must be initialized.')
+
+
+class _TextDocumentSyncKind(IntEnum):
+    FULL = 1
+
+
+class _PositionEncodingKind(Enum):
+    UTF16 = 'utf-16'

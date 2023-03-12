@@ -1,9 +1,11 @@
 from enum import Enum
 import json
+import logging
 from typing import (
     Callable,
     Dict,
     Iterable,
+    List,
     Mapping,
     MutableMapping,
     Optional,
@@ -39,6 +41,8 @@ _ReceiveMessageHook = Callable[
     ],
     None,
 ]
+_logger = logging.getLogger(__name__)
+_logger.addHandler(logging.NullHandler())
 
 
 class Server:
@@ -61,6 +65,7 @@ class Server:
         self._send_message_hook: _ReceiveMessageHook = (
             lambda _, _2, _3, _4: None
         )
+        self._messages_to_send: List[str] = []
 
     @overload
     def handle(self, arg: Handler) -> Handler:
@@ -107,6 +112,18 @@ class Server:
 
         return self._process_requests(parse_requests())
 
+    def notify(
+        self, method: str, parameters: Optional[Union[list, dict]]
+    ) -> None:
+        message: dict = {
+            'jsonrpc': '2.0',
+            'method': method,
+        }
+        if parameters is not None:
+            message['params'] = parameters
+        string_to_send = json.dumps(message, sort_keys=True,)
+        self._messages_to_send.append(string_to_send)
+
     def _process_requests(
         self, requests: Iterable[Union[dict, list, str]]
     ) -> Iterable[str]:
@@ -114,6 +131,8 @@ class Server:
             response = self._process_request(request_object)
             if response is not None:
                 yield response
+            yield from self._messages_to_send
+            self._messages_to_send.clear()
 
     def _process_request(
         self, request_object: Union[dict, list, str]
@@ -291,6 +310,10 @@ class Server:
                     ),
                     sort_keys=True,
                 )
+            self._log_error(
+                'Application defined error not sent because request was a notification',
+                e,
+            )
         if correlation_id is not self._missing_id_sentinel:
             return json.dumps(
                 self._create_success_response(correlation_id, return_value),
@@ -313,6 +336,9 @@ class Server:
             raise _ApplicationDefinedError from e
 
     _missing_id_sentinel = object()
+
+    def _log_error(self, message: str, error: Exception) -> None:
+        _logger.error(message, exc_info=error)
 
 
 def is_request(message: Mapping[str, object]) -> bool:

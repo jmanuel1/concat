@@ -28,4 +28,8 @@ module.exports = {
     concatLanguageClient.deactivate();
     commandsDisposable.dispose();
   },
+
+  consumeLinterV2: concatLanguageClient.consumeLinterV2.bind(
+    concatLanguageClient
+  ),
 };
