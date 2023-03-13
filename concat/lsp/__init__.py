@@ -2,11 +2,13 @@ from concat.astutils import Location
 import concat.jsonrpc
 from concat.lex import tokenize
 from concat.parse import ParseError
-from concat.transpile import parse
+from concat.transpile import parse, typecheck
+from concat.typecheck import StaticAnalysisError
 from enum import Enum, IntEnum
 from io import TextIOWrapper
 import logging
 import logging.handlers
+from pathlib import Path
 import re
 import tokenize as py_tokenize
 from typing import (
@@ -21,6 +23,8 @@ from typing import (
     cast,
 )
 from typing_extensions import Self
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 
 _logger = logging.getLogger(__name__)
@@ -399,7 +403,7 @@ class _TextDocumentItem:
                 message = 'Invalid token'
                 diagnostics.append(_Diagnostic(range_, message))
         try:
-            parse(tokens)
+            ast = parse(tokens)
         except ParseError as e:
             parser_start_position = e.get_start_position()
             parser_end_position = e.get_end_position()
@@ -413,6 +417,18 @@ class _TextDocumentItem:
             )
             message = f'Expected one of: {", ".join(e.expected)}'
             diagnostics.append(_Diagnostic(range_, message))
+            return diagnostics
+        try:
+            source_dir = str(
+                Path(url2pathname(urlparse(self._uri).path)).parent
+            )
+            typecheck(ast, source_dir)
+        except StaticAnalysisError as e:
+            position = _Position.from_tokenizer_location(
+                text_lines, e.location or (1, 0)
+            )
+            range_ = _Range(position, position)
+            diagnostics.append(_Diagnostic(range_, e.message))
         return diagnostics
 
 

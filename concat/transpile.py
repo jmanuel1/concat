@@ -49,13 +49,17 @@ def parse(tokens: Sequence[Token]) -> concat.parse.TopLevelNode:
     return parser.parse(tokens)
 
 
-def transpile(code: str, source_dir: str = '.') -> ast.Module:
-    tokens = tokenize(code)
-    concat_ast = parse(tokens)
+def typecheck(concat_ast: concat.parse.TopLevelNode, source_dir: str) -> None:
     # FIXME: Consider the type of everything entered interactively beforehand.
     concat.typecheck.check(
         concat.typecheck.Environment(), concat_ast.children, source_dir
     )
+
+
+def transpile(code: str, source_dir: str = '.') -> ast.Module:
+    tokens = tokenize(code)
+    concat_ast = parse(tokens)
+    typecheck(concat_ast, source_dir)
     return transpile_ast(concat_ast)
 
 
