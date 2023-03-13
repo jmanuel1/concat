@@ -1,5 +1,8 @@
+from concat.astutils import Location
 import concat.jsonrpc
 from concat.lex import tokenize
+from concat.parse import ParseError
+from concat.transpile import parse
 from enum import Enum, IntEnum
 from io import TextIOWrapper
 import logging
@@ -13,9 +16,11 @@ from typing import (
     List,
     Mapping,
     Optional,
+    Sequence,
     Union,
     cast,
 )
+from typing_extensions import Self
 
 
 _logger = logging.getLogger(__name__)
@@ -308,6 +313,18 @@ class _Position:
         # interpreted. It defaults to UTF-16 offsets.
         self._character = character
 
+    @classmethod
+    def from_tokenizer_location(
+        cls, text_lines: Sequence[str], loc: Location
+    ) -> Self:
+        line, column = loc
+        utf16_column_offset = (
+            0
+            if line > len(text_lines)
+            else index_to_utf16_code_unit_offset(text_lines[line - 1], column)
+        )
+        return cls(line - 1, utf16_column_offset)
+
     def to_json(self) -> dict:
         return {'line': self._line, 'character': self._character}
 
@@ -364,15 +381,7 @@ class _TextDocumentItem:
             tokens = tokenize(self._text)
         except py_tokenize.TokenError as e:
             message = e.args[0]
-            line, column = e.args[1]
-            utf16_column_offset = (
-                0
-                if line > len(text_lines)
-                else index_to_utf16_code_unit_offset(
-                    text_lines[line - 1], column
-                )
-            )
-            position = _Position(line - 1, utf16_column_offset)
+            position = _Position.from_tokenizer_location(text_lines, e.args[1])
             range_ = _Range(position, position)
             return [_Diagnostic(range_, message)]
         diagnostics = []
@@ -380,21 +389,30 @@ class _TextDocumentItem:
             if token.type == 'ERRORTOKEN':
                 _logger.debug(f'error token: {token!r}')
                 _logger.debug(f'text_lines length: {len(text_lines)}')
-                start_position = _Position(
-                    token.start[0] - 1,
-                    index_to_utf16_code_unit_offset(
-                        text_lines[token.start[0] - 1], token.start[1]
-                    ),
+                start_position = _Position.from_tokenizer_location(
+                    text_lines, token.start
                 )
-                end_position = _Position(
-                    token.end[0] - 1,
-                    index_to_utf16_code_unit_offset(
-                        text_lines[token.end[0] - 1], token.end[1]
-                    ),
+                end_position = _Position.from_tokenizer_location(
+                    text_lines, token.end
                 )
                 range_ = _Range(start_position, end_position)
                 message = 'Invalid token'
                 diagnostics.append(_Diagnostic(range_, message))
+        try:
+            parse(tokens)
+        except ParseError as e:
+            parser_start_position = e.get_start_position()
+            parser_end_position = e.get_end_position()
+            range_ = _Range(
+                _Position.from_tokenizer_location(
+                    text_lines, parser_start_position
+                ),
+                _Position.from_tokenizer_location(
+                    text_lines, parser_end_position
+                ),
+            )
+            message = f'Expected one of: {", ".join(e.expected)}'
+            diagnostics.append(_Diagnostic(range_, message))
         return diagnostics
 
 

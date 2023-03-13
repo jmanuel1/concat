@@ -242,8 +242,14 @@ if TYPE_CHECKING:
 class ParseError(parsy.ParseError):
     def line_info(self):
         return '{}:{} ({!r} here)'.format(
-            *self.stream[self.index].start, self.stream[self.index]
+            *self.get_start_position(), self.stream[self.index]
         )
+
+    def get_start_position(self) -> Tuple[int, int]:
+        return self.stream[self.index].start
+
+    def get_end_position(self) -> Tuple[int, int]:
+        return self.stream[self.index].end
 
 
 # let's lie

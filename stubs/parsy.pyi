@@ -2,7 +2,7 @@
 
 
 from typing import (TypeVar, List, Union, Generic,
-                    Callable, Generator, Optional, Protocol, overload)
+                    Callable, FrozenSet, Generator, Optional, Protocol, Sequence, overload)
 
 
 T = TypeVar('T')
@@ -88,8 +88,10 @@ class _ParserOutputtingList(Parser[T, List[U]]):
         ...
 
 
-class ParseError(Exception):
-    ...
+class ParseError(Exception, Generic[T]):
+    expected: FrozenSet[str]
+    index: int
+    stream: Sequence[T]
 
 
 def test_item(func: Callable[[T], bool], description: str) -> Parser[T, T]:
