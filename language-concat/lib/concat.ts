@@ -25,6 +25,9 @@ export default class Concat {
       {
         encoding: "utf-8",
         windowsHide: true,
+        env: {
+          PYTHONIOENCODING: "utf-8",
+        },
       },
       line
     );
