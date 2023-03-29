@@ -137,7 +137,8 @@ class Server:
     def _exit(self, _) -> None:
         self._should_exit = True
 
-    def _get_server_capabilities(self) -> Dict[str, object]:
+    @staticmethod
+    def _get_server_capabilities() -> Dict[str, object]:
         return {
             'textDocumentSync': _TextDocumentSyncKind.FULL.value,
             'positionEncoding': _PositionEncodingKind.UTF16.value,
@@ -302,7 +303,6 @@ class Server:
         rf'(?:(?P<name>{_token}):{_ows}(?P<value>{_field_value}){_ows})'
     )
     _terminated_header_field = rf'(?:{_header_field}\r\n)'
-    # _header_fields = rf'^(?:{_header_field}\r\n)*'
     _terminated_header_field_regex = re.compile(_terminated_header_field)
 
     # TODO: Parse the content-type header properly

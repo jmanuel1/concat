@@ -285,9 +285,8 @@ class Server:
             'id': correlation_id,
         }
 
-    def _error_code_to_jsonrpc(
-        self, error: Tuple[int, str]
-    ) -> Dict[str, object]:
+    @staticmethod
+    def _error_code_to_jsonrpc(error: Tuple[int, str]) -> Dict[str, object]:
         return {'code': error[0], 'message': error[1]}
 
     def _call_method_and_create_response(
@@ -339,7 +338,8 @@ class Server:
 
     _missing_id_sentinel = object()
 
-    def _log_error(self, message: str, error: Exception) -> None:
+    @staticmethod
+    def _log_error(message: str, error: Exception) -> None:
         _logger.error(message, exc_info=error)
 
 
