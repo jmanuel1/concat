@@ -65,7 +65,7 @@ class NameError(StaticAnalysisError, builtins.NameError):
         if isinstance(name, concat.parse.NameWordNode):
             location = name.location
             name = name.value
-        super().__init__('name {!r} not previously defined'.format(name))
+        super().__init__(f'name {name!r} not previously defined')
         self._name = name
         self.location = location
 

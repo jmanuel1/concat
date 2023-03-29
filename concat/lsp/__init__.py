@@ -7,7 +7,6 @@ from concat.typecheck import StaticAnalysisError
 from enum import Enum, IntEnum
 from io import TextIOWrapper
 import logging
-import logging.handlers
 from pathlib import Path
 import re
 import tokenize as py_tokenize
@@ -32,6 +31,8 @@ _logger.addHandler(logging.NullHandler())
 
 
 class Server:
+    """A Language Server Protocol server."""
+
     def __init__(self) -> None:
         self._rpc_server = concat.jsonrpc.Server()
         self._rpc_server.set_receive_message_hook(self._receive_message_hook)
@@ -80,11 +81,21 @@ class Server:
                 _logger.info(repr(headers))
                 if not self._charset_regex.search(content_type):
                     _logger.error('unsupported charset')
-                    error_json = '{"jsonrpc": "2.0", "error": {"code": -32600, "message": "Request body must be encoded in UTF-8"}, "id": null}'
+                    error_json = '''{
+                        "jsonrpc": "2.0",
+                        "error": {
+                            "code": -32600,
+                            "message": "Request body must be encoded in UTF-8"
+                        },
+                        "id": null
+                    }'''
+                    error_json_length = len(
+                        error_json.encode(encoding='utf-8')
+                    )
                     headers_response_file.writelines(
                         [
                             'Content-Type: application/vscode-jsonrpc; charset=utf-8',
-                            f'Content-Length: {len(error_json.encode(encoding="utf-8"))}',
+                            f'Content-Length: {error_json_length}',
                             '',
                         ]
                     )
@@ -96,14 +107,12 @@ class Server:
 
         rpc_responses = self._rpc_server.start(request_generator())
         for response in rpc_responses:
+            response_length = len(response.encode(encoding='utf-8'))
             _logger.info(
-                f'response:\nContent-Length: {len(response.encode(encoding="utf-8"))}\n\n{response}'
+                f'response:\nContent-Length: {response_length}\n\n{response}'
             )
             headers_response_file.writelines(
-                [
-                    f'Content-Length: {len(response.encode(encoding="utf-8"))}\n',
-                    '\n',
-                ]
+                [f'Content-Length: {response_length}\n', '\n',]
             )
             content_response_file.write(response)
             responses.flush()
@@ -117,6 +126,9 @@ class Server:
         return {'capabilities': self._get_server_capabilities()}
 
     def _on_initialized(self, _) -> None:
+        """Handler for the 'initialized' message.
+
+        No need to do anything here."""
         pass
 
     def _shutdown(self, _) -> None:
@@ -219,7 +231,7 @@ class Server:
             fail(*_Error.SERVER_NOT_INITIALIZED.value)
             return
         if message.get('method') != 'exit':
-            _logger.warn(f'dropping received message: {message!r}\n')
+            _logger.warning(f'dropping received message: {message!r}\n')
             drop()
 
     def _send_message_hook(
@@ -253,7 +265,7 @@ class Server:
                 line = str(requests.readline(), encoding='ascii')
                 _logger.debug(f'{line!r}\n')
                 if not line:
-                    _logger.warn('end of file while reading headers')
+                    _logger.warning('end of file while reading headers')
                     self._should_exit = True
                     break
                 if line == '\r\n':

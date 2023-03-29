@@ -16,6 +16,8 @@ from typing import (
 
 
 class Error(Enum):
+    """Standard JSON-RPC error codes and messages."""
+
     # Error messages are copied from the JSON-RPC spec. Attribution is in
     # LICENSE.md
 
@@ -353,6 +355,11 @@ class _MethodCallError(Exception):
 
 
 class InvalidParametersError(_MethodCallError):
+    """Raised by method handlers when they receive invalid parameters.
+
+    A method handler should raise an exception of this type to signal to the
+    client that the method parameters are invalid."""
+
     def __init__(self) -> None:
         super().__init__(Error.INVALID_PARAMS)
 
