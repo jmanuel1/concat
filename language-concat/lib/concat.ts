@@ -46,20 +46,24 @@ export default class Concat {
 
   static collectPossiblePythonPaths(editor: TextEditor | string): string[] {
     const virtualEnvPaths = ["env/Scripts/python.exe", "env/bin/python"];
-    let projectPath: string | null;
-    if (typeof editor === "string") {
-      projectPath = editor;
-    } else {
-      if (!editor) return ["python"];
-      const editorPath = editor.getPath();
-      if (!editorPath) {
-        return ["python"];
+    function getProjectPath() {
+      let projectPath: string | null;
+      if (typeof editor === "string") {
+        projectPath = editor;
+      } else {
+        if (!editor) return null;
+        const editorPath = editor.getPath();
+        if (!editorPath) {
+          return null;
+        }
+        [projectPath] = atom.project.relativizePath(editorPath);
       }
-      [projectPath] = atom.project.relativizePath(editorPath);
+      return projectPath;
     }
+    const projectPath = getProjectPath();
     if (projectPath === null) return ["python"];
     return virtualEnvPaths
-      .map((path) => join(projectPath!, path))
+      .map((path) => join(projectPath, path))
       .concat(["python"]);
   }
 

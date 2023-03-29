@@ -86,11 +86,12 @@ export default class ConcatGrammar extends GrammarClass {
     return null;
   }
 
-  // override tokenizeLine(line, ruleStack, firstLine) {
-  //   const tags = [];
-  //   const tokens = [];
-  //   return { line, tags, tokens, ruleStack: [] };
-  // }
+  // Needed to prevent errors that can prevent you from editing a line.
+  override tokenizeLine(line, ruleStack, firstLine) {
+    const tags = [];
+    const tokens = [];
+    return { line, tags, tokens, ruleStack: [] };
+  }
 
   startMarkingTokens() {
     const concatTextEditors = new Map();

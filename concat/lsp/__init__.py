@@ -419,6 +419,7 @@ class _TextDocumentItem:
             diagnostics.append(_Diagnostic(range_, message))
             return diagnostics
         try:
+            # https://stackoverflow.com/questions/5977576/is-there-a-convenient-way-to-map-a-file-uri-to-os-path
             source_dir = str(
                 Path(url2pathname(urlparse(self._uri).path)).parent
             )
