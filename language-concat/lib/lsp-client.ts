@@ -5,22 +5,20 @@ import Concat from "./concat";
  * A Language Server Protocol client for Concat.
  */
 class ConcatLanguageClient extends AutoLanguageClient {
-  override getGrammarScopes() {
-    void this;
+  private grammarScopes = ["source.concat"];
+  private languageName = "Concat";
+  private serverName = "Concat LSP";
 
-    return ["source.concat"];
+  override getGrammarScopes() {
+    return this.grammarScopes;
   }
 
   override getLanguageName() {
-    void this;
-
-    return "Concat";
+    return this.languageName;
   }
 
   override getServerName() {
-    void this;
-
-    return "Concat LSP";
+    return this.serverName;
   }
 
   override startServerProcess(projectPath: string) {

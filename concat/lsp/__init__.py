@@ -1,6 +1,7 @@
 from concat.astutils import Location
 import concat.jsonrpc
 from concat.lex import tokenize
+from concat.logging import ConcatLogger
 from concat.parse import ParseError
 from concat.transpile import parse, typecheck
 from concat.typecheck import StaticAnalysisError
@@ -26,8 +27,9 @@ from urllib.parse import urlparse
 from urllib.request import url2pathname
 
 
-_logger = logging.getLogger(__name__)
-_logger.addHandler(logging.NullHandler())
+_python_logger = logging.getLogger(__name__)
+_python_logger.addHandler(logging.NullHandler())
+_logger = ConcatLogger(_python_logger)
 
 
 class Server:
@@ -78,7 +80,7 @@ class Server:
                 _logger.info('read headers')
                 content_type = headers.content_type()
                 content_part = requests.read(headers.content_length_in_bytes())
-                _logger.info(repr(headers))
+                _logger.info('{!r}', headers)
                 if not self._charset_regex.search(content_type):
                     _logger.error('unsupported charset')
                     error_json = '''{
@@ -102,14 +104,16 @@ class Server:
                     content_response_file.write(error_json)
                     continue
                 decoded_content = str(content_part, encoding='utf-8')
-                _logger.info('request content: ' + repr(decoded_content))
+                _logger.info('request content: {!r}', decoded_content)
                 yield decoded_content
 
         rpc_responses = self._rpc_server.start(request_generator())
         for response in rpc_responses:
             response_length = len(response.encode(encoding='utf-8'))
             _logger.info(
-                f'response:\nContent-Length: {response_length}\n\n{response}'
+                'response:\nContent-Length: {response_length}\n\n{response}',
+                response_length=response_length,
+                response=response,
             )
             headers_response_file.writelines(
                 [f'Content-Length: {response_length}\n', '\n',]
@@ -129,7 +133,6 @@ class Server:
         """Handler for the 'initialized' message.
 
         No need to do anything here."""
-        pass
 
     def _shutdown(self, _) -> None:
         self._has_received_shutdown_request = True
@@ -151,15 +154,21 @@ class Server:
         if not isinstance(params, dict):
             raise concat.jsonrpc.InvalidParametersError
         text_document_item = params['textDocument']
-        _logger.debug(f'opened text document item: {text_document_item}')
+        _logger.debug(
+            'opened text document item: {text_document_item}',
+            text_document_item=text_document_item,
+        )
         if not isinstance(text_document_item, dict):
             _logger.error('text document item is not an object')
             raise concat.jsonrpc.InvalidParametersError
         text_document = _TextDocumentItem(text_document_item)
-        _logger.debug(f'text document object: {text_document!r}')
+        _logger.debug(
+            'text document object: {text_document!r}',
+            text_document=text_document,
+        )
         self._text_documents[text_document_item['uri']] = text_document
         _logger.debug(
-            f'about to compute diagnostics for {text_document_item["uri"]}'
+            'about to compute diagnostics for {}', text_document_item['uri']
         )
         text_document.diagnose()
         _logger.debug('about to publish diagnostics')
@@ -198,7 +207,7 @@ class Server:
             diags = []
             for d in document.diagnostics:
                 diags.append(d.to_json())
-            _logger.debug(f'publishing diagnostics for {uri}')
+            _logger.debug('publishing diagnostics for {uri}', uri=uri)
             self._rpc_server.notify(
                 'textDocument/publishDiagnostics',
                 {'uri': uri, 'diagnostics': diags},
@@ -216,7 +225,8 @@ class Server:
             and self._has_received_shutdown_request
         ):
             _logger.error(
-                f'has recieved shutdown, cannot respond to {message!r}\n'
+                'has recieved shutdown, cannot respond to {message!r}\n',
+                message=message,
             )
             fail(*concat.jsonrpc.Error.INVALID_REQUEST.value)
             return
@@ -227,12 +237,15 @@ class Server:
             return
         if concat.jsonrpc.is_request(message):
             _logger.error(
-                f'has not been told to initialize, cannot respond to {message!r}\n'
+                'has not been told to initialize, cannot respond to {message!r}\n',
+                message=message,
             )
             fail(*_Error.SERVER_NOT_INITIALIZED.value)
             return
         if message.get('method') != 'exit':
-            _logger.warning(f'dropping received message: {message!r}\n')
+            _logger.warning(
+                'dropping received message: {message!r}\n', message=message
+            )
             drop()
 
     def _send_message_hook(
@@ -240,7 +253,8 @@ class Server:
     ) -> None:
         if self._has_responded_to_initialize_request:
             _logger.debug(
-                f'has responded to initialize, can respond to {message!r}\n'
+                'has responded to initialize, can respond to {message!r}\n',
+                message=message,
             )
             return
         if message.get('method') in [
@@ -251,10 +265,11 @@ class Server:
             '$/progress',
         ]:
             _logger.debug(
-                f'has not responded to initialize, but respond to {message!r}\n'
+                'has not responded to initialize, but can respond to {message!r}\n',
+                message=message,
             )
             return
-        _logger.debug(f'dropping sent message: {message!r}\n')
+        _logger.debug('dropping sent message: {message!r}\n', message=message)
         drop()
 
     def _read_headers(self, requests: BinaryIO) -> '_Headers':
@@ -264,7 +279,7 @@ class Server:
             while not requests.closed:
                 _logger.debug('reading header line')
                 line = str(requests.readline(), encoding='ascii')
-                _logger.debug(f'{line!r}\n')
+                _logger.debug('{line!r}\n', line=line)
                 if not line:
                     _logger.warning('end of file while reading headers')
                     self._should_exit = True
@@ -403,8 +418,10 @@ class _TextDocumentItem:
         diagnostics = []
         for token in tokens:
             if token.type == 'ERRORTOKEN':
-                _logger.debug(f'error token: {token!r}')
-                _logger.debug(f'text_lines length: {len(text_lines)}')
+                _logger.debug('error token: {token!r}', token=token)
+                _logger.debug(
+                    'text_lines length: {length}', length=len(text_lines)
+                )
                 start_position = _Position.from_tokenizer_location(
                     text_lines, token.start
                 )

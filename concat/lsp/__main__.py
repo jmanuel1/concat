@@ -2,6 +2,7 @@ from concat.lsp import Server
 from datetime import datetime, timezone
 import json
 import logging
+import logging.handlers
 import pathlib
 import sys
 import traceback
@@ -17,16 +18,16 @@ class _LogRecordEncoder(json.JSONEncoder):
                 'message': obj.getMessage(),
                 # arguments for the formatting string don't need to be in the JSON
                 'level_name': obj.levelname,
-                'path_name': obj.pathname,
-                'file_name': obj.filename,
-                'module': obj.module,
+                'path_name': obj.caller.filename,
+                'file_name': pathlib.Path(obj.caller.filename).name,
+                'module': obj.caller.frame.f_globals['__name__'],
                 'exception': (
                     traceback.format_exception(*obj.exc_info)
                     if obj.exc_info
                     else None
                 ),
-                'line_number': obj.lineno,
-                'function_name': obj.funcName,
+                'line_number': obj.caller.lineno,
+                'function_name': obj.caller.function,
                 'created': datetime.fromtimestamp(
                     obj.created, timezone.utc
                 ).isoformat(),

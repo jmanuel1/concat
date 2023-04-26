@@ -1,3 +1,4 @@
+from concat.logging import ConcatLogger
 from enum import Enum
 import json
 import logging
@@ -43,8 +44,9 @@ _ReceiveMessageHook = Callable[
     ],
     None,
 ]
-_logger = logging.getLogger(__name__)
-_logger.addHandler(logging.NullHandler())
+_python_logger = logging.getLogger(__name__)
+_python_logger.addHandler(logging.NullHandler())
+_logger = ConcatLogger(_python_logger)
 
 
 class Server:
