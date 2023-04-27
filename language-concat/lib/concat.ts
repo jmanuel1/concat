@@ -15,16 +15,19 @@ export interface Token {
 }
 
 /**
- * Class to interact with the Concat executable.
+ * Functions to interact with the Concat executable.
  */
-export default class Concat {
-  static async *tokenize(line, editor): AsyncIterable<Token> {
+const Concat = {
+  async *tokenize(line: string, editor: TextEditor): AsyncIterable<Token> {
     const { stdout } = await Concat.execFoundPython(
       editor,
       ["-m", "concat", "--tokenize"],
       {
         encoding: "utf-8",
         windowsHide: true,
+        env: {
+          PYTHONIOENCODING: "utf-8",
+        },
       },
       line
     );
@@ -42,23 +45,32 @@ export default class Concat {
     for (const token of remainingTokens) {
       yield token;
     }
-  }
+  },
 
-  static collectPossiblePythonPaths(editor: TextEditor): string[] {
+  collectPossiblePythonPaths(editor: TextEditor | string): string[] {
     const virtualEnvPaths = ["env/Scripts/python.exe", "env/bin/python"];
-    if (!editor) return ["python"];
-    const editorPath = editor.getPath();
-    if (!editorPath) {
-      return ["python"];
+    function getProjectPath() {
+      let projectPath: string | null;
+      if (typeof editor === "string") {
+        projectPath = editor;
+      } else {
+        if (!editor) return null;
+        const editorPath = editor.getPath();
+        if (!editorPath) {
+          return null;
+        }
+        [projectPath] = atom.project.relativizePath(editorPath);
+      }
+      return projectPath;
     }
-    const [projectPath, _] = atom.project.relativizePath(editorPath);
-    if (!projectPath) return ["python"];
+    const projectPath = getProjectPath();
+    if (projectPath === null) return ["python"];
     return virtualEnvPaths
       .map((path) => join(projectPath, path))
       .concat(["python"]);
-  }
+  },
 
-  static async execFoundPython(
+  async execFoundPython(
     editor: TextEditor,
     args: string[],
     options: ExecFileOptions & ObjectEncodingOptions,
@@ -85,8 +97,12 @@ export default class Concat {
       }
     }
     throw new Error("No Python installation found.");
-  }
-}
+  },
+};
+
+type Concat = typeof Concat;
+
+export default Concat;
 
 function isErrnoException(error: Error): error is NodeJS.ErrnoException {
   return Boolean((error as NodeJS.ErrnoException).code);

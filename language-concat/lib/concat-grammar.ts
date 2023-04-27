@@ -22,15 +22,14 @@ import Concat, { Token } from "./concat";
 
 // QUESTION: Can I just implement the Grammar interface instead?
 export default class ConcatGrammar extends GrammarClass {
-  private concat: Concat;
-  private registry: GrammarRegistry;
+  private readonly registry: GrammarRegistry;
   private textEditorsObserver?: Disposable;
+  private readonly dummyTokenizeLineResult = { tags: [], tokens: [], ruleStack: [] };
 
   constructor(registry) {
     const name = "Concat";
     const scopeName = "source.concat";
     super(registry, { name, scopeName, fileTypes: ["cat"] });
-    this.concat = new Concat();
     this.registry = registry.textmateRegistry;
     this.startMarkingTokens();
   }
@@ -86,11 +85,10 @@ export default class ConcatGrammar extends GrammarClass {
     return null;
   }
 
-  // override tokenizeLine(line, ruleStack, firstLine) {
-  //   const tags = [];
-  //   const tokens = [];
-  //   return { line, tags, tokens, ruleStack: [] };
-  // }
+  // Needed to prevent errors that can prevent you from editing a line.
+  override tokenizeLine(line, _ruleStack, _firstLine) {
+    return { ...this.dummyTokenizeLineResult, line };
+  }
 
   startMarkingTokens() {
     const concatTextEditors = new Map();

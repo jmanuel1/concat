@@ -23,16 +23,19 @@ setup(
     install_requires=[
         'astunparse>=1.3.0,<2',
         'parsy>=1.3.0,<2',
-        'typing-extensions>=3.7.4,<4',
+        'typing-extensions>=4',
     ],
     test_suite='nose.collector',
     tests_require=[
         'coverage>=6.4.4,<7',
         'hypothesis==5.38.0',
+        # NOTE: If you upgrade hypothesis, you might be able to remove this.
+        'importlib-metadata<5.0',
         'nose',
         'pywinpty>=2.0.7,<3; platform_system=="Windows"',
         'scripttest',
-        'typing-extensions>=3.7.4,<4',
     ],
-    extras_require={'dev': ['pre-commit>=2.6.0,<3', 'axblack==20220330']},
+    extras_require={
+        'dev': ['axblack==20220330', 'mypy>=1.1.1', 'pre-commit>=2.6.0,<3']
+    },
 )

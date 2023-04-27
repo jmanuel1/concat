@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 
 class StaticAnalysisError(Exception):
     def __init__(self, message: str) -> None:
-        self._message = message
+        self.message = message
         self.location: Optional['concat.astutils.Location'] = None
 
     def set_location_if_missing(
@@ -49,7 +49,7 @@ class StaticAnalysisError(Exception):
             self.location = location
 
     def __str__(self) -> str:
-        return '{} at {}'.format(self._message, self.location)
+        return '{} at {}'.format(self.message, self.location)
 
 
 class TypeError(StaticAnalysisError, builtins.TypeError):
@@ -65,18 +65,15 @@ class NameError(StaticAnalysisError, builtins.NameError):
         if isinstance(name, concat.parse.NameWordNode):
             location = name.location
             name = name.value
-        super().__init__(name)
+        super().__init__(f'name {name!r} not previously defined')
         self._name = name
-        self.location = location or self.location
+        self.location = location
 
     def __str__(self) -> str:
         location_info = ''
         if self.location:
             location_info = ' (error at {}:{})'.format(*self.location)
-        return (
-            'name "{}" not previously defined'.format(self._name)
-            + location_info
-        )
+        return self.message + location_info
 
 
 class AttributeError(TypeError, builtins.AttributeError):
