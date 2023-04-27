@@ -29,6 +29,8 @@ setup(
     tests_require=[
         'coverage>=6.4.4,<7',
         'hypothesis==5.38.0',
+        # NOTE: If you upgrade hypothesis, you might be able to remove this.
+        'importlib-metadata<5.0',
         'nose',
         'pywinpty>=2.0.7,<3; platform_system=="Windows"',
         'scripttest',
