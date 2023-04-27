@@ -5,9 +5,9 @@ import Concat from "./concat";
  * A Language Server Protocol client for Concat.
  */
 class ConcatLanguageClient extends AutoLanguageClient {
-  private grammarScopes = ["source.concat"];
-  private languageName = "Concat";
-  private serverName = "Concat LSP";
+  private readonly grammarScopes = ["source.concat"];
+  private readonly languageName = "Concat";
+  private readonly serverName = "Concat LSP";
 
   override getGrammarScopes() {
     return this.grammarScopes;

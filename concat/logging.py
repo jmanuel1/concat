@@ -2,6 +2,7 @@ import inspect
 import logging
 from typing import Callable, Dict, List
 
+
 # QUESTION: Use a LoggingAdapter instead?
 class ConcatLogger:
     """Wraps a logging.Logger so that it's easy to use str.format syntax."""
@@ -16,28 +17,27 @@ class ConcatLogger:
         # https://stackoverflow.com/a/41938216/3455228
         caller = inspect.stack()[1]
         _log(self._logger.debug, format_string, caller, args, kwargs)
-        del caller
+        # According to Deepsource, all local variables will be deleted at the
+        # end of this scope. Therefore, any cyclic references created by
+        # `caller` should be broken.
 
     def error(
         self, format_string: str, *args: object, **kwargs: object
     ) -> None:
         caller = inspect.stack()[1]
         _log(self._logger.error, format_string, caller, args, kwargs)
-        del caller
 
     def warning(
         self, format_string: str, *args: object, **kwargs: object
     ) -> None:
         caller = inspect.stack()[1]
         _log(self._logger.warning, format_string, caller, args, kwargs)
-        del caller
 
     def info(
         self, format_string: str, *args: object, **kwargs: object
     ) -> None:
         caller = inspect.stack()[1]
         _log(self._logger.info, format_string, caller, args, kwargs)
-        del caller
 
 
 def _log(

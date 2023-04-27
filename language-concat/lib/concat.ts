@@ -15,10 +15,10 @@ export interface Token {
 }
 
 /**
- * Class to interact with the Concat executable.
+ * Functions to interact with the Concat executable.
  */
-export default class Concat {
-  static async *tokenize(line, editor): AsyncIterable<Token> {
+const Concat = {
+  async *tokenize(line: string, editor: TextEditor): AsyncIterable<Token> {
     const { stdout } = await Concat.execFoundPython(
       editor,
       ["-m", "concat", "--tokenize"],
@@ -45,9 +45,9 @@ export default class Concat {
     for (const token of remainingTokens) {
       yield token;
     }
-  }
+  },
 
-  static collectPossiblePythonPaths(editor: TextEditor | string): string[] {
+  collectPossiblePythonPaths(editor: TextEditor | string): string[] {
     const virtualEnvPaths = ["env/Scripts/python.exe", "env/bin/python"];
     function getProjectPath() {
       let projectPath: string | null;
@@ -68,9 +68,9 @@ export default class Concat {
     return virtualEnvPaths
       .map((path) => join(projectPath, path))
       .concat(["python"]);
-  }
+  },
 
-  static async execFoundPython(
+  async execFoundPython(
     editor: TextEditor,
     args: string[],
     options: ExecFileOptions & ObjectEncodingOptions,
@@ -97,8 +97,12 @@ export default class Concat {
       }
     }
     throw new Error("No Python installation found.");
-  }
-}
+  },
+};
+
+type Concat = typeof Concat;
+
+export default Concat;
 
 function isErrnoException(error: Error): error is NodeJS.ErrnoException {
   return Boolean((error as NodeJS.ErrnoException).code);
