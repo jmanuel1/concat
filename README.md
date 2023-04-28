@@ -10,7 +10,7 @@ Examples are in the examples directory. To see the (out of date and incomplete)
 spec, go to
 [http://jmanuel1.github.io/concat-spec/](http://jmanuel1.github.io/concat-spec/).
 
-Python 3.7+ required.
+Python 3.7 required.
 
 Development
 -----------
@@ -35,21 +35,16 @@ If you run the tests on Windows, you might need a
 depend on [`pywinpty`](https://pypi.org/project/pywinpty/) to use Windows
 pseudoterminals.)
 
-You may get Rust compile errors that make it look like the standard library is
-missing (in particular, E0463: `rustc --explain E0463`). As suggested by
-`rustc`, you can try adding the right standard library with `rustup target add
-<target>`. I had to use the target `i686-pc-windows-msvc` even though I'm on a
-64-bit laptop and `pywinpty` claims to require `x86_64-pc-windows-msvc` to build
-from source.
+If your Python is 32-bit, you may get Rust compile errors that make it look like
+the standard library is missing (in particular, E0463: `rustc --explain E0463`).
+As suggested by `rustc`, you can try adding the right standard library with
+`rustup target add <target>`. I used the target `i686-pc-windows-msvc` even
+though `pywinpty` claims to require `x86_64-pc-windows-msvc` to build from
+source. Then set the environment variable `CARGO_BUILD_TARGET` to
+`i686-pc-windows-msvc` and try to install `pywinpty` again.
 
-Run the tests under `coverage.py`:
-
-    pip install coverage
-    coverage run setup.py test
-
-Combine the coverage data:
-
-    coverage combine
+Run the tests and get coverage info using `tox run`. (Make sure you've
+insstalled the development dependencies first.)
 
 **Nota Bene**: If you have `concat` installed globally, make sure to create and
 enter a `virtualenv` before testing, so you don't end up running the installed

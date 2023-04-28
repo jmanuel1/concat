@@ -25,16 +25,12 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: "3.7"
-    - name: Install dependencies
+    - name: Install development dependencies
       run: |
-        python -m pip install --upgrade pip coverage
-        python setup.py install
+        pip install -e .[dev]
     - name: Test
       run: |
-        coverage run setup.py test
-        coverage combine
-        coverage xml
-        coverage lcov
+        tox run
     - name: Report test coverage to DeepSource
       uses: deepsourcelabs/test-coverage-action@master
       with:
