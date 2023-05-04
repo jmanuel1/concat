@@ -5,25 +5,18 @@ from concat.typecheck.types import (
     ObjectType,
     SequenceVariable,
     StackEffect,
-    StackItemType,
     TypeSequence,
 )
 from hypothesis.strategies import (
     SearchStrategy,
-    booleans,
     builds,
-    composite,
-    deferred,
     dictionaries,
     from_type,
-    iterables,
     just,
     lists,
     none,
-    one_of,
     recursive,
     register_type_strategy,
-    sampled_from,
     text,
 )
 from typing import (

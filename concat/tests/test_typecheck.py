@@ -8,7 +8,6 @@ from concat.typecheck.types import (
     IndividualType,
     IndividualVariable,
     ObjectType,
-    SequenceVariable,
     StackEffect,
     Type as ConcatType,
     TypeSequence,
@@ -32,7 +31,7 @@ import unittest
 from textwrap import dedent
 from typing import List, Dict, cast
 import parsy
-from hypothesis import HealthCheck, given, example, note, settings, Verbosity
+from hypothesis import HealthCheck, given, example, note, settings
 from hypothesis.strategies import (
     dictionaries,
     from_type,
@@ -266,7 +265,6 @@ class TestNamedTypeNode(unittest.TestCase):
         named_type_node=concat.typecheck.NamedTypeNode((0, 0), ''),
         type=IndividualVariable(),
     )
-    # @settings(verbosity=Verbosity.debug)
     def test_name_does_exist(self, named_type_node, type) -> None:
         env = concat.typecheck.Environment({named_type_node.name: type})
         expected_type = named_type_node.to_type(env)[0]

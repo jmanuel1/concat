@@ -28,7 +28,6 @@ from typing_extensions import Literal
 import abc
 import collections.abc
 from collections import defaultdict
-import builtins
 
 
 if TYPE_CHECKING:
