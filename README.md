@@ -43,8 +43,8 @@ though `pywinpty` claims to require `x86_64-pc-windows-msvc` to build from
 source. Then set the environment variable `CARGO_BUILD_TARGET` to
 `i686-pc-windows-msvc` and try to install `pywinpty` again.
 
-Run the tests and get coverage info using `tox run`. (Make sure you've
-insstalled the development dependencies first.)
+Run the tests and get coverage info using `tox run`. (Make sure you've installed
+the development dependencies first.)
 
 **Nota Bene**: If you have `concat` installed globally, make sure to create and
 enter a `virtualenv` before testing, so you don't end up running the installed

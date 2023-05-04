@@ -32,7 +32,7 @@ import unittest
 from textwrap import dedent
 from typing import List, Dict, cast
 import parsy
-from hypothesis import HealthCheck, given, example, note, settings
+from hypothesis import HealthCheck, given, example, note, settings, Verbosity
 from hypothesis.strategies import (
     dictionaries,
     from_type,
@@ -70,7 +70,11 @@ class TestTypeChecker(unittest.TestCase):
                 [
                     ObjectType(
                         IndividualVariable(),
-                        {attr_word.value: StackEffect([], [int_type]),},
+                        {
+                            attr_word.value: StackEffect(
+                                TypeSequence([]), TypeSequence([int_type])
+                            ),
+                        },
                     ),
                 ]
             ),
@@ -89,7 +93,9 @@ class TestTypeChecker(unittest.TestCase):
             is_top_level=True,
         )
         note(str(type))
-        self.assertEqual(type, StackEffect([], [int_type]))
+        self.assertEqual(
+            type, StackEffect(TypeSequence([]), TypeSequence([int_type]))
+        )
 
     def test_if_then_inference(self) -> None:
         try_prog = 'True $() if_then\n'
@@ -101,7 +107,7 @@ class TestTypeChecker(unittest.TestCase):
             tree.children,
             is_top_level=True,
         )
-        self.assertEqual(type, StackEffect([], []))
+        self.assertEqual(type, StackEffect(TypeSequence([]), TypeSequence([])))
 
     def test_call_inference(self) -> None:
         try_prog = '$(42) call\n'
@@ -113,7 +119,9 @@ class TestTypeChecker(unittest.TestCase):
             tree.children,
             is_top_level=True,
         )
-        self.assertEqual(type, StackEffect([], [int_type]))
+        self.assertEqual(
+            type, StackEffect(TypeSequence([]), TypeSequence([int_type]))
+        )
 
     @given(sampled_from(['None', '...', 'NotImplemented']))
     def test_constants(self, constant_name) -> None:
@@ -171,7 +179,9 @@ class TestTypeChecker(unittest.TestCase):
             tree.children,
             is_top_level=True,
         )
-        self.assertEqual(type, StackEffect([], [int_type]))
+        self.assertEqual(
+            type, StackEffect(TypeSequence([]), TypeSequence([int_type]))
+        )
 
 
 class TestStackEffectParser(unittest.TestCase):
@@ -180,16 +190,35 @@ class TestStackEffectParser(unittest.TestCase):
     _b = concat.typecheck.IndividualVariable()
     _c = concat.typecheck.IndividualVariable()
     examples: Dict[str, StackEffect] = {
-        'a b -- b a': StackEffect([_a_bar, _b, _c], [_a_bar, _c, _b]),
-        'a -- a a': StackEffect([_a_bar, _b], [_a_bar, _b, _b]),
-        'a --': StackEffect([_a_bar, _b], [_a_bar]),
-        'a:object b:object -- b a': StackEffect(
-            [_a_bar, object_type, object_type,], [_a_bar, *[object_type] * 2],
+        'a b -- b a': StackEffect(
+            TypeSequence([_a_bar, _b, _c]), TypeSequence([_a_bar, _c, _b])
         ),
-        'a:`t -- a a': StackEffect([_a_bar, _b], [_a_bar, _b, _b]),
-        '*i -- *i a': StackEffect([_a_bar], [_a_bar, _b]),
+        'a -- a a': StackEffect(
+            TypeSequence([_a_bar, _b]), TypeSequence([_a_bar, _b, _b])
+        ),
+        'a --': StackEffect(
+            TypeSequence([_a_bar, _b]), TypeSequence([_a_bar])
+        ),
+        'a:object b:object -- b a': StackEffect(
+            TypeSequence([_a_bar, object_type, object_type,]),
+            TypeSequence([_a_bar, *[object_type] * 2]),
+        ),
+        'a:`t -- a a': StackEffect(
+            TypeSequence([_a_bar, _b]), TypeSequence([_a_bar, _b, _b])
+        ),
+        '*i -- *i a': StackEffect(
+            TypeSequence([_a_bar]), TypeSequence([_a_bar, _b])
+        ),
         '*i fun:(*i -- *o) -- *o': StackEffect(
-            [_a_bar, StackEffect([_a_bar], [_d_bar])], [_d_bar],
+            TypeSequence(
+                [
+                    _a_bar,
+                    StackEffect(
+                        TypeSequence([_a_bar]), TypeSequence([_d_bar])
+                    ),
+                ]
+            ),
+            TypeSequence([_d_bar]),
         ),
     }
 
@@ -237,21 +266,12 @@ class TestNamedTypeNode(unittest.TestCase):
         named_type_node=concat.typecheck.NamedTypeNode((0, 0), ''),
         type=IndividualVariable(),
     )
+    # @settings(verbosity=Verbosity.debug)
     def test_name_does_exist(self, named_type_node, type) -> None:
         env = concat.typecheck.Environment({named_type_node.name: type})
         expected_type = named_type_node.to_type(env)[0]
         note((expected_type, type))
         self.assertEqual(named_type_node.to_type(env)[0], type)
-
-
-class TestStackEffectProperties(unittest.TestCase):
-    def test_completeness_test(self) -> None:
-        in_var = SequenceVariable()
-        f = StackEffect(
-            [in_var, object_type, object_type],
-            [in_var, object_type, object_type],
-        )
-        self.assertFalse(f.can_be_complete_program())
 
 
 class TestDiagnosticInfo(unittest.TestCase):
@@ -286,8 +306,10 @@ class TestSubtyping(unittest.TestCase):
     @given(from_type(IndividualType), from_type(IndividualType))
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_stack_effect_subtyping(self, type1, type2) -> None:
-        fun1 = StackEffect([type1], [type2])
-        fun2 = StackEffect([no_return_type], [object_type])
+        fun1 = StackEffect(TypeSequence([type1]), TypeSequence([type2]))
+        fun2 = StackEffect(
+            TypeSequence([no_return_type]), TypeSequence([object_type])
+        )
         self.assertLessEqual(fun1, fun2)
 
     @given(from_type(IndividualType))
@@ -353,7 +375,9 @@ class TestSubtyping(unittest.TestCase):
     def test_class_subtype_of_stack_effect(self, effect) -> None:
         x = IndividualVariable()
         # NOTE: self-last convention is modelled after Factor.
-        unbound_effect = StackEffect([*effect.input, x], effect.output)
+        unbound_effect = StackEffect(
+            TypeSequence([*effect.input, x]), effect.output
+        )
         cls = ClassType(x, {'__init__': unbound_effect})
         self.assertLessEqual(cls, effect)
 

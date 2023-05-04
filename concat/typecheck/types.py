@@ -77,7 +77,7 @@ class Type(abc.ABC):
     @abc.abstractmethod
     def apply_substitution(
         self, _: 'concat.typecheck.Substitutions'
-    ) -> Union['Type', Sequence['StackItemType']]:
+    ) -> 'Type':
         pass
 
     @abc.abstractmethod
@@ -630,13 +630,11 @@ def ForAll(type_parameters: Sequence['_Variable'], type: Type) -> Type:
 # TODO: Rename to StackEffect at all use sites.
 class _Function(IndividualType):
     def __init__(
-        self,
-        input: Iterable['StackItemType'],
-        output: Iterable['StackItemType'],
+        self, input_types: TypeSequence, output_types: TypeSequence,
     ) -> None:
         super().__init__()
-        self.input = TypeSequence(tuple(input))
-        self.output = TypeSequence(tuple(output))
+        self.input = input_types
+        self.output = output_types
 
     def __iter__(self) -> Iterator['TypeSequence']:
         return iter((self.input, self.output))
@@ -647,11 +645,6 @@ class _Function(IndividualType):
             {'__call__': self,},
             list(self.free_type_variables() - gamma.free_type_variables()),
         )
-
-    def can_be_complete_program(self) -> bool:
-        """Returns true iff the function type is a subtype of ( -- *out)."""
-        out_var = SequenceVariable()
-        return self.is_subtype_of(_Function([], [out_var]))
 
     def __hash__(self) -> int:
         # FIXME: Alpha equivalence
@@ -797,15 +790,6 @@ class _Function(IndividualType):
         out_types = ' '.join(map(str, self.output))
         return '({} -- {})'.format(in_types, out_types)
 
-    def __and__(self, other: object) -> IndividualType:
-        if isinstance(other, _Function):
-            input = _intersect_sequences(tuple(self.input), tuple(other.input))
-            output = _intersect_sequences(
-                tuple(self.output), tuple(other.output)
-            )
-            return _Function(input, output)
-        return super().__and__(other)
-
     def get_type_of_attribute(self, name: str) -> '_Function':
         if name == '__call__':
             return self
@@ -854,7 +838,7 @@ class QuotationType(_Function):
             in_var = IndividualVariable()
             out_var = IndividualVariable()
             quotation_iterable_type = iterable_type[
-                _Function([in_var], [out_var]),
+                StackEffect(TypeSequence([in_var]), TypeSequence([out_var])),
             ]
             return quotation_iterable_type.constrain_and_bind_supertype_variables(
                 supertype, rigid_variables, subtyping_assumptions
@@ -878,7 +862,7 @@ class QuotationType(_Function):
             in_var = IndividualVariable()
             out_var = IndividualVariable()
             quotation_iterable_type = iterable_type[
-                _Function([in_var], [out_var]),
+                StackEffect(TypeSequence([in_var]), TypeSequence([out_var])),
             ]
             return quotation_iterable_type.constrain_and_bind_subtype_variables(
                 supertype, rigid_variables, subtyping_assumptions
@@ -891,28 +875,6 @@ class QuotationType(_Function):
         self, sub: 'concat.typecheck.Substitutions'
     ) -> 'QuotationType':
         return QuotationType(super().apply_substitution(sub))
-
-
-def _intersect_sequences(
-    seq1: Sequence['StackItemType'], seq2: Sequence['StackItemType']
-) -> Sequence['StackItemType']:
-    raise NotImplementedError('stop using _IntersectionType')
-
-
-# FIXME: This should be a method on types
-def inst(sigma: _Function) -> IndividualType:
-    """This is based on the inst function described by Kleffner."""
-    if isinstance(sigma, _Function):
-        input = [
-            inst(type) if isinstance(type, _Function) else type
-            for type in sigma.input
-        ]
-        output = [
-            inst(type) if isinstance(type, _Function) else type
-            for type in sigma.output
-        ]
-        return _Function(input, output)
-    raise builtins.TypeError(type(sigma))
 
 
 StackItemType = Union[SequenceVariable, IndividualType]
@@ -1736,11 +1698,10 @@ class _OptionalType(ObjectType):
         assert len(type_arguments) == 1
         return _OptionalType(type_arguments)
 
-    # def constrain(self, supertype, )
-
     def apply_substitution(
         self, sub: 'concat.typecheck.Substitutions'
     ) -> '_OptionalType':
+        # FIXME: self._type_arguments might not be a valid stack type.
         return _OptionalType(tuple(sub(TypeSequence(self._type_arguments))))
 
 
