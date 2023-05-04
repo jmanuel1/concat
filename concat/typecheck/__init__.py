@@ -233,7 +233,9 @@ def infer(
                     rest_types = o1[:-1]
                     current_subs, current_effect = (
                         S1,
-                        StackEffect(i1, [*rest_types, attr_type]),
+                        StackEffect(
+                            i1, TypeSequence([*rest_types, attr_type])
+                        ),
                     )
                 # special case for name words
                 elif isinstance(child, concat.parse.NameWordNode):
@@ -244,7 +246,9 @@ def infer(
                         name_type = name_type.instantiate()
                     current_effect = StackEffect(
                         current_effect.input,
-                        [*current_effect.output, current_subs(name_type)],
+                        TypeSequence(
+                            [*current_effect.output, current_subs(name_type)]
+                        ),
                     )
                 elif isinstance(child, concat.parse.QuoteWordNode):
                     if child.input_stack_type is not None:
@@ -263,8 +267,8 @@ def infer(
                     current_subs, current_effect = (
                         S2(S1),
                         StackEffect(
-                            S2(TypeSequence(i1)),
-                            [*S2(TypeSequence(o1)), QuotationType(fun_type)],
+                            S2(i1),
+                            TypeSequence([*S2(o1), QuotationType(fun_type)]),
                         ),
                     )
                 else:
@@ -275,7 +279,7 @@ def infer(
                     )
             elif isinstance(node, concat.parse.ListWordNode):
                 phi = S
-                collected_type = TypeSequence(o)
+                collected_type = o
                 element_type: IndividualType = object_type
                 for item in node.list_children:
                     phi1, fun_type = infer(
@@ -298,7 +302,10 @@ def infer(
                     phi,
                     phi(
                         StackEffect(
-                            i, [*collected_type, list_type[element_type,]]
+                            i,
+                            TypeSequence(
+                                [*collected_type, list_type[element_type,]]
+                            ),
                         )
                     ),
                 )
@@ -325,10 +332,12 @@ def infer(
                     phi(
                         StackEffect(
                             i,
-                            [
-                                *collected_type,
-                                tuple_type[TypeSequence(element_types),],
-                            ],
+                            TypeSequence(
+                                [
+                                    *collected_type,
+                                    tuple_type[TypeSequence(element_types),],
+                                ]
+                            ),
                         )
                     ),
                 )
@@ -421,7 +430,9 @@ def infer(
                 gamma[name] = effect.generalized_wrt(S(gamma))
             elif isinstance(node, concat.parse.NumberWordNode):
                 if isinstance(node.value, int):
-                    current_effect = StackEffect(i, [*o, int_type])
+                    current_effect = StackEffect(
+                        i, TypeSequence([*o, int_type])
+                    )
                 else:
                     raise UnhandledNodeTypeError
             elif isinstance(node, concat.parse.NameWordNode):
@@ -450,11 +461,11 @@ def infer(
                 # make sure any annotation matches the current stack
                 if quotation.input_stack_type is not None:
                     input_stack, _ = quotation.input_stack_type.to_type(gamma)
-                    S = TypeSequence(o).constrain_and_bind_supertype_variables(
+                    S = o.constrain_and_bind_supertype_variables(
                         input_stack, set(), []
                     )(S)
                 else:
-                    input_stack = TypeSequence(o)
+                    input_stack = o
                 S1, (i1, o1) = infer(
                     gamma,
                     [*quotation.children],
@@ -471,7 +482,7 @@ def infer(
                     S,
                     StackEffect(
                         current_effect.input,
-                        [*current_effect.output, str_type],
+                        TypeSequence([*current_effect.output, str_type]),
                     ),
                 )
             elif isinstance(node, concat.parse.AttributeWordNode):
@@ -486,9 +497,7 @@ def infer(
                             node.value, attr_function_type, attr_function_type
                         )
                     )
-                R = TypeSequence(
-                    out_types
-                ).constrain_and_bind_supertype_variables(
+                R = out_types.constrain_and_bind_supertype_variables(
                     attr_function_type.input, set(), []
                 )
                 current_subs, current_effect = (
@@ -499,7 +508,9 @@ def infer(
                 new_type, _ = node.type.to_type(gamma)
                 rest = current_effect.output[:-1]
                 current_effect = current_subs(
-                    StackEffect(current_effect.input, [*rest, new_type])
+                    StackEffect(
+                        current_effect.input, TypeSequence([*rest, new_type])
+                    )
                 )
             else:
                 raise UnhandledNodeTypeError(
@@ -536,7 +547,7 @@ class IndividualTypeNode(TypeNode, abc.ABC):
 # A dataclass is not used here because making this a subclass of an abstract
 # class does not work without overriding __init__ even when it's a dataclass.
 class NamedTypeNode(TypeNode):
-    def __init__(self, location: concat.astutils.Location, name: str) -> None:
+    def __init__(self, location: tuple, name: str) -> None:
         super().__init__(location)
         self.name = name
 
@@ -718,7 +729,13 @@ class StackEffectTypeNode(IndividualTypeNode):
             type, new_env = _ensure_type(item[1], new_env, item[0])
             out_types.append(type)
 
-        return StackEffect([a_bar, *in_types], [b_bar, *out_types]), new_env
+        return (
+            StackEffect(
+                TypeSequence([a_bar, *in_types]),
+                TypeSequence([b_bar, *out_types]),
+            ),
+            new_env,
+        )
 
 
 class _IndividualVariableNode(IndividualTypeNode):
@@ -961,7 +978,9 @@ def _generate_type_of_innermost_module(
         module_attributes,
         nominal_supertypes=[module_type],
     )
-    return StackEffect([_seq_var], [_seq_var, module_type])
+    return StackEffect(
+        TypeSequence([_seq_var]), TypeSequence([_seq_var, module_type])
+    )
 
 
 def _generate_module_type(
@@ -979,7 +998,9 @@ def _generate_module_type(
             },
             nominal_supertypes=[module_type],
         )
-        effect = StackEffect([_seq_var], [_seq_var, module_type])
+        effect = StackEffect(
+            TypeSequence([_seq_var]), TypeSequence([_seq_var, module_type])
+        )
         return ObjectType(
             IndividualVariable(), {'__call__': effect,}, [_seq_var]
         )

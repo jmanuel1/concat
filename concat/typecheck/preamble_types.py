@@ -48,94 +48,144 @@ types = {
     'py_call': ForAll(
         [_rest_var, _seq_var, _a_var],
         StackEffect(
-            [
-                _rest_var,
-                iterable_type[object_type,],
-                iterable_type[object_type,],
-                py_function_type[TypeSequence([_seq_var]), _a_var],
-            ],
-            [_rest_var, _a_var],
+            TypeSequence(
+                [
+                    _rest_var,
+                    iterable_type[object_type,],
+                    iterable_type[object_type,],
+                    py_function_type[TypeSequence([_seq_var]), _a_var],
+                ]
+            ),
+            TypeSequence([_rest_var, _a_var]),
         ),
     ),
     'swap': ForAll(
         [_rest_var, _a_var, _b_var],
-        StackEffect([_rest_var, _a_var, _b_var], [_rest_var, _b_var, _a_var]),
+        StackEffect(
+            TypeSequence([_rest_var, _a_var, _b_var]),
+            TypeSequence([_rest_var, _b_var, _a_var]),
+        ),
     ),
     'pick': ForAll(
         [_rest_var, _a_var, _b_var, _c_var],
         StackEffect(
-            [_rest_var, _a_var, _b_var, _c_var],
-            [_rest_var, _a_var, _b_var, _c_var, _a_var],
+            TypeSequence([_rest_var, _a_var, _b_var, _c_var]),
+            TypeSequence([_rest_var, _a_var, _b_var, _c_var, _a_var]),
         ),
     ),
     'nip': ForAll(
         [_rest_var, _a_var],
-        StackEffect([_rest_var, object_type, _a_var], [_rest_var, _a_var]),
+        StackEffect(
+            TypeSequence([_rest_var, object_type, _a_var]),
+            TypeSequence([_rest_var, _a_var]),
+        ),
     ),
     'nip_2': ObjectType(
         _a_var,
         {
             '__call__': StackEffect(
-                [_rest_var, object_type, object_type, _b_var],
-                [_rest_var, _b_var],
+                TypeSequence([_rest_var, object_type, object_type, _b_var]),
+                TypeSequence([_rest_var, _b_var]),
             )
         },
         [_rest_var, _b_var],
     ),
     'drop': ForAll(
-        [_rest_var], StackEffect([_rest_var, object_type], [_rest_var])
+        [_rest_var],
+        StackEffect(
+            TypeSequence([_rest_var, object_type]), TypeSequence([_rest_var])
+        ),
     ),
     'dup': ForAll(
         [_rest_var, _a_var],
-        StackEffect([_rest_var, _a_var], [_rest_var, _a_var, _a_var]),
+        StackEffect(
+            TypeSequence([_rest_var, _a_var]),
+            TypeSequence([_rest_var, _a_var, _a_var]),
+        ),
     ),
     'open': ForAll(
         [_rest_var],
         StackEffect(
-            [_rest_var, dict_type[str_type, object_type], str_type],
-            [_rest_var, file_type],
+            TypeSequence(
+                [_rest_var, dict_type[str_type, object_type], str_type]
+            ),
+            TypeSequence([_rest_var, file_type]),
         ),
     ),
     'over': ForAll(
         [_rest_var, _a_var, _b_var],
         StackEffect(
-            [_rest_var, _a_var, _b_var], [_rest_var, _a_var, _b_var, _a_var]
+            TypeSequence([_rest_var, _a_var, _b_var]),
+            TypeSequence([_rest_var, _a_var, _b_var, _a_var]),
         ),
     ),
     'to_list': ForAll(
         [_rest_var],
         StackEffect(
-            [_rest_var, iterable_type[_a_var,]],
-            [_rest_var, list_type[_a_var,]],
+            TypeSequence([_rest_var, iterable_type[_a_var,]]),
+            TypeSequence([_rest_var, list_type[_a_var,]]),
         ),
     ),
     'False': ForAll(
-        [_rest_var], StackEffect([_rest_var], [_rest_var, bool_type])
+        [_rest_var],
+        StackEffect(
+            TypeSequence([_rest_var]), TypeSequence([_rest_var, bool_type])
+        ),
     ),
     'curry': ForAll(
         [_rest_var, _seq_var, _stack_var, _a_var],
         StackEffect(
-            [_rest_var, _a_var, StackEffect([_seq_var, _a_var], [_stack_var])],
-            [_rest_var, StackEffect([_seq_var], [_stack_var])],
+            TypeSequence(
+                [
+                    _rest_var,
+                    _a_var,
+                    StackEffect(
+                        TypeSequence([_seq_var, _a_var]),
+                        TypeSequence([_stack_var]),
+                    ),
+                ]
+            ),
+            TypeSequence(
+                [
+                    _rest_var,
+                    StackEffect(
+                        TypeSequence([_seq_var]), TypeSequence([_stack_var])
+                    ),
+                ]
+            ),
         ),
     ),
     'choose': ForAll(
         [_rest_var, _seq_var],
         StackEffect(
-            [
-                _rest_var,
-                bool_type,
-                StackEffect([_rest_var], [_seq_var]),
-                StackEffect([_rest_var], [_seq_var]),
-            ],
-            [_seq_var],
+            TypeSequence(
+                [
+                    _rest_var,
+                    bool_type,
+                    StackEffect(
+                        TypeSequence([_rest_var]), TypeSequence([_seq_var])
+                    ),
+                    StackEffect(
+                        TypeSequence([_rest_var]), TypeSequence([_seq_var])
+                    ),
+                ]
+            ),
+            TypeSequence([_seq_var]),
         ),
     ),
     'if_not': ForAll(
         [_rest_var],
         StackEffect(
-            [_rest_var, bool_type, StackEffect([_rest_var], [_rest_var])],
-            [_rest_var],
+            TypeSequence(
+                [
+                    _rest_var,
+                    bool_type,
+                    StackEffect(
+                        TypeSequence([_rest_var]), TypeSequence([_rest_var])
+                    ),
+                ]
+            ),
+            TypeSequence([_rest_var]),
         ),
     ),
     # Python builtins
@@ -146,8 +196,17 @@ types = {
         _x,
         {
             '__call__': StackEffect(
-                [_rest_var, bool_type, StackEffect([_rest_var], [_rest_var])],
-                [_rest_var],
+                TypeSequence(
+                    [
+                        _rest_var,
+                        bool_type,
+                        StackEffect(
+                            TypeSequence([_rest_var]),
+                            TypeSequence([_rest_var]),
+                        ),
+                    ]
+                ),
+                TypeSequence([_rest_var]),
             )
         },
         [_rest_var],
@@ -156,7 +215,15 @@ types = {
         _x,
         {
             '__call__': StackEffect(
-                [_rest_var, StackEffect([_rest_var], [_seq_var])], [_seq_var],
+                TypeSequence(
+                    [
+                        _rest_var,
+                        StackEffect(
+                            TypeSequence([_rest_var]), TypeSequence([_seq_var])
+                        ),
+                    ]
+                ),
+                TypeSequence([_seq_var]),
             )
         },
         [_rest_var, _seq_var],
@@ -178,7 +245,11 @@ types = {
     ),
     'True': ObjectType(
         _a_var,
-        {'__call__': StackEffect([_rest_var], [_rest_var, bool_type])},
+        {
+            '__call__': StackEffect(
+                TypeSequence([_rest_var]), TypeSequence([_rest_var, bool_type])
+            )
+        },
         [_rest_var],
     ),
     # TODO: Separate type-check-time environment from runtime environment.

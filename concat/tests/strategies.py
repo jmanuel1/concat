@@ -1,18 +1,23 @@
 from concat.lex import Token
 from concat.typecheck.types import (
     IndividualType,
+    IndividualVariable,
+    ObjectType,
     SequenceVariable,
-    StackItemType,
+    StackEffect,
+    TypeSequence,
 )
 from hypothesis.strategies import (
     SearchStrategy,
-    booleans,
-    composite,
+    builds,
+    dictionaries,
     from_type,
-    iterables,
+    just,
     lists,
+    none,
+    recursive,
     register_type_strategy,
-    sampled_from,
+    text,
 )
 from typing import (
     Iterable,
@@ -21,31 +26,84 @@ from typing import (
 )
 
 
-def _iterable_strategy(type: Type[Iterable]) -> SearchStrategy[Iterable]:
-    @composite
-    def strategy(draw) -> Iterable:
-        if hasattr(type, '__args__') and type.__args__ == (StackItemType,):
-            list = []
-            if draw(booleans()):
-                list.append(draw(from_type(SequenceVariable)))
-            list += draw(lists(from_type(IndividualType), max_size=10))
-            return list
-        cls = draw(sampled_from([list, tuple, set, frozenset]))
-        return cls(
-            draw(iterables(getattr(type, '__args__', object), max_size=10))
-        )
-
-    return strategy()
+def _type_sequence_strategy(
+    individual_type_strategy: SearchStrategy[IndividualType],
+) -> SearchStrategy[TypeSequence]:
+    return builds(
+        lambda maybe_seq_var, rest: TypeSequence(maybe_seq_var + rest),
+        lists(from_type(SequenceVariable), max_size=1),
+        lists(individual_type_strategy, max_size=10),
+    )
 
 
-def _sequence_strategy(type: Type[Sequence]) -> SearchStrategy[Sequence]:
-    @composite
-    def strategy(draw) -> Sequence:
-        cls = draw(sampled_from([list, tuple]))
-        return cls(draw(_iterable_strategy(type)))
+def _object_type_strategy(
+    individual_type_strategy: SearchStrategy[IndividualType],
+) -> SearchStrategy[ObjectType]:
+    return recursive(
+        builds(
+            ObjectType,
+            attributes=dictionaries(text(), individual_type_strategy),
+            nominal_supertypes=lists(individual_type_strategy),
+            _type_arguments=lists(
+                from_type(SequenceVariable)
+                | individual_type_strategy
+                | _type_sequence_strategy(individual_type_strategy)
+            ),
+            _head=none(),
+            _other_kwargs=just({}),
+        ),
+        lambda children: builds(
+            ObjectType,
+            attributes=dictionaries(text(), individual_type_strategy),
+            nominal_supertypes=lists(individual_type_strategy),
+            _type_arguments=lists(
+                from_type(SequenceVariable)
+                | individual_type_strategy
+                | _type_sequence_strategy(individual_type_strategy)
+            ),
+            _head=children,
+            _other_kwargs=just({}),
+        ),
+        max_leaves=50,
+    )
 
-    return strategy()
+
+_individual_type_subclasses = IndividualType.__subclasses__()
+_individual_type_strategies = {}
 
 
-register_type_strategy(Iterable, _iterable_strategy)
-register_type_strategy(Sequence, _sequence_strategy)
+def _mark_individual_type_strategy(
+    strategy: SearchStrategy[IndividualType], type_: Type[IndividualType]
+) -> SearchStrategy[IndividualType]:
+    _individual_type_strategies[type_] = strategy
+    return strategy
+
+
+_individual_type_strategy = recursive(
+    _mark_individual_type_strategy(
+        from_type(IndividualVariable), IndividualVariable
+    ),
+    lambda children: _mark_individual_type_strategy(
+        builds(
+            StackEffect,
+            _type_sequence_strategy(children),
+            _type_sequence_strategy(children),
+        ),
+        StackEffect,
+    )
+    | _mark_individual_type_strategy(
+        _object_type_strategy(children), ObjectType
+    ),
+    max_leaves=50,
+)
+
+for subclass in _individual_type_subclasses:
+    assert subclass in _individual_type_strategies, subclass
+
+register_type_strategy(IndividualType, _individual_type_strategy)
+register_type_strategy(
+    ObjectType, _object_type_strategy(_individual_type_strategy)
+)
+register_type_strategy(
+    TypeSequence, _type_sequence_strategy(_individual_type_strategy)
+)

@@ -4,7 +4,7 @@ import sys
 import contextlib
 import concat.parse
 import concat.typecheck
-from concat.typecheck.types import SequenceVariable, StackEffect
+from concat.typecheck.types import SequenceVariable, StackEffect, TypeSequence
 import concat.stdlib.types
 import concat.stdlib.repl
 from typing import TextIO, Iterator
@@ -33,9 +33,15 @@ class TestREPLFunctions(unittest.TestCase):
                 [],
                 extra_env=concat.typecheck.Environment(
                     {
-                        'some': StackEffect([seq_var], []),
-                        'words': StackEffect([], []),
-                        'here': StackEffect([], []),
+                        'some': StackEffect(
+                            TypeSequence([seq_var]), TypeSequence([])
+                        ),
+                        'words': StackEffect(
+                            TypeSequence([]), TypeSequence([])
+                        ),
+                        'here': StackEffect(
+                            TypeSequence([]), TypeSequence([])
+                        ),
                     }
                 ),
             )
