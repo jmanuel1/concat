@@ -56,8 +56,9 @@ arg_parser.add_argument(
     help='tokenize input from the given file and print the tokens as a JSON array',
 )
 
-# We should pass any unknown args onto the program we're about to run. There
-# might be a better way to go about this, but I think this is fine for now.
+# We should pass any unknown args onto the program we're about to run.
+# FIXME: There might be a better way to go about this, but I think this is fine
+# for now.
 args, rest = arg_parser.parse_known_args()
 sys.argv = [sys.argv[0], *rest]
 
@@ -89,7 +90,11 @@ else:
         raise
     else:
         concat.execute.execute(
-            filename, python_ast, {}, should_log_stacks=args.debug
+            filename,
+            python_ast,
+            {},
+            should_log_stacks=args.debug,
+            import_resolution_start_directory=os.path.dirname(filename),
         )
     finally:
         args.file.close()

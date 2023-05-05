@@ -173,6 +173,7 @@ def _repl_impl(
         while True:
             print(prompt, end='', flush=True)
             try:
+                # FIXME: `stack` might not exist yet if there was no init file.
                 eval(
                     'concat.stdlib.repl.read_form(stack, [])', globals, locals,
                 )
