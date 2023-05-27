@@ -1,7 +1,5 @@
 """This module takes the transpiler/compiler output and executes it."""
 import ast
-import types
-from typing import Dict, Optional, List, Callable
 import concat.stdlib.compositional
 import concat.stdlib.execution
 import concat.stdlib.importlib
@@ -13,6 +11,11 @@ import concat.stdlib.pyinterop.instance
 import concat.stdlib.pyinterop.math
 import concat.stdlib.pyinterop.method
 import concat.stdlib.pyinterop.user_defined_function as udf
+import contextlib
+import sys
+import types
+from typing import Callable, Dict, Iterator, List, Optional
+import os
 
 
 class ConcatRuntimeError(RuntimeError):
@@ -56,18 +59,35 @@ def _compile(filename: str, ast_: ast.Module) -> types.CodeType:
 
 def _run(
     prog: types.CodeType,
+    import_resolution_start_directory: os.PathLike,
     globals: Optional[Dict[str, object]] = None,
     locals: Optional[Dict[str, object]] = None,
 ) -> None:
     globals = {} if globals is None else globals
     try:
-        # FIXME: Imports should be resolved from the location of the source
-        # file.
-        exec(prog, globals, globals if locals is None else locals)
+        with _override_import_resolution_start_directory(
+            import_resolution_start_directory
+        ):
+            exec(prog, globals, globals if locals is None else locals)
     except Exception as e:
-        # throw away all of the traceback outside the code
-        # traceback = e.__traceback__.tb_next
+        # TODO: throw away all of the traceback outside the code, but have an
+        # option to keep the traceback.
         raise ConcatRuntimeError(globals['stack'], globals['stash']) from e
+
+
+@contextlib.contextmanager
+def _override_import_resolution_start_directory(
+    import_resolution_start_directory: os.PathLike,
+) -> Iterator[None]:
+    # This is similar to how Python sets sys.path[0] when running just a file
+    # (like `python blah.py`, not `python -m blah`). This should probably be
+    # extended when module support is implemented.
+    first_path, sys.path[0] = (
+        sys.path[0],
+        str(import_resolution_start_directory),
+    )
+    yield
+    sys.path[0] = first_path
 
 
 def _do_preamble(globals: Dict[str, object], should_log_stacks=False) -> None:
@@ -167,7 +187,14 @@ def execute(
     globals: Dict[str, object],
     locals: Optional[Dict[str, object]] = None,
     should_log_stacks=False,
+    # By default, sys.path[0] is '' when executing a package.
+    import_resolution_start_directory: os.PathLike = '',
 ) -> None:
     _do_preamble(globals, should_log_stacks)
 
-    _run(_compile(filename, ast), globals, locals)
+    _run(
+        _compile(filename, ast),
+        import_resolution_start_directory,
+        globals,
+        locals,
+    )

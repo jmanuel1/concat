@@ -1,5 +1,6 @@
 import concat.execute
 import ast
+import pathlib
 from typing import Dict
 import unittest
 
@@ -73,3 +74,18 @@ class TestExecute(unittest.TestCase):
             with self.subTest(msg='presence of "{}"'.format(name), name=name):
                 message = 'preamble did not add "{}"'.format(name)
                 self.assertIn(name, globals, msg=message)
+
+    def test_import_resolution_location(self) -> None:
+        """Test that imports are resolved from the given directory."""
+        test_module_path = (pathlib.Path(__file__) / '../fixtures/').resolve()
+        globals_dict: dict = {}
+        concat.execute.execute(
+            '<test>',
+            ast.parse('import imported_module'),
+            globals_dict,
+            import_resolution_start_directory=test_module_path,
+        )
+        self.assertEqual(
+            pathlib.Path(globals_dict['imported_module'].__file__),
+            test_module_path / 'imported_module.py',
+        )
