@@ -77,7 +77,7 @@ class TestExecute(unittest.TestCase):
 
     def test_import_resolution_location(self) -> None:
         """Test that imports are resolved from the given directory."""
-        test_module_path = pathlib.Path(__file__) / '../fixtures/'
+        test_module_path = (pathlib.Path(__file__) / '../fixtures/').resolve()
         globals_dict: dict = {}
         concat.execute.execute(
             '<test>',
