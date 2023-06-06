@@ -3,7 +3,7 @@ import dataclasses
 import io
 import json
 import tokenize as py_tokenize
-from typing import Iterator, List, Optional, Tuple, Union
+from typing import Iterator, List, Optional, Tuple, TypeVar, Union
 
 
 @dataclasses.dataclass
@@ -25,15 +25,35 @@ class Token:
 
 
 class TokenEncoder(json.JSONEncoder):
-    """Extension of the default JSON Encoder that supports Token objects."""
+    """JSON Encoder that supports Token and Exception objects."""
 
-    def default(self, obj):
+    def default(self, obj: object):
         if isinstance(obj, Token):
             return obj.__dict__
+        if isinstance(obj, py_tokenize.TokenError):
+            return {
+                'error_type': type(obj).__qualname__,
+                'message': obj.args[0],
+                'start': obj.args[1],
+                'end': obj.args[1],
+            }
+        if isinstance(obj, IndentationError):
+            location = (obj.lineno, obj.offset)
+            return {
+                'error_type': type(obj).__qualname__,
+                'message': str(obj),
+                'start': location,
+                'end': location,
+            }
         return super().default(obj)
 
 
-def tokenize(code: str, should_preserve_comments: bool = False) -> List[Token]:
+TokenOrError = Union[Token, Exception]
+
+
+def tokenize(
+    code: str, should_preserve_comments: bool = False
+) -> List[TokenOrError]:
     lexer = Lexer()
     lexer.input(code, should_preserve_comments)
     tokens = []
@@ -64,7 +84,7 @@ class Lexer:
         self.tokens: Optional[Iterator[py_tokenize.TokenInfo]]
         self.lineno: int
         self.lexpos: int
-        self._concat_token_iterator: Iterator['Token']
+        self._concat_token_iterator: Iterator[TokenOrError]
         self._should_preserve_comments: bool
 
     def input(self, data: str, should_preserve_comments: bool = False) -> None:
@@ -76,11 +96,11 @@ class Lexer:
         self._concat_token_iterator = self._tokens()
         self._should_preserve_comments = should_preserve_comments
 
-    def token(self) -> Optional['Token']:
-        """Return the next token as a Token object."""
+    def token(self) -> Optional[TokenOrError]:
+        """Return the next token as a Token object, or an exception."""
         return next(self._concat_token_iterator, None)
 
-    def _tokens(self) -> Iterator['Token']:
+    def _tokens(self) -> Iterator[TokenOrError]:
         import token
 
         if self.tokens is None:
@@ -89,7 +109,10 @@ class Lexer:
             )
 
         glued_token_prefix = None
-        for token_ in self.tokens:
+        for token_ in _embed_errors_in_iterator(self.tokens):
+            if isinstance(token_, Exception):
+                yield token_
+                continue
             tok = Token()
             _, tok.value, tok.start, tok.end, _ = token_
             tok.type = token.tok_name[token_.exact_type]
@@ -191,3 +214,18 @@ class Lexer:
 
 def to_tokens(*tokTuples: TokenTuple) -> List[Token]:
     return [Token(*tuple) for tuple in tokTuples]
+
+
+_T = TypeVar('_T')
+
+
+def _embed_errors_in_iterator(
+    iterable: Iterator[_T],
+) -> Iterator[Union[_T, Exception]]:
+    while True:
+        try:
+            yield next(iterable)
+        except StopIteration:
+            return
+        except Exception as e:
+            yield e

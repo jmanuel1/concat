@@ -408,16 +408,27 @@ class _TextDocumentItem:
 
     def _diagnose(self) -> List[_Diagnostic]:
         text_lines = self._text.splitlines(keepends=True)
-        try:
-            tokens = tokenize(self._text)
-        except py_tokenize.TokenError as e:
-            message = e.args[0]
-            position = _Position.from_tokenizer_location(text_lines, e.args[1])
-            range_ = _Range(position, position)
-            return [_Diagnostic(range_, message)]
+        tokens = tokenize(self._text)
         diagnostics = []
         for token in tokens:
-            if token.type == 'ERRORTOKEN':
+            if isinstance(token, py_tokenize.TokenError):
+                e = token
+                message = e.args[0]
+                position = _Position.from_tokenizer_location(
+                    text_lines, e.args[1]
+                )
+                range_ = _Range(position, position)
+                diagnostics.append(_Diagnostic(range_, message))
+            elif isinstance(token, IndentationError):
+                message = 'Unexpected indentation level'
+                position = _Position.from_tokenizer_location(
+                    text_lines, (token.lineno, token.offset)
+                )
+                range_ = _Range(position, position)
+                diagnostics.append(_Diagnostic(range_, message))
+            elif isinstance(token, Exception):
+                raise token
+            elif token.type == 'ERRORTOKEN':
                 _logger.debug('error token: {token!r}', token=token)
                 _logger.debug(
                     'text_lines length: {length}', length=len(text_lines)

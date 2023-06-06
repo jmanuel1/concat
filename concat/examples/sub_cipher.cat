@@ -5,29 +5,30 @@
 # attributes.
 # based on the python answer in rosetta code
 
+from concat.stdlib.pyinterop import to_dict
 from string import printable
-import random
+import random as py_random
+
+
+def type py_random_type:
+    {
+        seed: py_function[(_:int), none],
+        shuffle: forall `t. py_function[(_:list[`t]), list[`t]]
+    }
+
+
+def random( -- module:py_random_type):
+    $py_random cast (py_random_type)
+
 
 def seed(--):
-    {} [334344, 2,] random.seed pop
+    [,] to_dict [334344,] random$.seed py_call pop
+
+
+def shuffle(lst:list[`t] -- lst):
+    # QUESTION: Should I even track Python function argument types if I don't
+    # use the positional parameter types and have no keyword parameter types?
+    [,] to_dict [swap,] random$.shuffle py_call pop
+
 
 seed  # set seed for reproducibility
-$printable $(char:str : pop {} [1, $printable len,] random$.randint py_call) $False sorted ''.join  # EXAMPLE_KEY
-
-def encode:  # plaintext key
-    swap $(over _r [$printable.index] r_ swap) map ''.join nip
-
-def decode:  # encoded_text key
-    swap  # key encoded_text
-    $(  # key char
-        over .index _r $printable [r_]) map ''.join nip
-
-"A simple example."  # EXAMPLE_KEY original
-dup2 _r _r swap encode  # encoded # original EXAMPLE_KEY
-dup r_ dup _r decode  # encoded decoded # original EXAMPLE_KEY
-r_ r_  # encoded decoded EXAMPLE_KEY original
-swap 3 roll 3 roll
-4 tolist """The original is: {}
-Encoding it with the key: {}
-Gives: {}
-Decoding it by the same key gives: {}\n""".format print

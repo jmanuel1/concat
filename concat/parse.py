@@ -233,7 +233,7 @@ T = TypeVar('T')
 
 
 if TYPE_CHECKING:
-    from concat.typecheck import StackEffectTypeNode
+    from concat.typecheck import StackEffectTypeNode, TypeNode
 
 
 # Patches to parsy for better errors--useful for debugging
@@ -285,6 +285,16 @@ class ListWordNode(IterableWordNode):
     def __init__(self, element_words: Iterable['Words'], location: 'Location'):
         super().__init__(element_words, location)
         self.list_children = element_words
+
+
+class TypeAliasStatementNode(StatementNode):
+    def __init__(
+        self, name: 'Token', type_node: 'TypeNode', location: 'Location'
+    ):
+        super().__init__()
+        self.name = name.value
+        self.type_node = type_node
+        self.location = location
 
 
 class FuncdefStatementNode(StatementNode):
@@ -357,9 +367,15 @@ class ClassdefStatementNode(StatementNode):
         self.keyword_args = keyword_args
 
 
-def token(typ: str) -> parsy.Parser:
+def token(
+    typ: str,
+) -> 'parsy.Parser[concat.lex.TokenOrError, concat.lex.Token]':
     description = f'{typ} token'
-    return parsy.test_item(lambda token: token.type == typ, description)
+    return parsy.test_item(
+        lambda token: isinstance(token, concat.lex.Token)
+        and token.type == typ,
+        description,
+    )
 
 
 def extension(parsers: ParserDict) -> None:
@@ -478,6 +494,7 @@ def extension(parsers: ParserDict) -> None:
         'PAR', TupleWordNode, 'tuple word'
     )
 
+    # TODO: Accept `[]` and `[x]` as the lists.
     # This parses a list word.
     # list word = LSQB, word list, RSQB ;
     parsers['list-word'] = iterable_word_parser(
@@ -499,6 +516,7 @@ def extension(parsers: ParserDict) -> None:
     parsers['statement'] |= parsy.alt(
         parsers.ref_parser('classdef-statement'),
         parsers.ref_parser('funcdef-statement'),
+        parsers.ref_parser('type-alias-statement'),
     )
 
     from concat.astutils import flatten
@@ -515,6 +533,31 @@ def extension(parsers: ParserDict) -> None:
         parsers.ref_parser('attribute-word'),
         parsers.ref_parser('subscription-word'),
         parsers.ref_parser('slice-word'),
+    )
+
+    @parsy.generate
+    def type_alias_statement_parser() -> Generator:
+        location = (yield token('DEF')).start
+        name_type = yield token('NAME')
+        if name_type.value != 'type':
+            yield parsy.fail('the word "type"')
+        name = yield token('NAME')
+        yield token('COLON')
+        indented_block = (
+            token('NEWLINE').optional()
+            >> token('INDENT')
+            >> parsers['type']
+            << token('NEWLINE').optional()
+            << token('DEDENT')
+            << token('NEWLINE').optional()
+        )
+        type_node = yield (parsers['type'] | indented_block)
+        return TypeAliasStatementNode(name, type_node, location)
+
+    parsers[
+        'type-alias-statement'
+    ] = concat.parser_combinators.desc_cumulatively(
+        type_alias_statement_parser, 'type alias statement'
     )
 
     # This parses a function definition.

@@ -828,6 +828,32 @@ class _ForallTypeNode(TypeNode):
         return forall_type, env
 
 
+class _ObjectTypeNode(IndividualTypeNode):
+    """The AST type for anonymous structural object types."""
+
+    def __init__(
+        self,
+        attribute_type_pairs: Iterable[Tuple[Token, TypeNode]],
+        location: 'concat.astutils.Location',
+    ) -> None:
+        super().__init__(location)
+        self._attribute_type_pairs = attribute_type_pairs
+
+    def to_type(self, env: Environment) -> Tuple[ObjectType, Environment]:
+        temp_env = env.copy()
+        attribute_type_mapping: Dict[str, IndividualType] = {}
+        for attribute, type_node in self._attribute_type_pairs:
+            ty, temp_env = type_node.to_type(temp_env)
+            attribute_type_mapping[attribute] = ty
+        return (
+            ObjectType(
+                self_type=IndividualType(),  # FIXME: Support recursive types in syntax
+                attributes=attribute_type_mapping,
+            ),
+            temp_env,
+        )
+
+
 def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
     @parsy.generate
     def non_star_name_parser() -> Generator:
@@ -925,12 +951,30 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
 
         return _ForallTypeNode(forall.start, type_variables, ty)
 
-    # TODO: Parse type variables
+    @parsy.generate
+    def object_type_parser() -> Generator:
+        location = (yield concat.parse.token('LBRACE')).start
+        attribute_type_pair = parsy.seq(
+            concat.parse.token('NAME') << concat.parse.token('COLON'),
+            parsers['type'],
+        )
+        pairs = yield (attribute_type_pair.sep_by(concat.parse.token('COMMA')))
+        yield concat.parse.token('RBRACE')
+        return _ObjectTypeNode(pairs, location)
+
+    # TODO: Parse sequence type variables
     parsers['nonparameterized-type'] = parsy.alt(
         concat.parser_combinators.desc_cumulatively(
             named_type_parser, 'named type'
         ),
         parsers.ref_parser('stack-effect-type'),
+        concat.parser_combinators.desc_cumulatively(
+            object_type_parser, 'object type'
+        ),
+        concat.parse.token('LPAR')
+        >> parsers.ref_parser('type-sequence')
+        << concat.parse.token('RPAR'),
+        individual_type_variable_parser,
     )
 
     parsers['type'] = parsy.alt(
