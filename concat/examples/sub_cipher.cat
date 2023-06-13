@@ -22,13 +22,14 @@ def random( -- module:py_random_type):
 
 
 def seed(--):
-    [,] to_dict [334344,] random$.seed py_call pop
+    [,] to_dict [334344,] random$.seed py_call drop
 
 
 def shuffle(lst:list[`t] -- lst):
     # QUESTION: Should I even track Python function argument types if I don't
-    # use the positional parameter types and have no keyword parameter types?
-    [,] to_dict [swap,] random$.shuffle py_call pop
+    # use the positional parameter types and have no keyword parameter types nor
+    # optional parameters?
+    [,] to_dict [swap,] random$.shuffle py_call drop
 
 
 seed  # set seed for reproducibility
