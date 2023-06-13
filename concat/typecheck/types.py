@@ -79,6 +79,12 @@ class Type(abc.ABC):
     ) -> 'Type':
         pass
 
+    # QUESTION: There's a lot of duplication in the constrain* methods. I
+    # should look bidirectional typing with polymorphism/generics. Maybe
+    # 'Complete and Easy'? In there they put existential variables into the
+    # (ordered) context. I could also put the subtyping assumptions into the
+    # context (I forget where I saw that).
+
     @abc.abstractmethod
     def constrain_and_bind_supertype_variables(
         self,
@@ -96,16 +102,6 @@ class Type(abc.ABC):
         subtyping_assumptions: List[Tuple['IndividualType', 'IndividualType']],
     ) -> 'Substitutions':
         pass
-
-    # QUESTION: Should I remove this? Should I not distinguish between subtype
-    # and supertype variables in the other two constraint methods? I should
-    # look bidirectional typing with polymorphism/generics. Maybe 'Complete and
-    # Easy'?
-    def constrain(self, supertype: 'Type') -> None:
-        if not self.is_subtype_of(supertype):
-            raise TypeError(
-                '{} is not a subtype of {}'.format(self, supertype)
-            )
 
     def instantiate(self) -> 'Type':
         return self
