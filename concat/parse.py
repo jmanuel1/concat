@@ -292,9 +292,10 @@ class TypeAliasStatementNode(StatementNode):
         self, name: 'Token', type_node: 'TypeNode', location: 'Location'
     ):
         super().__init__()
+        self.children = [type_node]
+        self.location = location
         self.name = name.value
         self.type_node = type_node
-        self.location = location
 
 
 class FuncdefStatementNode(StatementNode):

@@ -104,22 +104,10 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
     @assert_annotated_type
     def core_import_statement_visitor(
         node: concat.parse.ImportStatementNode,
-    ) -> ast.stmt:
+    ) -> ast.If:
         import_node = ast.Import([ast.alias(node.value, None)])
-        # reassign the import to a module type that is self-pushing
-        class_store = ast.Attribute(
-            value=ast.Name(id=node.value, ctx=ast.Load()),
-            attr='__class__',
-            ctx=ast.Store(),
-        )
-        module_type = cast(
-            ast.Expression,
-            ast.parse('concat.stdlib.importlib.Module', mode='eval'),
-        ).body
-        assign = ast.Assign(targets=[class_store], value=module_type)
         import_node.lineno, import_node.col_offset = node.location
-        assign.lineno, assign.col_offset = node.location
-        return concat.astutils.wrap_in_statement([import_node, assign])
+        return concat.astutils.wrap_in_statement([import_node])
 
     @assert_annotated_type
     def import_statement_visitor(
@@ -127,11 +115,6 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
     ) -> ast.If:
         if_statement = cast(ast.If, core_import_statement_visitor.visit(node))
         cast(ast.Import, if_statement.body[0]).names[0].asname = node.asname
-        targets = cast(ast.Assign, if_statement.body[1]).targets
-        qualified_name = astunparse.unparse(targets[0])
-        if_statement.body[
-            1:
-        ] = assign_self_pushing_module_type_to_all_components(qualified_name)
         return if_statement
 
     @assert_annotated_type
@@ -396,3 +379,12 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
     visitors['cast-word'] = assert_type(concat.parse.CastWordNode).then(
         node_to_py_string('lambda s,t:None')
     )
+
+    @visitors.add_alternative_to('statement', 'type-alias-statement')
+    @assert_annotated_type
+    def type_alias_statement_visitor(
+        node: concat.parse.TypeAliasStatementNode,
+    ) -> ast.stmt:
+        py_node = ast.Pass()
+        py_node.lineno, py_node.col_offset = node.location
+        return py_node
