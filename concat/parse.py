@@ -41,6 +41,7 @@ from typing import (
     List,
     Callable,
     TYPE_CHECKING,
+    cast,
 )
 import concat.lex
 import concat.astutils
@@ -58,7 +59,9 @@ class Node(abc.ABC):
     @abc.abstractmethod
     def __init__(self):
         self.location = (0, 0)
-        self.children: Iterable[Node]
+        self.end_location = (0, 0)
+        self.children: Iterable[Node] = []
+        self.extra: dict = {}
 
 
 class TopLevelNode(Node):
@@ -70,6 +73,7 @@ class TopLevelNode(Node):
         super().__init__()
         self.encoding = encoding.value
         self.location = encoding.start
+        self.end_location = encoding.end
         self.children: concat.astutils.WordsOrStatements = children
 
     def __repr__(self) -> str:
@@ -86,11 +90,13 @@ class ImportStatementNode(StatementNode):
     def __init__(
         self,
         module: str,
+        location: 'Location',
+        end_location: 'Location',
         asname: Optional[str] = None,
-        location: 'Location' = (0, 0),
     ):
         super().__init__()
         self.location = location
+        self.end_location = end_location
         self.children = []
         self.value = module
         self.asname = asname
@@ -108,10 +114,14 @@ class WordNode(Node, abc.ABC):
 
 class CastWordNode(WordNode):
     def __init__(
-        self, type: 'concat.typecheck.IndividualTypeNode', location: 'Location'
+        self,
+        type: 'concat.typecheck.IndividualTypeNode',
+        location: 'Location',
+        end_location: 'Location',
     ):
         super().__init__()
         self.location = location
+        self.end_location = end_location
         self.children = []
         self.type = type
 
@@ -130,6 +140,7 @@ class FreezeWordNode(WordNode):
     def __init__(self, location: 'Location', word: WordNode) -> None:
         super().__init__()
         self.location = location
+        self.end_location = word.end_location
         self.children = [word]
         self.word = word
 
@@ -141,22 +152,24 @@ class FreezeWordNode(WordNode):
 
 
 class PushWordNode(WordNode):
-    def __init__(self, child: WordNode):
+    def __init__(self, start_location: 'Location', child: WordNode):
         super().__init__()
-        self.location = child.location
+        self.location = start_location
+        self.end_location = child.end_location
         self.children: List[WordNode] = [child]
 
     def __str__(self) -> str:
         return '$' + str(self.children[0])
 
     def __repr__(self) -> str:
-        return 'PushWordNode({!r})'.format(self.children[0])
+        return f'PushWordNode({self.location!r}, {self.children[0]!r})'
 
 
 class NumberWordNode(WordNode):
     def __init__(self, number: 'concat.lex.Token'):
         super().__init__()
         self.location = number.start
+        self.end_location = number.end
         self.children: List[Node] = []
         try:
             self.value = eval(number.value)
@@ -166,15 +179,14 @@ class NumberWordNode(WordNode):
             )
 
     def __repr__(self) -> str:
-        return 'NumberWordNode(Token("NUMBER", {!r}, {!r}))'.format(
-            str(self.value), self.location
-        )
+        return f'NumberWordNode(Token("NUMBER", {self.value!r}, {self.location!r}, {self.end_location!r}))'
 
 
 class StringWordNode(WordNode):
     def __init__(self, string: 'concat.lex.Token') -> None:
         super().__init__()
         self.location = string.start
+        self.end_location = string.end
         self.children: List[Node] = []
         try:
             self.value = eval(string.value)
@@ -188,11 +200,13 @@ class QuoteWordNode(WordNode):
     def __init__(
         self,
         children: Sequence[WordNode],
-        location: Tuple[int, int],
+        location: 'Location',
+        end_location: 'Location',
         input_stack_type: Optional['TypeSequenceNode'] = None,
     ):
         super().__init__()
         self.location = location
+        self.end_location = end_location
         self.children: Sequence[WordNode] = children
         self.input_stack_type = input_stack_type
 
@@ -209,6 +223,7 @@ class NameWordNode(WordNode):
     def __init__(self, name: 'concat.lex.Token'):
         super().__init__()
         self.location = name.start
+        self.end_location = name.end
         self.children: List[Node] = []
         self.value = name.value
 
@@ -217,16 +232,17 @@ class NameWordNode(WordNode):
 
 
 class AttributeWordNode(WordNode):
-    def __init__(self, attribute: 'concat.lex.Token'):
+    def __init__(
+        self, start_location: 'Location', attribute: 'concat.lex.Token'
+    ):
         super().__init__()
-        self.location = attribute.start
+        self.location = start_location
+        self.end_location = attribute.end
         self.children: List[Node] = []
         self.value = attribute.value
 
     def __repr__(self) -> str:
-        return 'AttributeWordNode(Token("NAME", {!r}, {!r}))'.format(
-            self.value, self.location
-        )
+        return f'AttributeWordNode({self.location!r}, Token("NAME", {self.value!r}, <unknown>, {self.end_location!r}))'
 
 
 T = TypeVar('T')
@@ -261,29 +277,46 @@ class BytesWordNode(WordNode):
         super().__init__()
         self.children = []
         self.location = bytes.start
+        self.end_location = bytes.end
         self.value = eval(bytes.value)
 
 
 class IterableWordNode(WordNode, abc.ABC):
     @abc.abstractmethod
-    def __init__(self, element_words: Iterable['Words'], location: 'Location'):
+    def __init__(
+        self,
+        element_words: Iterable['Words'],
+        location: 'Location',
+        end_location: 'Location',
+    ):
         super().__init__()
         self.children = []
         self.location = location
+        self.end_location = location
         for children in element_words:
             self.children += list(children)
         self.element_words = element_words
 
 
 class TupleWordNode(IterableWordNode):
-    def __init__(self, element_words: Iterable['Words'], location: 'Location'):
-        super().__init__(element_words, location)
+    def __init__(
+        self,
+        element_words: Iterable['Words'],
+        location: 'Location',
+        end_location: 'Location',
+    ):
+        super().__init__(element_words, location, end_location)
         self.tuple_children = element_words
 
 
 class ListWordNode(IterableWordNode):
-    def __init__(self, element_words: Iterable['Words'], location: 'Location'):
-        super().__init__(element_words, location)
+    def __init__(
+        self,
+        element_words: Iterable['Words'],
+        location: 'Location',
+        end_location: 'Location',
+    ):
+        super().__init__(element_words, location, end_location)
         self.list_children = element_words
 
 
@@ -294,6 +327,7 @@ class TypeAliasStatementNode(StatementNode):
         super().__init__()
         self.children = [type_node]
         self.location = location
+        self.end_location = type_node.end_location
         self.name = name.value
         self.type_node = type_node
 
@@ -310,6 +344,11 @@ class FuncdefStatementNode(StatementNode):
     ):
         super().__init__()
         self.location = location
+        if not body:
+            raise ValueError(
+                'body of function definition statement node must be non-empty'
+            )
+        self.end_location = body[-1].end_location
         self.name = name.value
         self.decorators = decorators
         self.annotation = annotation
@@ -337,16 +376,19 @@ class FromImportStatementNode(ImportStatementNode):
         self,
         relative_module: str,
         imported_name: str,
+        location: 'Location',
+        end_location: 'Location',
         asname: Optional[str] = None,
-        location: 'Location' = (0, 0),
     ):
-        super().__init__(relative_module, asname, location)
+        super().__init__(relative_module, location, end_location, asname)
         self.imported_name = imported_name
 
 
 class FromImportStarStatementNode(FromImportStatementNode):
-    def __init__(self, module: str, location: 'Location' = (0, 0)):
-        super().__init__(module, '*', None, location)
+    def __init__(
+        self, module: str, location: 'Location', end_location: 'Location'
+    ):
+        super().__init__(module, '*', location, end_location, None)
 
 
 class ClassdefStatementNode(StatementNode):
@@ -355,12 +397,14 @@ class ClassdefStatementNode(StatementNode):
         name: str,
         body: 'WordsOrStatements',
         location: 'Location',
+        end_location: 'Location',
         decorators: Optional['Words'] = None,
         bases: Iterable['Words'] = (),
         keyword_args: Iterable[Tuple[str, WordNode]] = (),
     ):
         super().__init__()
         self.location = location
+        self.end_location = end_location
         self.children = body
         self.class_name = name
         self.decorators = [] if decorators is None else decorators
@@ -372,10 +416,13 @@ def token(
     typ: str,
 ) -> 'parsy.Parser[concat.lex.TokenOrError, concat.lex.Token]':
     description = f'{typ} token'
-    return parsy.test_item(
-        lambda token: isinstance(token, concat.lex.Token)
-        and token.type == typ,
-        description,
+
+    def test(token: concat.lex.TokenOrError) -> bool:
+        return isinstance(token, concat.lex.Token) and token.type == typ
+
+    return cast(
+        'parsy.Parser[concat.lex.TokenOrError, concat.lex.Token]',
+        parsy.test_item(test, description,),
     )
 
 
@@ -445,8 +492,10 @@ def extension(parsers: ParserDict) -> None:
         else:
             input_stack_type = None
         children = yield parsers['word'].many()
-        yield token('RPAR')
-        return QuoteWordNode(children, lpar.start, input_stack_type)
+        end_location = (yield token('RPAR')).end
+        return QuoteWordNode(
+            children, lpar.start, end_location, input_stack_type
+        )
 
     parsers['quote-word'] = quote_word_parser
 
@@ -457,15 +506,33 @@ def extension(parsers: ParserDict) -> None:
     # outside a push.
     word = parsers.ref_parser('word')
     dollarSign = token('DOLLARSIGN')
-    parsers['push-word'] = dollarSign >> (
-        parsers.ref_parser('freeze-word') | word
-    ).map(PushWordNode)
+
+    @parsy.generate
+    def push_word_parser() -> Generator[parsy.Parser, Any, PushWordNode]:
+        start_location = (yield dollarSign).start
+        subword = yield (parsers.ref_parser('freeze-word') | word)
+        return PushWordNode(start_location, subword)
+
+    parsers['push-word'] = concat.parser_combinators.desc_cumulatively(
+        push_word_parser, 'push word'
+    )
 
     # Parsers an attribute word.
     # attribute word = DOT, NAME ;
     dot = token('DOT')
     name = token('NAME')
-    parsers['attribute-word'] = dot >> name.map(AttributeWordNode)
+
+    @parsy.generate
+    def attribute_word_parser() -> Generator[
+        parsy.Parser, Any, AttributeWordNode
+    ]:
+        start_location = (yield dot).start
+        name_token = yield name
+        return AttributeWordNode(start_location, name_token)
+
+    parsers['attribute-word'] = concat.parser_combinators.desc_cumulatively(
+        attribute_word_parser, 'attribute word'
+    )
 
     parsers['literal-word'] |= parsy.alt(
         parsers.ref_parser('bytes-word'),
@@ -484,8 +551,8 @@ def extension(parsers: ParserDict) -> None:
         def parser() -> Generator:
             location = (yield token('L' + delimiter)).start
             element_words = yield word_list_parser
-            yield token('R' + delimiter)
-            return cls(element_words, location)
+            end_location = (yield token('R' + delimiter)).end
+            return cls(element_words, location, end_location)
 
         return concat.parser_combinators.desc_cumulatively(parser, desc)
 
@@ -505,7 +572,9 @@ def extension(parsers: ParserDict) -> None:
     # word list = (COMMA | word+, COMMA | word+, (COMMA, word+)+, [ COMMA ]) ;
     @parsy.generate('word list')
     def word_list_parser() -> Generator:
-        empty: 'parsy.Parser[Token, List[Words]]' = token('COMMA').result([])
+        empty: 'parsy.Parser[concat.lex.TokenOrError, List[Words]]' = token(
+            'COMMA'
+        ).result([])
         singleton = parsy.seq(parsers['word'].at_least(1) << token('COMMA'))
         multiple_element = (
             parsers['word'].at_least(1).sep_by(token('COMMA'), min=2)
@@ -612,10 +681,15 @@ def extension(parsers: ParserDict) -> None:
 
     suite = concat.parser_combinators.desc_cumulatively(suite, 'suite')
 
+    @parsy.generate('module-parts')
+    def module_parts():
+        name = token('NAME')
+        return (yield name.sep_by(token('DOT'), min=1))
+
     @parsy.generate('module')
     def module():
-        name = token('NAME').map(operator.attrgetter('value'))
-        return '.'.join((yield name.sep_by(token('DOT'), min=1)))
+        parts = yield module_parts
+        return '.'.join(map(operator.attrgetter('value'), parts))
 
     # These following parsers parse import statements.
     # import statement = IMPORT, module, [ AS, NAME ]
@@ -627,12 +701,22 @@ def extension(parsers: ParserDict) -> None:
     @parsy.generate('import statement')
     def import_statement_parser() -> Generator:
         location = (yield token('IMPORT')).start
-        module_name = yield module
-        asname_parser = token('NAME').map(operator.attrgetter('value'))
-        asname = None
+        module_name_parts = yield module_parts
+        module_name = '.'.join(
+            map(operator.attrgetter('value'), module_name_parts)
+        )
+        asname_parser = token('NAME')
+        asname: Optional[concat.lex.Token] = None
+        end_location = module_name_parts[-1].end
         if (yield token('AS').optional()):
-            asname = yield asname_parser
-        return ImportStatementNode(module_name, asname, location)
+            asname = parsed_asname = yield asname_parser
+            end_location = parsed_asname.end
+        return ImportStatementNode(
+            module_name,
+            location,
+            end_location,
+            None if asname is None else asname.value,
+        )
 
     parsers['import-statement'] = import_statement_parser
 
@@ -645,13 +729,20 @@ def extension(parsers: ParserDict) -> None:
     def from_import_statement_parser() -> Generator:
         location = (yield token('FROM')).start
         module = yield relative_module
-        name_parser = token('NAME').map(operator.attrgetter('value'))
+        name_parser = token('NAME')
+        # FIXME: * is a name
+        imported_name_token = yield token('IMPORT') >> name_parser
         # TODO: Support importing multiple names at once
-        imported_name = yield token('IMPORT') >> name_parser
+        imported_name = imported_name_token.value
+        end_location = imported_name_token.end
         asname = None
         if (yield token('AS').optional()):
-            asname = yield name_parser
-        return FromImportStatementNode(module, imported_name, asname, location)
+            asname_token = yield name_parser
+            asname = asname_token.value
+            end_location = asname_token.end
+        return FromImportStatementNode(
+            module, imported_name, location, end_location, asname
+        )
 
     parsers['import-statement'] |= from_import_statement_parser
 
@@ -660,8 +751,9 @@ def extension(parsers: ParserDict) -> None:
         location = (yield token('FROM')).start
         module_name = yield module
         yield token('IMPORT')
-        yield token('STAR')
-        return FromImportStarStatementNode(module_name, location)
+        # FIXME: * is a name
+        end_location = (yield token('STAR')).end
+        return FromImportStarStatementNode(module_name, location, end_location)
 
     parsers['import-statement'] |= from_import_star_statement_parser
 
@@ -706,8 +798,8 @@ def extension(parsers: ParserDict) -> None:
         location = (yield token('CAST')).start
         yield token('LPAR')
         type_ast = yield parsers['type']
-        yield token('RPAR')
-        return CastWordNode(type_ast, location)
+        end_location = (yield token('RPAR')).end
+        return CastWordNode(type_ast, location, end_location)
 
     # This parses a cast word.
     # none word = LPAR, type, RPAR, CAST ;

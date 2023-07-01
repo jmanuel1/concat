@@ -526,8 +526,14 @@ def infer(
 
 
 class TypeNode(concat.parse.Node, abc.ABC):
-    def __init__(self, location: concat.astutils.Location) -> None:
+    def __init__(
+        self,
+        location: concat.astutils.Location,
+        end_location: concat.astutils.Location,
+    ) -> None:
+        super().__init__()
         self.location = location
+        self.end_location = end_location
 
     @abc.abstractmethod
     def to_type(self, env: Environment) -> Tuple[Type, Environment]:
@@ -536,8 +542,12 @@ class TypeNode(concat.parse.Node, abc.ABC):
 
 class IndividualTypeNode(TypeNode, abc.ABC):
     @abc.abstractmethod
-    def __init__(self, location: concat.astutils.Location) -> None:
-        super().__init__(location)
+    def __init__(
+        self,
+        location: concat.astutils.Location,
+        end_location: concat.astutils.Location,
+    ) -> None:
+        super().__init__(location, end_location)
 
     @abc.abstractmethod
     def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
@@ -547,8 +557,13 @@ class IndividualTypeNode(TypeNode, abc.ABC):
 # A dataclass is not used here because making this a subclass of an abstract
 # class does not work without overriding __init__ even when it's a dataclass.
 class NamedTypeNode(TypeNode):
-    def __init__(self, location: tuple, name: str) -> None:
-        super().__init__(location)
+    def __init__(
+        self,
+        location: concat.astutils.Location,
+        end_location: concat.astutils.Location,
+        name: str,
+    ) -> None:
+        super().__init__(location, end_location)
         self.name = name
 
     def __repr__(self) -> str:
@@ -563,29 +578,15 @@ class NamedTypeNode(TypeNode):
         return type, env
 
 
-class IntersectionTypeNode(IndividualTypeNode):
-    def __init__(
-        self,
-        location: concat.astutils.Location,
-        type_1: IndividualTypeNode,
-        type_2: IndividualTypeNode,
-    ):
-        super().__init__(location)
-        self.type_1 = type_1
-        self.type_2 = type_2
-
-    def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
-        raise NotImplementedError('intersection types should longer exist')
-
-
 class _GenericTypeNode(IndividualTypeNode):
     def __init__(
         self,
         location: concat.astutils.Location,
+        end_location: concat.astutils.Location,
         generic_type: IndividualTypeNode,
         type_arguments: Sequence[IndividualTypeNode],
     ) -> None:
-        super().__init__(location)
+        super().__init__(location, end_location)
         self._generic_type = generic_type
         self._type_arguments = type_arguments
 
@@ -602,13 +603,14 @@ class _GenericTypeNode(IndividualTypeNode):
 
 class _TypeSequenceIndividualTypeNode(IndividualTypeNode):
     def __init__(
-        self, args: Sequence[Union[concat.lex.Token, IndividualTypeNode]],
+        self, args: Tuple[concat.lex.Token, Optional[IndividualTypeNode]],
     ) -> None:
-        if args[0] is None:
-            location = args[1].location
+        location = args[0].start
+        if args[1] is None:
+            end_location = args[0].end
         else:
-            location = args[0].start
-        super().__init__(location)
+            end_location = args[1].end_location
+        super().__init__(location, end_location)
         self._name = None if args[0] is None else args[0].value
         self._type = args[1]
 
@@ -642,11 +644,12 @@ class _TypeSequenceIndividualTypeNode(IndividualTypeNode):
 class TypeSequenceNode(TypeNode):
     def __init__(
         self,
-        location: Optional[concat.astutils.Location],
+        location: concat.astutils.Location,
+        end_location: concat.astutils.Location,
         seq_var: Optional['_SequenceVariableNode'],
         individual_type_items: Iterable[_TypeSequenceIndividualTypeNode],
     ) -> None:
-        super().__init__(location or (-1, -1))
+        super().__init__(location, end_location)
         self._sequence_variable = seq_var
         self._individual_type_items = tuple(individual_type_items)
 
@@ -680,24 +683,18 @@ class StackEffectTypeNode(IndividualTypeNode):
     def __init__(
         self,
         location: concat.astutils.Location,
+        end_location: concat.astutils.Location,
         input: TypeSequenceNode,
         output: TypeSequenceNode,
     ) -> None:
-        super().__init__(location)
+        super().__init__(location, end_location)
         self.input_sequence_variable = input.sequence_variable
         self.input = [(i.name, i.type) for i in input.individual_type_items]
         self.output_sequence_variable = output.sequence_variable
         self.output = [(o.name, o.type) for o in output.individual_type_items]
 
     def __repr__(self) -> str:
-        return '{}({!r}, {!r}, {!r}, {!r}, location={!r})'.format(
-            type(self).__qualname__,
-            self.input_sequence_variable,
-            self.input,
-            self.output_sequence_variable,
-            self.output,
-            self.location,
-        )
+        return f'{type(self).__qualname__}(location={self.location!r}, end_location={self.end_location!r}, <input>, <output>)'
 
     def to_type(self, env: Environment) -> Tuple[StackEffect, Environment]:
         a_bar = SequenceVariable()
@@ -742,7 +739,7 @@ class _IndividualVariableNode(IndividualTypeNode):
     """The AST type for individual type variables."""
 
     def __init__(self, name: Token) -> None:
-        super().__init__(name.start)
+        super().__init__(name.start, name.end)
         self._name = name.value
 
     def to_type(
@@ -774,7 +771,7 @@ class _SequenceVariableNode(TypeNode):
     """The AST type for sequence type variables."""
 
     def __init__(self, name: Token) -> None:
-        super().__init__(name.start)
+        super().__init__(name.start, name.end)
         self._name = name.value
 
     def to_type(
@@ -813,7 +810,7 @@ class _ForallTypeNode(TypeNode):
         ],
         ty: TypeNode,
     ) -> None:
-        super().__init__(location)
+        super().__init__(location, ty.end_location)
         self._type_variables = type_variables
         self._type = ty
 
@@ -834,9 +831,10 @@ class _ObjectTypeNode(IndividualTypeNode):
     def __init__(
         self,
         attribute_type_pairs: Iterable[Tuple[Token, TypeNode]],
-        location: 'concat.astutils.Location',
+        location: concat.astutils.Location,
+        end_location: concat.astutils.Location,
     ) -> None:
-        super().__init__(location)
+        super().__init__(location, end_location)
         self._attribute_type_pairs = attribute_type_pairs
 
     def to_type(self, env: Environment) -> Tuple[ObjectType, Environment]:
@@ -865,7 +863,9 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
     @parsy.generate
     def named_type_parser() -> Generator:
         name_token = yield concat.parse.token('NAME')
-        return NamedTypeNode(name_token.start, name_token.value)
+        return NamedTypeNode(
+            name_token.start, name_token.end, name_token.value
+        )
 
     @parsy.generate
     def individual_type_variable_parser() -> Generator:
@@ -885,13 +885,18 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
 
     @parsy.generate
     def type_sequence_parser() -> Generator:
-        type = parsers['type'] | individual_type_variable_parser
-
         # TODO: Allow type-only items
         item = parsy.seq(
             non_star_name_parser,
-            (concat.parse.token('COLON') >> type).optional(),
-        ).map(_TypeSequenceIndividualTypeNode)
+            (concat.parse.token('COLON') >> individual_type_parser).optional(),
+        ).map(
+            lambda pair: _TypeSequenceIndividualTypeNode(
+                cast(
+                    Tuple[concat.lex.Token, Optional[IndividualTypeNode]],
+                    tuple(pair),
+                )
+            )
+        )
         items = item.many()
 
         seq_var = sequence_type_variable_parser
@@ -904,9 +909,28 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         elif seq_var_parsed is not None:
             location = seq_var_parsed.location
         else:
-            location = None
+            location = (
+                yield parsy.peek(
+                    parsy.test_item(
+                        lambda i: isinstance(i, Token), 'any token'
+                    )
+                )
+            ).start
 
-        return TypeSequenceNode(location, seq_var_parsed, i)
+        if i:
+            end_location = i[-1].end_location
+        elif seq_var_parsed:
+            end_location = seq_var_parsed.end_location
+        else:
+            end_location = (
+                yield parsy.peek(
+                    parsy.test_item(
+                        lambda i: isinstance(i, Token), 'any token'
+                    )
+                )
+            ).end
+
+        return TypeSequenceNode(location, end_location, seq_var_parsed, i)
 
     @parsy.generate
     def stack_effect_type_parser() -> Generator:
@@ -917,23 +941,13 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         i = yield parsers['type-sequence'] << separator
         o = yield parsers['type-sequence']
 
-        yield concat.parse.token('RPAR')
+        end_location = (yield concat.parse.token('RPAR')).end
 
-        return StackEffectTypeNode(location, i, o)
+        return StackEffectTypeNode(location, end_location, i, o)
 
     parsers['stack-effect-type'] = concat.parser_combinators.desc_cumulatively(
         stack_effect_type_parser, 'stack effect type'
     )
-
-    @parsy.generate
-    def generic_type_parser() -> Generator:
-        type = yield parsers['nonparameterized-type']
-        yield concat.parse.token('LSQB')
-        type_arguments = yield parsers['type'].sep_by(
-            concat.parse.token('COMMA'), min=1
-        )
-        yield concat.parse.token('RSQB')
-        return _GenericTypeNode(type.location, type, type_arguments)
 
     @parsy.generate
     def forall_type_parser() -> Generator:
@@ -959,8 +973,8 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
             parsers['type'],
         )
         pairs = yield (attribute_type_pair.sep_by(concat.parse.token('COMMA')))
-        yield concat.parse.token('RBRACE')
-        return _ObjectTypeNode(pairs, location)
+        end_location = (yield concat.parse.token('RBRACE')).end
+        return _ObjectTypeNode(pairs, location, end_location)
 
     # TODO: Parse sequence type variables
     parsers['nonparameterized-type'] = parsy.alt(
