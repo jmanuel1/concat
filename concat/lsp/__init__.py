@@ -2,7 +2,7 @@ from concat.astutils import Location
 import concat.jsonrpc
 from concat.lex import tokenize
 from concat.logging import ConcatLogger
-from concat.parse import ParseError
+from concat.parse import Node, ParseError
 from concat.transpile import parse, typecheck
 from concat.typecheck import StaticAnalysisError
 import concurrent.futures as futures
@@ -17,10 +17,12 @@ from typing import (
     BinaryIO,
     Callable,
     Dict,
+    Iterator,
     List,
     Mapping,
     Optional,
     Sequence,
+    Tuple,
     Union,
     cast,
 )
@@ -176,8 +178,9 @@ class Server:
     @staticmethod
     def _get_server_capabilities() -> Dict[str, object]:
         return {
-            'textDocumentSync': _TextDocumentSyncKind.FULL.value,
+            'hoverProvider': True,
             'positionEncoding': _PositionEncodingKind.UTF16.value,
+            'textDocumentSync': _TextDocumentSyncKind.FULL.value,
         }
 
     def _did_open_text_document(
@@ -209,6 +212,25 @@ class Server:
         self._text_documents[text_document_item['uri']] = text_document
         _logger.debug('about to publish diagnostics')
         self._publish_diagnostics()
+
+    def _hover_text_document(
+        self, params: Optional[Union[dict, list]]
+    ) -> Optional[dict]:
+        if not isinstance(params, dict):
+            raise concat.jsonrpc.InvalidParametersError
+        text_document = self._text_documents[params['textDocument']['uri']]
+        position = _Position.from_json(params['position'])
+        node = text_document.find_node_just_before_position(position)
+        self._text_documents[params['textDocument']['uri']] = text_document
+        if not node:
+            return None
+        stack_type_here = node.extra.get('typecheck-stack-type-after-here')
+        if not stack_type_here:
+            return None
+        hover_message = (
+            f'Stack type here: `{_escape_markdown_string(stack_type_here)}`'
+        )
+        return _Hover(contents=hover_message).to_json()
 
     def _did_change_text_document(
         self, params: Optional[Union[dict, list]]
@@ -362,6 +384,10 @@ class Server:
     _charset_regex = re.compile(r'charset=utf-?8')
 
 
+def _escape_markdown_string(string: str) -> str:
+    return string.replace('`', '\\`')
+
+
 class _Headers(Dict[str, str]):
     def content_length_in_bytes(self) -> int:
         return int(self['content-length'].strip())
@@ -375,12 +401,25 @@ class _Headers(Dict[str, str]):
         super().__setitem__(name.lower(), value)
 
 
+# https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#hover
+class _Hover:
+    def __init__(self, contents: str) -> None:
+        self._contents = contents
+
+    def to_json(self) -> dict:
+        return {'contents': self._contents}
+
+
 class _Position:
     def __init__(self, line: int, character: int) -> None:
         self._line = line
         # PositionEncodingKind determines how the character offset is
         # interpreted. It defaults to UTF-16 offsets.
         self._character = character
+
+    @classmethod
+    def from_json(cls, json: dict) -> Self:
+        return cls(json['line'], json['character'])
 
     @classmethod
     def from_tokenizer_location(
@@ -397,6 +436,16 @@ class _Position:
     def to_json(self) -> dict:
         return {'line': self._line, 'character': self._character}
 
+    def to_tokenizer_location(self, text_lines: Sequence[str]) -> Location:
+        return (
+            self._line + 1,
+            0
+            if self._line >= len(text_lines)
+            else _utf16_code_unit_offset_to_index(
+                text_lines[self._line], self._character
+            ),
+        )
+
 
 def index_to_utf16_code_unit_offset(string: str, index: int) -> int:
     offset = 0
@@ -406,6 +455,16 @@ def index_to_utf16_code_unit_offset(string: str, index: int) -> int:
         # https://en.wikipedia.org/wiki/UTF-16#U+0000_to_U+D7FF_and_U+E000_to_U+FFFF
         offset += 1 if ord(char) <= 0xFFFF else 2
     return offset
+
+
+def _utf16_code_unit_offset_to_index(string: str, offset: int) -> int:
+    o = 0
+    for i, char in enumerate(string):
+        if o == offset:
+            return i
+        # https://en.wikipedia.org/wiki/UTF-16#U+0000_to_U+D7FF_and_U+E000_to_U+FFFF
+        offset += 1 if ord(char) <= 0xFFFF else 2
+    return len(string)
 
 
 class _Range:
@@ -432,6 +491,7 @@ class _TextDocumentItem:
         self._language_id = cast(str, dictionary['languageId'])
         self._version = cast(int, dictionary['version'])
         self._text = cast(str, dictionary['text'])
+        self._ast: Optional[Node] = None
         self.diagnostics: List[_Diagnostic] = []
 
     def update(self, version: int, text: str) -> None:
@@ -441,10 +501,35 @@ class _TextDocumentItem:
     def close(self) -> None:
         self.diagnostics = []
 
-    def diagnose(self) -> None:
-        self.diagnostics = self._diagnose()
+    def diagnose(self, logger: ConcatLogger) -> None:
+        self.diagnostics = self._diagnose(logger)
 
-    def _diagnose(self) -> List[_Diagnostic]:
+    def _diagnose(self, logger: ConcatLogger) -> List[_Diagnostic]:
+        self._ast = None
+        return self._ensure_typechecked_ast(logger)[1]
+
+    def find_node_just_before_position(
+        self, position: _Position
+    ) -> Optional[Node]:
+        text_lines = self._text.splitlines(keepends=True)
+        location = position.to_tokenizer_location(text_lines)
+        node = self._ensure_typechecked_ast(None)[0]
+        if not node:
+            return None
+        for child in _traverse_node_preorder_right_to_left(node):
+            if child.location <= child.end_location <= location:
+                return child
+        return None
+
+    def _ensure_typechecked_ast(
+        self, logger: Optional[ConcatLogger]
+    ) -> Tuple[Optional[Node], List[_Diagnostic]]:
+        if self._ast and self._ast.extra.get('typecheck-success', False):
+            return self._ast, self.diagnostics
+        if logger is not None:
+            logger.debug(
+                'refreshing AST and diagnostics for {uri}', uri=self._uri
+            )
         text_lines = self._text.splitlines(keepends=True)
         tokens = tokenize(self._text)
         diagnostics = []
@@ -459,9 +544,12 @@ class _TextDocumentItem:
                 diagnostics.append(_Diagnostic(range_, message))
             elif isinstance(token, IndentationError):
                 message = 'Unexpected indentation level'
-                position = _Position.from_tokenizer_location(
-                    text_lines, (token.lineno, token.offset)
-                )
+                if token.lineno is None or token.offset is None:
+                    position = _Position(0, 0)
+                else:
+                    position = _Position.from_tokenizer_location(
+                        text_lines, (token.lineno, token.offset)
+                    )
                 range_ = _Range(position, position)
                 diagnostics.append(_Diagnostic(range_, message))
             elif isinstance(token, Exception):
@@ -481,7 +569,7 @@ class _TextDocumentItem:
                 message = 'Invalid token'
                 diagnostics.append(_Diagnostic(range_, message))
         try:
-            ast = parse(tokens)
+            self._ast = ast = parse(tokens)
         except ParseError as e:
             parser_start_position = e.get_start_position()
             parser_end_position = e.get_end_position()
@@ -495,7 +583,7 @@ class _TextDocumentItem:
             )
             message = f'Expected one of: {", ".join(e.expected)}'
             diagnostics.append(_Diagnostic(range_, message))
-            return diagnostics
+            return self._ast, diagnostics
         try:
             # https://stackoverflow.com/questions/5977576/is-there-a-convenient-way-to-map-a-file-uri-to-os-path
             source_dir = str(
@@ -508,7 +596,13 @@ class _TextDocumentItem:
             )
             range_ = _Range(position, position)
             diagnostics.append(_Diagnostic(range_, e.message))
-        return diagnostics
+        return self._ast, diagnostics
+
+
+def _traverse_node_preorder_right_to_left(node: Node) -> Iterator[Node]:
+    for child in reversed(list(node.children)):
+        yield from _traverse_node_preorder_right_to_left(child)
+    yield node
 
 
 class _Error(Enum):

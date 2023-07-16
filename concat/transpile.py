@@ -12,7 +12,7 @@ Visser (2001): ACM SIGPLAN Notices 36(11):270-282 November 2001 DOI:
 import ast
 import astunparse  # type: ignore
 from typing import Sequence, Type, cast
-from concat.lex import Token, tokenize
+from concat.lex import Token, TokenOrError, tokenize
 import concat.parse
 import concat.typecheck
 from concat.visitors import (
@@ -42,7 +42,7 @@ from concat.astutils import (
 )
 
 
-def parse(tokens: Sequence[Token]) -> concat.parse.TopLevelNode:
+def parse(tokens: Sequence[TokenOrError]) -> concat.parse.TopLevelNode:
     parser = concat.parse.ParserDict()
     parser.extend_with(concat.parse.extension)
     parser.extend_with(concat.typecheck.typecheck_extension)
@@ -54,6 +54,7 @@ def typecheck(concat_ast: concat.parse.TopLevelNode, source_dir: str) -> None:
     concat.typecheck.check(
         concat.typecheck.Environment(), concat_ast.children, source_dir
     )
+    concat_ast.extra['typecheck-success'] = True
 
 
 def transpile(code: str, source_dir: str = '.') -> ast.Module:
