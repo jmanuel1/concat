@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import json
 import logging
 import logging.handlers
+from multiprocessing import Manager
 import pathlib
 import sys
 import traceback
@@ -55,5 +56,6 @@ _logger = logging.getLogger()
 _logger.addHandler(_log_handler)
 _logger.setLevel(logging.DEBUG)
 
-server = Server()
+manager = Manager()
+server = Server(manager)
 sys.exit(server.start(sys.stdin.buffer, sys.stdout.buffer))

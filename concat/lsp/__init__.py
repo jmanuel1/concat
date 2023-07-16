@@ -5,9 +5,11 @@ from concat.logging import ConcatLogger
 from concat.parse import ParseError
 from concat.transpile import parse, typecheck
 from concat.typecheck import StaticAnalysisError
+import concurrent.futures as futures
 from enum import Enum, IntEnum
 from io import TextIOWrapper
 import logging
+from multiprocessing import Manager
 from pathlib import Path
 import re
 import tokenize as py_tokenize
@@ -35,13 +37,18 @@ _logger = ConcatLogger(_python_logger)
 class Server:
     """A Language Server Protocol server."""
 
-    def __init__(self) -> None:
-        self._rpc_server = concat.jsonrpc.Server()
+    def __init__(self, manager) -> None:
+        self._rpc_server = concat.jsonrpc.Server(manager)
         self._rpc_server.set_receive_message_hook(self._receive_message_hook)
         self._rpc_server.set_send_message_hook(self._send_message_hook)
 
-        self._has_received_initialize_request = False
-        self._has_responded_to_initialize_request = False
+        self._initialization_state = manager.dict(
+            {
+                'has-received-initialize-request': False,
+                'has-responded-to-initialize-request': False,
+            }
+        )
+
         self._rpc_server.handle('initialize')(self._initialize)
         self._rpc_server.handle('initialized')(self._on_initialized)
 
@@ -51,16 +58,39 @@ class Server:
         self._should_exit = False
         self._rpc_server.handle('exit')(self._exit)
 
-        self._text_documents: Dict[str, _TextDocumentItem] = {}
-        self._rpc_server.handle('textDocument/didOpen')(
-            self._did_open_text_document
-        )
+        self._text_documents: Dict[str, _TextDocumentItem] = manager.dict({})
         self._rpc_server.handle('textDocument/didChange')(
             self._did_change_text_document
         )
         self._rpc_server.handle('textDocument/didClose')(
             self._did_close_text_document
         )
+        self._rpc_server.handle('textDocument/didOpen')(
+            self._did_open_text_document
+        )
+        self._rpc_server.handle('textDocument/hover')(
+            self._hover_text_document
+        )
+
+    @property
+    def _has_received_initialize_request(self) -> bool:
+        return self._initialization_state['has-received-initialize-request']
+
+    @_has_received_initialize_request.setter
+    def _has_received_initialize_request(self, value: bool) -> None:
+        self._initialization_state['has-received-initialize-request'] = value
+
+    @property
+    def _has_responded_to_initialize_request(self) -> bool:
+        return self._initialization_state[
+            'has-responded-to-initialize-request'
+        ]
+
+    @_has_responded_to_initialize_request.setter
+    def _has_responded_to_initialize_request(self, value: bool) -> None:
+        self._initialization_state[
+            'has-responded-to-initialize-request'
+        ] = value
 
     def start(self, requests: BinaryIO, responses: BinaryIO) -> int:
         # Don't wrap the requests file in a TextIOWrapper to read the
@@ -107,21 +137,24 @@ class Server:
                 _logger.info('request content: {!r}', decoded_content)
                 yield decoded_content
 
-        rpc_responses = self._rpc_server.start(request_generator())
-        for response in rpc_responses:
-            response_length = len(response.encode(encoding='utf-8'))
-            _logger.info(
-                'response:\nContent-Length: {response_length}\n\n{response}',
-                response_length=response_length,
-                response=response,
+        with futures.ProcessPoolExecutor() as task_executor:
+            rpc_responses = self._rpc_server.start(
+                task_executor, request_generator()
             )
-            headers_response_file.writelines(
-                [f'Content-Length: {response_length}\n', '\n',]
-            )
-            content_response_file.write(response)
-            responses.flush()
-            if self._has_received_initialize_request:
-                self._has_responded_to_initialize_request = True
+            for response in rpc_responses:
+                response_length = len(response.encode(encoding='utf-8'))
+                _logger.info(
+                    'response:\nContent-Length: {response_length}\n\n{response}',
+                    response_length=response_length,
+                    response=response,
+                )
+                headers_response_file.writelines(
+                    [f'Content-Length: {response_length}\n', '\n',]
+                )
+                content_response_file.write(response)
+                responses.flush()
+                if self._has_received_initialize_request:
+                    self._has_responded_to_initialize_request = True
 
         return 0 if self._has_received_shutdown_request else 1
 
@@ -170,7 +203,10 @@ class Server:
         _logger.debug(
             'about to compute diagnostics for {}', text_document_item['uri']
         )
-        text_document.diagnose()
+        text_document.diagnose(_logger)
+        # Reassign into the text documents `Manager().dict` so that other
+        # processes get the modifications to `text_document`.
+        self._text_documents[text_document_item['uri']] = text_document
         _logger.debug('about to publish diagnostics')
         self._publish_diagnostics()
 
@@ -184,7 +220,8 @@ class Server:
         version = versioned_text_document_identifier['version']
         new_full_content = params['contentChanges'][0]['text']
         self._text_documents[uri].update(version, new_full_content)
-        self._text_documents[uri].diagnose()
+        self._text_documents[uri].diagnose(_logger)
+        self._text_documents[uri] = self._text_documents[uri]
         _logger.debug('about to publish diagnostics')
         self._publish_diagnostics()
 
@@ -196,6 +233,7 @@ class Server:
         text_document_identifier = params['textDocument']
         uri = text_document_identifier['uri']
         self._text_documents[uri].close()
+        self._text_documents[uri] = self._text_documents[uri]
         # TODO: Diagnostics will be cleared for this document. This is fine
         # because Concat doesn't really have a full module system or a project
         # system, yet.

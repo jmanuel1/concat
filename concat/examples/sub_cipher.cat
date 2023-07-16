@@ -1,10 +1,11 @@
 # IGNORE
-# IN: ''
+# IN: 'A simple example.'
 # OUT: 'The original is: A simple example.\nEncoding it with the key: |\nx$NB"uqbJK[\x0c7Q4,P0S?6@>Z^n)9=}\'mMV.X /*i;IOdc<Hl\rvFCwt2pY_fD#Wg&r3ajz1h-osT]%(\t\\{E~ykGA5UL:!`+eR\x0b8\nGives: .`)P6Z?7`7mJ6Z?7s\nDecoding it by the same key gives: A simple example.\n'
-# FIXME: Support an object type syntax so that I can cast values to have needed
-# attributes.
-# based on the python answer in rosetta code
+# https://rosettacode.org/wiki/Substitution_cipher
 
+from concat.stdlib.pyinterop import getitem
+from concat.stdlib.pyinterop import map
+from concat.stdlib.pyinterop import to_str
 from concat.stdlib.pyinterop import to_dict
 from string import printable
 import random as py_random
@@ -13,7 +14,7 @@ import random as py_random
 def type py_random_type:
     {
         seed: py_function[(_:int), none],
-        shuffle: forall `t. py_function[(_:list[`t]), list[`t]]
+        shuffle: forall `t. py_function[(_:list[`t]), none]
     }
 
 
@@ -25,11 +26,69 @@ def seed(--):
     [,] to_dict [334344,] random$.seed py_call drop
 
 
-def shuffle(lst:list[`t] -- lst):
+def shuffle(lst:list[`t] -- ):
     # QUESTION: Should I even track Python function argument types if I don't
     # use the positional parameter types and have no keyword parameter types nor
     # optional parameters?
     [,] to_dict [swap,] random$.shuffle py_call drop
 
 
-seed  # set seed for reproducibility
+def printable_chars(-- chars:str):
+    $printable cast (str)
+
+
+def get_input( -- result:str):
+    None to_dict [,] $input py_call cast (str)
+
+
+def put_output(string:str -- ):
+    [(),] [('end', ''),] to_dict swap $print py_call drop
+
+
+def str_from_iter(it:object -- s:str):
+    [(),] None to_dict swap ''$.join py_call cast (str)
+
+
+def create_key(-- key:str):
+    printable_chars to_list dup shuffle str_from_iter
+
+
+def print_decoding_message(--):
+    '\nDecoding it by the same key gives: ' put_output
+
+
+def print_key(key:str input:str -- input key):
+    swap  # <input> <key>
+    dup put_output  # <input> <key>
+
+
+def index_of(string:str char:str -- index:int):
+    [(),] None to_dict swap pick $.index py_call nip
+
+
+def sub(char:str key:str -- sub:str):
+    printable_chars pick index_of getitem nip
+
+
+def map_str(*s f:(*s c:str -- *s fc:str) a:str -- *s fa:str):
+    # FIXME: iterator_type[`t_30891952] is not a subtype of str_type
+    cast (iterable[str])
+    map str_from_iter
+
+
+def encode(input:str key:str -- output:str):
+    swap  # key input
+    $(key:str c:str: over sub)  # key input f
+    swap map_str  # key map(f, input)
+    nip
+
+
+seed  # set seed for reproducibility:
+create_key  # create key: <key>
+get_input  # <key> <input>
+'The original is: ' put_output  # <key> <input>
+dup put_output  # <key> <input>
+'\nEncoding it with the key: ' put_output  # <key> <input>
+print_key # <input> <key>
+print_decoding_message  # <input> <key>
+dup encode decode put_output '\n' put_output

@@ -1,11 +1,14 @@
 from concat.logging import ConcatLogger
+import concurrent.futures as futures
 from enum import Enum
 import json
 import logging
+from multiprocessing import Manager, Queue
 from typing import (
     Callable,
     Dict,
     Iterable,
+    Iterator,
     List,
     Mapping,
     MutableMapping,
@@ -14,6 +17,7 @@ from typing import (
     Union,
     overload,
 )
+import queue
 
 
 class Error(Enum):
@@ -60,7 +64,9 @@ class Server:
     python-lsp-jsonrpc's interface
     (https://github.com/python-lsp/python-lsp-jsonrpc/blob/c73fbdba2eeb99b7b145dcda76e62250552feda4/examples/langserver.py)."""
 
-    def __init__(self) -> None:
+    def __init__(self, manager: Manager) -> None:
+        self._response_queue: Queue = manager.Queue()
+
         self._methods: MutableMapping[str, Handler] = {}
         self._receive_message_hook: _ReceiveMessageHook = (
             lambda _, _2, _3, _4: None
@@ -69,7 +75,6 @@ class Server:
         self._send_message_hook: _ReceiveMessageHook = (
             lambda _, _2, _3, _4: None
         )
-        self._messages_to_send: List[str] = []
 
     @overload
     def handle(self, arg: Handler) -> Handler:
@@ -99,7 +104,9 @@ class Server:
     def set_send_message_hook(self, callback: _ReceiveMessageHook) -> None:
         self._send_message_hook = callback
 
-    def start(self, requests: Iterable[str]) -> Iterable[str]:
+    def start(
+        self, task_executor: futures.Executor, requests: Iterable[str]
+    ) -> Iterable[str]:
         def parse_requests():
             for request in requests:
                 try:
@@ -114,7 +121,37 @@ class Server:
                     continue
                 yield obj
 
-        return self._process_requests(parse_requests())
+        tasks = self._process_requests(task_executor, parse_requests())
+        running_tasks = set()
+        while True:
+            while True:
+                try:
+                    message = self._response_queue.get_nowait()
+                    yield message
+                except queue.Empty:
+                    break
+            try:
+                next_task = next(tasks)
+            except StopIteration:
+                break
+            running_tasks |= {next_task}
+            done, running_tasks = futures.wait(
+                running_tasks, return_when=futures.FIRST_COMPLETED
+            )
+            for done_task in done:
+                response = done_task.result()
+                if response is not None:
+                    yield response
+        for task in futures.as_completed(running_tasks):
+            response = task.result()
+            if response is not None:
+                yield response
+        while True:
+            try:
+                message = self._response_queue.get_nowait()
+                yield message
+            except queue.Empty:
+                break
 
     def notify(
         self, method: str, parameters: Optional[Union[list, dict]]
@@ -126,17 +163,15 @@ class Server:
         if parameters is not None:
             message['params'] = parameters
         string_to_send = json.dumps(message, sort_keys=True,)
-        self._messages_to_send.append(string_to_send)
+        self._response_queue.put(string_to_send)
 
     def _process_requests(
-        self, requests: Iterable[Union[dict, list, str]]
-    ) -> Iterable[str]:
+        self,
+        task_executor: futures.Executor,
+        requests: Iterable[Union[dict, list, str]],
+    ) -> Iterator[futures.Future]:
         for request_object in requests:
-            response = self._process_request(request_object)
-            if response is not None:
-                yield response
-            yield from self._messages_to_send
-            self._messages_to_send.clear()
+            yield task_executor.submit(self._process_request, request_object)
 
     def _process_request(
         self, request_object: Union[dict, list, str]
@@ -223,7 +258,15 @@ class Server:
                 self._create_error_response(None, Error.INVALID_REQUEST.value),
                 sort_keys=True,
             )
-        responses = list(self._process_requests(request_object))
+        responses_and_nones = (
+            self._process_request(sub_request)
+            for sub_request in request_object
+        )
+        responses = [
+            response
+            for response in responses_and_nones
+            if response is not None
+        ]
         if not responses:
             return None
         response = f'[{", ".join(responses)}]'
