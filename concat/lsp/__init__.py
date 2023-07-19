@@ -111,7 +111,13 @@ class Server:
                 headers = self._read_headers(requests)
                 _logger.info('read headers')
                 content_type = headers.content_type()
-                content_part = requests.read(headers.content_length_in_bytes())
+                try:
+                    content_length = headers.content_length_in_bytes()
+                except KeyError:
+                    # TODO: Do something
+                    _logger.error('no content length in headers')
+                    continue
+                content_part = requests.read(content_length)
                 _logger.info('{!r}', headers)
                 if not self._charset_regex.search(content_type):
                     _logger.error('unsupported charset')
