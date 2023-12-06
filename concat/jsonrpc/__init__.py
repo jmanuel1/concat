@@ -1,6 +1,7 @@
 from concat.logging import ConcatLogger
 import concurrent.futures as futures
 from enum import Enum
+import itertools
 import json
 import logging
 from multiprocessing import Manager, Queue
@@ -66,6 +67,7 @@ class Server:
 
     def __init__(self, manager: Manager) -> None:
         self._response_queue: Queue = manager.Queue()
+        self._cancellation_request_queue = manager.Queue()
 
         self._methods: MutableMapping[str, Handler] = {}
         self._receive_message_hook: _ReceiveMessageHook = (
@@ -75,6 +77,10 @@ class Server:
         self._send_message_hook: _ReceiveMessageHook = (
             lambda _, _2, _3, _4: None
         )
+
+    @property
+    def response_queue(self) -> Queue:
+        return self._response_queue
 
     @overload
     def handle(self, arg: Handler) -> Handler:
@@ -106,7 +112,7 @@ class Server:
 
     def start(
         self, task_executor: futures.Executor, requests: Iterable[str]
-    ) -> Iterable[str]:
+    ) -> None:
         def parse_requests():
             for request in requests:
                 try:
@@ -122,36 +128,48 @@ class Server:
                 yield obj
 
         tasks = self._process_requests(task_executor, parse_requests())
-        running_tasks = set()
+        running_tasks = []
         while True:
-            while True:
-                try:
-                    message = self._response_queue.get_nowait()
-                    yield message
-                except queue.Empty:
-                    break
             try:
-                next_task = next(tasks)
+                task_tuple = next(tasks)
             except StopIteration:
                 break
-            running_tasks |= {next_task}
-            done, running_tasks = futures.wait(
-                running_tasks, return_when=futures.FIRST_COMPLETED
+            running_tasks.append(task_tuple)
+            task = task_tuple[1]
+            task.add_done_callback(
+                lambda fut: self._response_queue.put(fut.result())
+                if fut.result() is not None
+                else None
             )
-            for done_task in done:
-                response = done_task.result()
-                if response is not None:
-                    yield response
-        for task in futures.as_completed(running_tasks):
-            response = task.result()
-            if response is not None:
-                yield response
-        while True:
-            try:
-                message = self._response_queue.get_nowait()
-                yield message
-            except queue.Empty:
-                break
+            print('HERE1')
+            while True:
+                try:
+                    (
+                        cancellation_predicate,
+                        id_limit,
+                    ) = self._cancellation_request_queue.get_nowait()
+                except queue.Empty:
+                    break
+                uncancelled_tasks = []
+                for task_tuple in running_tasks:
+                    request, task, identifier = task_tuple
+                    if identifier >= id_limit:
+                        continue
+                    try:
+                        should_cancel = cancellation_predicate(request)
+                    except Exception:
+                        should_cancel = False
+                    if should_cancel:
+                        task.cancel()
+                    else:
+                        uncancelled_tasks.append(task_tuple)
+                running_tasks = uncancelled_tasks
+            running_tasks = [
+                (req, task, identifier)
+                for (req, task, identifier) in running_tasks
+                if task.running()
+            ]
+            print('HERE2')
 
     def notify(
         self, method: str, parameters: Optional[Union[list, dict]]
@@ -165,22 +183,37 @@ class Server:
         string_to_send = json.dumps(message, sort_keys=True,)
         self._response_queue.put(string_to_send)
 
+    def cancel_requests_matching(
+        self, fallible_predicate: Callable[[dict], bool], limit_id: int
+    ) -> None:
+        self._cancellation_request_queue.put((fallible_predicate, limit_id))
+
     def _process_requests(
         self,
         task_executor: futures.Executor,
         requests: Iterable[Union[dict, list, str]],
-    ) -> Iterator[futures.Future]:
-        for request_object in requests:
-            yield task_executor.submit(self._process_request, request_object)
+    ) -> Iterator[Tuple[Union[dict, list, str], futures.Future, int]]:
+        for request_object, internal_request_id in zip(
+            requests, itertools.count()
+        ):
+            yield (
+                request_object,
+                task_executor.submit(
+                    self._process_request, request_object, internal_request_id
+                ),
+                internal_request_id,
+            )
 
     def _process_request(
-        self, request_object: Union[dict, list, str]
+        self, request_object: Union[dict, list, str], internal_request_id: int
     ) -> Optional[str]:
         try:
             if isinstance(request_object, str):
                 return request_object
             if isinstance(request_object, list):
-                response = self._process_batch_request(request_object)
+                response = self._process_batch_request(
+                    request_object, internal_request_id
+                )
                 return response
             if not isinstance(request_object, dict):
                 return json.dumps(
@@ -237,7 +270,7 @@ class Server:
             ):
                 return json.dumps(intercepted_response, sort_keys=True)
             response = self._call_method_and_create_response(
-                method, parameters, correlation_id
+                method, parameters, correlation_id, internal_request_id
             )
             return response
         except Exception:
@@ -251,7 +284,7 @@ class Server:
             return None
 
     def _process_batch_request(
-        self, request_object: Iterable[dict]
+        self, request_object: Iterable[dict], internal_request_id: int
     ) -> Optional[str]:
         if not request_object:
             return json.dumps(
@@ -259,7 +292,7 @@ class Server:
                 sort_keys=True,
             )
         responses_and_nones = (
-            self._process_request(sub_request)
+            self._process_request(sub_request, internal_request_id)
             for sub_request in request_object
         )
         responses = [
@@ -339,15 +372,22 @@ class Server:
         method: str,
         parameters: Optional[Union[dict, list]],
         correlation_id: object,
+        internal_request_id: int,
     ) -> Optional[str]:
         try:
-            return_value = self._call_method(method, parameters)
+            return_value = self._call_method(
+                method, parameters, internal_request_id
+            )
         except _MethodCallError as e:
             if correlation_id is not self._missing_id_sentinel:
                 return json.dumps(
                     self._create_error_response(correlation_id, e.error.value),
                     sort_keys=True,
                 )
+            self._log_error(
+                'Method call error not sent because request was a notification',
+                e,
+            )
         except _ApplicationDefinedError as e:
             if correlation_id is not self._missing_id_sentinel:
                 return json.dumps(
@@ -368,14 +408,19 @@ class Server:
         return None
 
     def _call_method(
-        self, method: str, parameters: Optional[Union[dict, list]]
+        self,
+        method: str,
+        parameters: Optional[Union[dict, list]],
+        internal_request_id: int,
     ) -> object:
         try:
             handler = self._methods[method]
         except KeyError:
             raise _MethodCallError(Error.METHOD_NOT_FOUND)
         try:
-            return handler(parameters)
+            # TODO: Call handler with a nice request object that hides details
+            # of the request, like the internal id.
+            return handler(parameters, internal_request_id)
         except Exception as e:
             if isinstance(e, InvalidParametersError):
                 raise

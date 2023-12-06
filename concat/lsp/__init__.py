@@ -11,6 +11,7 @@ from io import TextIOWrapper
 import logging
 from multiprocessing import Manager
 from pathlib import Path
+import queue
 import re
 import tokenize as py_tokenize
 from typing import (
@@ -97,13 +98,6 @@ class Server:
     def start(self, requests: BinaryIO, responses: BinaryIO) -> int:
         # Don't wrap the requests file in a TextIOWrapper to read the
         # headers since it requires buffering.
-        headers_response_file = TextIOWrapper(
-            responses, encoding='ascii', newline='\r\n', write_through=True
-        )
-        content_response_file = TextIOWrapper(
-            responses, encoding='utf-8', newline='', write_through=True
-        )
-
         def request_generator():
             while not requests.closed and not self._should_exit:
                 _logger.debug('reading next message')
@@ -129,56 +123,67 @@ class Server:
                         },
                         "id": null
                     }'''
-                    error_json_length = len(
-                        error_json.encode(encoding='utf-8')
-                    )
-                    headers_response_file.writelines(
-                        [
-                            'Content-Type: application/vscode-jsonrpc; charset=utf-8',
-                            f'Content-Length: {error_json_length}',
-                            '',
-                        ]
-                    )
-                    content_response_file.write(error_json)
+                    self._rpc_server.response_queue.put(error_json)
                     continue
                 decoded_content = str(content_part, encoding='utf-8')
                 _logger.info('request content: {!r}', decoded_content)
                 yield decoded_content
 
         with futures.ProcessPoolExecutor() as task_executor:
-            rpc_responses = self._rpc_server.start(
-                task_executor, request_generator()
+            # TODO: Have a way to force-quit this task.
+            process_response_queue_future = task_executor.submit(
+                self._process_response_queue, responses
             )
-            for response in rpc_responses:
-                response_length = len(response.encode(encoding='utf-8'))
-                _logger.info(
-                    'response:\nContent-Length: {response_length}\n\n{response}',
-                    response_length=response_length,
-                    response=response,
-                )
-                headers_response_file.writelines(
-                    [f'Content-Length: {response_length}\n', '\n',]
-                )
-                content_response_file.write(response)
-                responses.flush()
-                if self._has_received_initialize_request:
-                    self._has_responded_to_initialize_request = True
+            self._rpc_server.start(task_executor, request_generator())
+            process_response_queue_future.result()
 
         return 0 if self._has_received_shutdown_request else 1
 
-    def _initialize(self, _) -> Dict[str, object]:
+    def _process_response_queue(self, responses) -> None:
+        headers_response_file = TextIOWrapper(
+            responses, encoding='ascii', newline='\r\n', write_through=True
+        )
+        content_response_file = TextIOWrapper(
+            responses, encoding='utf-8', newline='', write_through=True
+        )
+        print(f'_should_exit: {self._should_exit}')
+        print(f'empty(): {self._rpc_server.response_queue.empty()}')
+        while not (
+            self._should_exit and self._rpc_server.response_queue.empty()
+        ):
+            print('HERE4')
+            try:
+                response = self._rpc_server.response_queue.get(timeout=1)
+            except queue.Empty:
+                continue
+            response_length = len(response.encode(encoding='utf-8'))
+            _logger.info(
+                'response:\nContent-Length: {response_length}\n\n{response}',
+                response_length=response_length,
+                response=response,
+            )
+            headers_response_file.writelines(
+                [f'Content-Length: {response_length}\n', '\n',]
+            )
+            content_response_file.write(response)
+            responses.flush()
+            if self._has_received_initialize_request:
+                self._has_responded_to_initialize_request = True
+
+    def _initialize(self, *args) -> Dict[str, object]:
+        print('HERE3')
         self._has_received_initialize_request = True
         return {'capabilities': self._get_server_capabilities()}
 
-    def _on_initialized(self, _) -> None:
+    def _on_initialized(self, *args) -> None:
         """Handler for the 'initialized' message.
 
         No need to do anything here."""
 
-    def _shutdown(self, _) -> None:
+    def _shutdown(self, *args) -> None:
         self._has_received_shutdown_request = True
 
-    def _exit(self, _) -> None:
+    def _exit(self, *args) -> None:
         self._should_exit = True
 
     @staticmethod
@@ -190,7 +195,7 @@ class Server:
         }
 
     def _did_open_text_document(
-        self, params: Optional[Union[dict, list]]
+        self, params: Optional[Union[dict, list]], *args
     ) -> None:
         _logger.debug('did open text document')
         if not isinstance(params, dict):
@@ -220,7 +225,7 @@ class Server:
         self._publish_diagnostics()
 
     def _hover_text_document(
-        self, params: Optional[Union[dict, list]]
+        self, params: Optional[Union[dict, list]], *args
     ) -> Optional[dict]:
         if not isinstance(params, dict):
             raise concat.jsonrpc.InvalidParametersError
@@ -239,11 +244,16 @@ class Server:
         return _Hover(contents=hover_message).to_json()
 
     def _did_change_text_document(
-        self, params: Optional[Union[dict, list]]
+        self, params: Optional[Union[dict, list]], internal_request_id: int
     ) -> None:
         if not isinstance(params, dict):
             raise concat.jsonrpc.InvalidParametersError
         versioned_text_document_identifier = params['textDocument']
+        self._rpc_server.cancel_requests_matching_before(
+            lambda request: request['params']['textDocument']
+            == versioned_text_document_identifier,
+            internal_request_id,
+        )
         uri = versioned_text_document_identifier['uri']
         version = versioned_text_document_identifier['version']
         new_full_content = params['contentChanges'][0]['text']
@@ -254,7 +264,7 @@ class Server:
         self._publish_diagnostics()
 
     def _did_close_text_document(
-        self, params: Optional[Union[dict, list]]
+        self, params: Optional[Union[dict, list]], *args
     ) -> None:
         if not isinstance(params, dict):
             raise concat.jsonrpc.InvalidParametersError

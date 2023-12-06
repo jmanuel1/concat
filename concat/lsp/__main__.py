@@ -56,6 +56,8 @@ _logger = logging.getLogger()
 _logger.addHandler(_log_handler)
 _logger.setLevel(logging.DEBUG)
 
-manager = Manager()
-server = Server(manager)
-sys.exit(server.start(sys.stdin.buffer, sys.stdout.buffer))
+with Manager() as manager:
+    server = Server(manager)
+    # FIXME: Ensure clean up of multiprocessing resources before exiting.
+    exit_code = server.start(sys.stdin.buffer, sys.stdout.buffer)
+sys.exit(exit_code)
