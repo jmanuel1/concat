@@ -1,5 +1,11 @@
+from datetime import datetime, timezone
 import inspect
+import json
 import logging
+import logging.handlers
+import os
+import pathlib
+import traceback
 from typing import Callable, Dict, List
 
 
@@ -38,6 +44,117 @@ class ConcatLogger:
     ) -> None:
         caller = inspect.stack()[1]
         _log(self._logger.info, format_string, caller, args, kwargs)
+
+
+# queue_handler = None
+
+
+class ProcessSafeRotatingFileHandler(logging.handlers.RotatingFileHandler):
+    def __init__(self, lock, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.__process_lock = lock
+
+    def acquire(self) -> None:
+        super().acquire()
+        # print('AQUIRE', os.getpid())
+        # traceback.print_stack()
+        self.__process_lock.acquire()
+        # print('AFTER AQUIRE', os.getpid())
+
+    def release(self) -> None:
+        # print('RELEASE', os.getpid())
+        self.__process_lock.release()
+        super().release()
+
+
+class _LogRecordEncoder(json.JSONEncoder):
+    """A JSON Encoder that supports logging.LogRecord objects."""
+
+    def default(self, obj: object):
+        if isinstance(obj, logging.LogRecord):
+            return {
+                'name': obj.name,
+                'message': obj.getMessage(),
+                # arguments for the formatting string don't need to be in the JSON
+                'level_name': obj.levelname,
+                'path_name': obj.caller.filename,
+                'file_name': pathlib.Path(obj.caller.filename).name,
+                'module': obj.caller.frame.f_globals['__name__'],
+                'exception': (
+                    traceback.format_exception(*obj.exc_info)
+                    if obj.exc_info
+                    else None
+                ),
+                'line_number': obj.caller.lineno,
+                'function_name': obj.caller.function,
+                'created': datetime.fromtimestamp(
+                    obj.created, timezone.utc
+                ).isoformat(),
+                'thread': obj.thread,
+                'thread_name': obj.threadName,
+                'process_name': obj.processName,
+                'process': obj.process,
+            }
+        return super().default(obj)
+
+
+class _JSONFormatter(logging.Formatter):
+    """A logging formatter for producing structured JSON logs."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        return json.dumps(record, cls=_LogRecordEncoder)
+
+
+def init_process(lock) -> None:
+    import logging
+    import multiprocessing
+
+    multiprocessing.get_logger().setLevel(logging.CRITICAL)
+
+    # global queue_handler
+    # queue_handler = logging.handlers.QueueHandler(log_queue)
+    # logger = logging.getLogger()
+    # logger.addHandler(queue_handler)
+    # logger.setLevel(logging.DEBUG)
+    import concat.lsp
+
+    _logger_path = pathlib.Path(concat.lsp.__file__) / '../lsp.log'
+    _log_handler = ProcessSafeRotatingFileHandler(
+        lock, _logger_path, maxBytes=1048576, backupCount=1
+    )
+    _log_handler.setFormatter(_JSONFormatter())
+    _logger = logging.getLogger()
+    # if queue_handler is None:
+    #     _logger.removeHandler(queue_handler)
+    _logger.addHandler(_log_handler)
+    # while True:
+    #     try:
+    #         record = log_queue.get()
+    #         if record is None:
+    #             break
+    #         logger.handle(record)
+    #     except Exception:
+    #         traceback.print_exc(file=sys.stderr)
+
+
+# def process_logs(log_queue) -> None:
+#     _logger_path = pathlib.Path(__file__) / '../lsp.log'
+#     _log_handler = logging.handlers.RotatingFileHandler(
+#         _logger_path, maxBytes=1048576, backupCount=1
+#     )
+#     _log_handler.setFormatter(_JSONFormatter())
+#     _logger = logging.getLogger()
+#     if queue_handler is None:
+#         _logger.removeHandler(queue_handler)
+#     _logger.addHandler(_log_handler)
+#     while True:
+#         try:
+#             record = log_queue.get()
+#             if record is None:
+#                 break
+#             logger.handle(record)
+#         except Exception:
+#             traceback.print_exc(file=sys.stderr)
 
 
 def _log(

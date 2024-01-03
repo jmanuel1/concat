@@ -10,6 +10,7 @@ from enum import Enum, IntEnum
 from io import TextIOWrapper
 import logging
 from multiprocessing import Manager
+import multiprocessing.connection as connection
 from pathlib import Path
 import queue
 import re
@@ -95,47 +96,31 @@ class Server:
             'has-responded-to-initialize-request'
         ] = value
 
-    def start(self, requests: BinaryIO, responses: BinaryIO) -> int:
+    def start(
+        self,
+        task_executor: futures.Executor,
+        requests: connection.Connection,
+        responses: BinaryIO,
+    ) -> int:
         # Don't wrap the requests file in a TextIOWrapper to read the
         # headers since it requires buffering.
         def request_generator():
             while not requests.closed and not self._should_exit:
-                _logger.debug('reading next message')
-                _logger.debug('reading headers')
-                headers = self._read_headers(requests)
-                _logger.info('read headers')
-                content_type = headers.content_type()
-                try:
-                    content_length = headers.content_length_in_bytes()
-                except KeyError:
-                    # TODO: Do something
-                    _logger.error('no content length in headers')
-                    continue
-                content_part = requests.read(content_length)
-                _logger.info('{!r}', headers)
-                if not self._charset_regex.search(content_type):
-                    _logger.error('unsupported charset')
-                    error_json = '''{
-                        "jsonrpc": "2.0",
-                        "error": {
-                            "code": -32600,
-                            "message": "Request body must be encoded in UTF-8"
-                        },
-                        "id": null
-                    }'''
-                    self._rpc_server.response_queue.put(error_json)
-                    continue
-                decoded_content = str(content_part, encoding='utf-8')
-                _logger.info('request content: {!r}', decoded_content)
-                yield decoded_content
+                message = requests.recv()
+                if 'error' in message:
+                    self._rpc_server.response_queue.put(message['error'])
+                elif message.get('eof'):
+                    break
+                else:
+                    yield message['request']
 
-        with futures.ProcessPoolExecutor() as task_executor:
-            # TODO: Have a way to force-quit this task.
-            process_response_queue_future = task_executor.submit(
-                self._process_response_queue, responses
-            )
-            self._rpc_server.start(task_executor, request_generator())
-            process_response_queue_future.result()
+        # TODO: Have a way to force-quit this task.
+        process_response_queue_future = task_executor.submit(
+            self._process_response_queue, responses
+        )
+        self._rpc_server.start(task_executor, request_generator())
+        process_response_queue_future.result()
+        requests.send({'exit': True})
 
         return 0 if self._has_received_shutdown_request else 1
 
@@ -348,35 +333,6 @@ class Server:
         _logger.debug('dropping sent message: {message!r}\n', message=message)
         drop()
 
-    def _read_headers(self, requests: BinaryIO) -> '_Headers':
-        headers = _Headers()
-        while True:
-            lines = ''
-            while not requests.closed:
-                _logger.debug('reading header line')
-                line = str(requests.readline(), encoding='ascii')
-                _logger.debug('{line!r}\n', line=line)
-                if not line:
-                    _logger.warning('end of file while reading headers')
-                    self._should_exit = True
-                    break
-                if line == '\r\n':
-                    _logger.debug('end of headers')
-                    break
-                lines += line
-            _logger.debug('headers:\n' + lines)
-            pos = 0
-            while pos < len(lines):
-                _logger.debug('trying to parse header')
-                match = self._terminated_header_field_regex.match(lines, pos)
-                if not match:
-                    break
-                _logger.debug(str(match))
-                headers[match['name']] = match['value']
-                pos = match.end()
-            _logger.debug('end of headers')
-            return headers
-
     _ows = r'[ \t]*'
     _digit = r'[0-9]'
     _alpha = r'[A-Za-z]'
@@ -395,9 +351,6 @@ class Server:
     )
     _terminated_header_field = rf'(?:{_header_field}\r\n)'
     _terminated_header_field_regex = re.compile(_terminated_header_field)
-
-    # TODO: Parse the content-type header properly
-    _charset_regex = re.compile(r'charset=utf-?8')
 
 
 def _escape_markdown_string(string: str) -> str:
