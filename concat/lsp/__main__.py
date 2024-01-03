@@ -24,9 +24,7 @@ with Manager() as manager:
         server = Server(manager)
         # FIXME: Ensure clean up of multiprocessing resources before exiting.
         exit_code = server.start(
-            task_executor,
-            start_stdin_processor(manager, task_executor),
-            sys.stdout.buffer,
+            task_executor, start_stdin_processor(manager, task_executor),
         )
         # log_queue.put(None)
         # log_task.get()

@@ -82,9 +82,7 @@ class _StdinProcessor:
             lines = ''
             while not requests.closed:
                 _logger.debug('reading header line')
-                print('HERE')
                 line = str(requests.readline(), encoding='ascii')
-                print('HERE2', line)
                 _logger.debug('{line!r}\n', line=line)
                 if not line:
                     _logger.warning('end of file while reading headers')
@@ -111,3 +109,22 @@ class _StdinProcessor:
 
     # TODO: Parse the content-type header properly
     _charset_regex = re.compile(r'charset=utf-?8')
+
+    _ows = r'[ \t]*'
+    _digit = r'[0-9]'
+    _alpha = r'[A-Za-z]'
+    _vchar = r'[\x21-\x7e]'
+    _delimiter = r'["(),/:;<=>?@\[\\\]{}]'
+    _vchar_except_delimiters = rf'(?:(?!{_delimiter}){_vchar})'
+    _tchar = rf'(?:[!#$%&\'*+-.\^_`|~]|{_digit}|{_alpha}|{_vchar_except_delimiters})'
+    _token = rf'{_tchar}+'
+    _obs_text = r'[\x80-\xff]'
+    _field_vchar = rf'(?:{_vchar}|{_obs_text})'
+    _field_content = rf'(?:{_field_vchar}(?:[ \t]+{_field_vchar})?)'
+    _obs_fold = r'(?:\r\n[ \t]+)'
+    _field_value = rf'(?:{_field_content}|{_obs_fold})+'
+    _header_field = (
+        rf'(?:(?P<name>{_token}):{_ows}(?P<value>{_field_value}){_ows})'
+    )
+    _terminated_header_field = rf'(?:{_header_field}\r\n)'
+    _terminated_header_field_regex = re.compile(_terminated_header_field)

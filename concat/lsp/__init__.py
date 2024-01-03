@@ -14,6 +14,7 @@ import multiprocessing.connection as connection
 from pathlib import Path
 import queue
 import re
+import sys
 import tokenize as py_tokenize
 from typing import (
     BinaryIO,
@@ -97,10 +98,7 @@ class Server:
         ] = value
 
     def start(
-        self,
-        task_executor: futures.Executor,
-        requests: connection.Connection,
-        responses: BinaryIO,
+        self, task_executor: futures.Executor, requests: connection.Connection,
     ) -> int:
         # Don't wrap the requests file in a TextIOWrapper to read the
         # headers since it requires buffering.
@@ -116,7 +114,7 @@ class Server:
 
         # TODO: Have a way to force-quit this task.
         process_response_queue_future = task_executor.submit(
-            self._process_response_queue, responses
+            self._process_response_queue,
         )
         self._rpc_server.start(task_executor, request_generator())
         process_response_queue_future.result()
@@ -124,19 +122,17 @@ class Server:
 
         return 0 if self._has_received_shutdown_request else 1
 
-    def _process_response_queue(self, responses) -> None:
+    def _process_response_queue(self) -> None:
+        responses = sys.stdout.buffer
         headers_response_file = TextIOWrapper(
             responses, encoding='ascii', newline='\r\n', write_through=True
         )
         content_response_file = TextIOWrapper(
             responses, encoding='utf-8', newline='', write_through=True
         )
-        print(f'_should_exit: {self._should_exit}')
-        print(f'empty(): {self._rpc_server.response_queue.empty()}')
         while not (
             self._should_exit and self._rpc_server.response_queue.empty()
         ):
-            print('HERE4')
             try:
                 response = self._rpc_server.response_queue.get(timeout=1)
             except queue.Empty:
@@ -332,25 +328,6 @@ class Server:
             return
         _logger.debug('dropping sent message: {message!r}\n', message=message)
         drop()
-
-    _ows = r'[ \t]*'
-    _digit = r'[0-9]'
-    _alpha = r'[A-Za-z]'
-    _vchar = r'[\x21-\x7e]'
-    _delimiter = r'["(),/:;<=>?@\[\\\]{}]'
-    _vchar_except_delimiters = rf'(?:(?!{_delimiter}){_vchar})'
-    _tchar = rf'(?:[!#$%&\'*+-.\^_`|~]|{_digit}|{_alpha}|{_vchar_except_delimiters})'
-    _token = rf'{_tchar}+'
-    _obs_text = r'[\x80-\xff]'
-    _field_vchar = rf'(?:{_vchar}|{_obs_text})'
-    _field_content = rf'(?:{_field_vchar}(?:[ \t]+{_field_vchar})?)'
-    _obs_fold = r'(?:\r\n[ \t]+)'
-    _field_value = rf'(?:{_field_content}|{_obs_fold})+'
-    _header_field = (
-        rf'(?:(?P<name>{_token}):{_ows}(?P<value>{_field_value}){_ows})'
-    )
-    _terminated_header_field = rf'(?:{_header_field}\r\n)'
-    _terminated_header_field_regex = re.compile(_terminated_header_field)
 
 
 def _escape_markdown_string(string: str) -> str:
