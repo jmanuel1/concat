@@ -1,23 +1,32 @@
 from concat.logging import ConcatLogger
 from concat.lsp import _Headers
+from concat.multiprocessing import create_process
 import logging
 import multiprocessing
 import multiprocessing.connection as connection
+from multiprocessing.managers import BaseManager
+from multiprocessing.pool import Pool
 import re
 import sys
-from typing import BinaryIO
-
+from typing import BinaryIO, Tuple
 
 _python_logger = logging.getLogger(__name__)
 _python_logger.addHandler(logging.NullHandler())
 _logger = ConcatLogger(_python_logger)
 
 
-def start_stdin_processor(manager, executor) -> connection.Connection:
+def start_stdin_processor(
+    logging_lock: multiprocessing.RLock,
+) -> Tuple[connection.Connection, multiprocessing.Process]:
     controller_conn, processor_conn = multiprocessing.Pipe()
-    executor.submit(_StdinProcessor(processor_conn).start)
+    process = create_process(
+        target=_StdinProcessor(processor_conn).start,
+        name='StdinProcessor',
+        logging_lock=logging_lock,
+    )
+    process.start()
     sys.stdin.close()
-    return controller_conn
+    return controller_conn, process
 
 
 class _StdinProcessor:
@@ -41,6 +50,7 @@ class _StdinProcessor:
                 self._logger.error(str(e), exc_info=e)
 
         self._conn.send({'eof': True})
+        self._conn.close()
 
     def _main(self, requests) -> None:
         _logger.debug('reading next message')

@@ -2,6 +2,7 @@ from concat.astutils import Location
 import concat.jsonrpc
 from concat.lex import tokenize
 from concat.logging import ConcatLogger
+from concat.multiprocessing import create_process
 from concat.parse import Node, ParseError
 from concat.transpile import parse, typecheck
 from concat.typecheck import StaticAnalysisError
@@ -9,8 +10,9 @@ import concurrent.futures as futures
 from enum import Enum, IntEnum
 from io import TextIOWrapper
 import logging
-from multiprocessing import Manager
+from multiprocessing import Manager, Process, RLock
 import multiprocessing.connection as connection
+from multiprocessing.pool import Pool
 from pathlib import Path
 import queue
 import re
@@ -98,7 +100,11 @@ class Server:
         ] = value
 
     def start(
-        self, task_executor: futures.Executor, requests: connection.Connection,
+        self,
+        pool: Pool,
+        requests: connection.Connection,
+        manager: Manager,
+        logging_lock: RLock,
     ) -> int:
         # Don't wrap the requests file in a TextIOWrapper to read the
         # headers since it requires buffering.
@@ -113,12 +119,19 @@ class Server:
                     yield message['request']
 
         # TODO: Have a way to force-quit this task.
-        process_response_queue_future = task_executor.submit(
-            self._process_response_queue,
+        response_process = create_process(
+            target=self._process_response_queue,
+            name='Response',
+            logging_lock=logging_lock,
         )
-        self._rpc_server.start(task_executor, request_generator())
-        process_response_queue_future.result()
-        requests.send({'exit': True})
+        response_process.start()
+        try:
+            self._rpc_server.start(pool, request_generator(), manager)
+        finally:
+            response_process.join()
+            response_process.close()
+            requests.send({'exit': True})
+            self._rpc_server.close()
 
         return 0 if self._has_received_shutdown_request else 1
 
@@ -137,6 +150,8 @@ class Server:
                 response = self._rpc_server.response_queue.get(timeout=1)
             except queue.Empty:
                 continue
+            except EOFError:
+                break
             response_length = len(response.encode(encoding='utf-8'))
             _logger.info(
                 'response:\nContent-Length: {response_length}\n\n{response}',

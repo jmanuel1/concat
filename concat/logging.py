@@ -3,10 +3,12 @@ import inspect
 import json
 import logging
 import logging.handlers
+import multiprocessing
 import os
 import pathlib
+import sys
 import traceback
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Optional
 
 
 # QUESTION: Use a LoggingAdapter instead?
@@ -56,14 +58,14 @@ class ProcessSafeRotatingFileHandler(logging.handlers.RotatingFileHandler):
 
     def acquire(self) -> None:
         super().acquire()
-        # print('AQUIRE', os.getpid())
-        # traceback.print_stack()
         self.__process_lock.acquire()
-        # print('AFTER AQUIRE', os.getpid())
 
     def release(self) -> None:
-        # print('RELEASE', os.getpid())
-        self.__process_lock.release()
+        try:
+            self.__process_lock.release()
+        except FileNotFoundError:
+            print(multiprocessing.current_process().name, file=sys.stderr)
+            raise
         super().release()
 
 
@@ -105,9 +107,16 @@ class _JSONFormatter(logging.Formatter):
         return json.dumps(record, cls=_LogRecordEncoder)
 
 
+_log_handler: Optional = None
+_logger: Optional[logging.Logger] = None
+
+
 def init_process(lock) -> None:
+    import concat.lsp
     import logging
     import multiprocessing
+
+    global _log_handler, _logger
 
     multiprocessing.get_logger().setLevel(logging.CRITICAL)
 
@@ -116,7 +125,6 @@ def init_process(lock) -> None:
     # logger = logging.getLogger()
     # logger.addHandler(queue_handler)
     # logger.setLevel(logging.DEBUG)
-    import concat.lsp
 
     _logger_path = pathlib.Path(concat.lsp.__file__) / '../lsp.log'
     _log_handler = ProcessSafeRotatingFileHandler(
@@ -127,14 +135,15 @@ def init_process(lock) -> None:
     # if queue_handler is None:
     #     _logger.removeHandler(queue_handler)
     _logger.addHandler(_log_handler)
-    # while True:
-    #     try:
-    #         record = log_queue.get()
-    #         if record is None:
-    #             break
-    #         logger.handle(record)
-    #     except Exception:
-    #         traceback.print_exc(file=sys.stderr)
+
+
+def finalize_process() -> None:
+    global _log_handler, _logger
+
+    if _log_handler:
+        _logger.removeHandler(_log_handler)
+        _log_handler = None
+        _logger = None
 
 
 # def process_logs(log_queue) -> None:

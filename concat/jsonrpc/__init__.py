@@ -4,7 +4,8 @@ from enum import Enum
 import itertools
 import json
 import logging
-from multiprocessing import Manager, Queue
+from multiprocessing import Event, Manager, Queue
+from multiprocessing.pool import AsyncResult, Pool
 from typing import (
     Callable,
     Dict,
@@ -68,6 +69,7 @@ class Server:
     def __init__(self, manager: Manager) -> None:
         self._response_queue: Queue = manager.Queue()
         self._cancellation_request_queue = manager.Queue()
+        self._task_cancel_events = manager.dict()
 
         self._methods: MutableMapping[str, Handler] = {}
         self._receive_message_hook: _ReceiveMessageHook = (
@@ -111,7 +113,7 @@ class Server:
         self._send_message_hook = callback
 
     def start(
-        self, task_executor: futures.Executor, requests: Iterable[str]
+        self, pool: Pool, requests: Iterable[str], manager: Manager
     ) -> None:
         def parse_requests():
             for request in requests:
@@ -127,7 +129,7 @@ class Server:
                     continue
                 yield obj
 
-        tasks = self._process_requests(task_executor, parse_requests())
+        tasks = self._process_requests(pool, parse_requests(), manager)
         running_tasks = []
         while True:
             try:
@@ -136,12 +138,6 @@ class Server:
                 break
             running_tasks.append(task_tuple)
             task = task_tuple[1]
-            task.add_done_callback(
-                lambda fut: self._response_queue.put(fut.result())
-                if fut.result() is not None
-                else None
-            )
-            print('HERE1')
             while True:
                 try:
                     (
@@ -160,14 +156,14 @@ class Server:
                     except Exception:
                         should_cancel = False
                     if should_cancel:
-                        task.cancel()
+                        self._task_cancel_events[identifier].set()
                     else:
                         uncancelled_tasks.append(task_tuple)
                 running_tasks = uncancelled_tasks
             running_tasks = [
                 (req, task, identifier)
                 for (req, task, identifier) in running_tasks
-                if task.running()
+                if not task.ready()
             ]
             print('HERE2')
 
@@ -188,18 +184,29 @@ class Server:
     ) -> None:
         self._cancellation_request_queue.put((fallible_predicate, limit_id))
 
+    def close(self) -> None:
+        self._response_queue.close()
+        self._cancellation_request_queue.close()
+
     def _process_requests(
         self,
-        task_executor: futures.Executor,
+        pool: Pool,
         requests: Iterable[Union[dict, list, str]],
-    ) -> Iterator[Tuple[Union[dict, list, str], futures.Future, int]]:
+        manager: Manager,
+    ) -> Iterator[Tuple[Union[dict, list, str], AsyncResult, int]]:
         for request_object, internal_request_id in zip(
             requests, itertools.count()
         ):
+            event = manager.Event()
+            self._task_cancel_events[internal_request_id] = event
             yield (
                 request_object,
-                task_executor.submit(
-                    self._process_request, request_object, internal_request_id
+                pool.apply_async(
+                    self._process_request,
+                    (request_object, internal_request_id),
+                    callback=lambda r: self._response_queue.put(r)
+                    if r is not None
+                    else None,
                 ),
                 internal_request_id,
             )
@@ -207,6 +214,10 @@ class Server:
     def _process_request(
         self, request_object: Union[dict, list, str], internal_request_id: int
     ) -> Optional[str]:
+        if self._task_cancel_events[internal_request_id].is_set():
+            del self._task_cancel_events[internal_request_id]
+            return
+
         try:
             if isinstance(request_object, str):
                 return request_object

@@ -1,31 +1,45 @@
-from datetime import datetime, timezone
+from concat.lsp import Server
+from concat.lsp.stdin_processor import start_stdin_processor
 import concat.logging
+import concat.multiprocessing
 import concurrent.futures as futures
+from datetime import datetime, timezone
 import json
 import logging
 import logging.handlers
 from multiprocessing import Manager
+from multiprocessing.pool import Pool
 import pathlib
+import signal
 import sys
 import traceback
 
 
-from concat.lsp import Server
-from concat.lsp.stdin_processor import start_stdin_processor
-
-
 with Manager() as manager:
-    log_queue = manager.Queue()
     log_lock = manager.RLock()
-    with futures.ProcessPoolExecutor(
-        initializer=concat.logging.init_process, initargs=(log_lock,)
+    concat.logging.init_process(log_lock)
+    with Pool(
+        initializer=concat.multiprocessing.init_process, initargs=(log_lock,)
     ) as task_executor:
-        # log_task = task_executor.submit(concat.logging.process_logs, log_queue)
         server = Server(manager)
-        # FIXME: Ensure clean up of multiprocessing resources before exiting.
-        exit_code = server.start(
-            task_executor, start_stdin_processor(manager, task_executor),
+        stdin_processor_conn, stdin_processor_process = start_stdin_processor(
+            log_lock
         )
-        # log_queue.put(None)
-        # log_task.get()
+        with stdin_processor_conn:
+            # FIXME: Ensure clean up of multiprocessing resources before exiting.
+            try:
+                exit_code = server.start(
+                    task_executor, stdin_processor_conn, manager, log_lock
+                )
+            except KeyboardInterrupt:
+                # QUESTION: Why isn't this reached????
+                print(
+                    'received keyboard interrupt', flush=True, file=sys.stderr
+                )
+                exit_code = 0
+                stdin_processor_process.terminate()
+            else:
+                stdin_processor_process.join()
+            finally:
+                stdin_processor_process.close()
 sys.exit(exit_code)
