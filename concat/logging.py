@@ -118,22 +118,13 @@ def init_process(lock) -> None:
 
     global _log_handler, _logger
 
-    multiprocessing.get_logger().setLevel(logging.CRITICAL)
-
-    # global queue_handler
-    # queue_handler = logging.handlers.QueueHandler(log_queue)
-    # logger = logging.getLogger()
-    # logger.addHandler(queue_handler)
-    # logger.setLevel(logging.DEBUG)
-
     _logger_path = pathlib.Path(concat.lsp.__file__) / '../lsp.log'
     _log_handler = ProcessSafeRotatingFileHandler(
         lock, _logger_path, maxBytes=1048576, backupCount=1
     )
     _log_handler.setFormatter(_JSONFormatter())
     _logger = logging.getLogger()
-    # if queue_handler is None:
-    #     _logger.removeHandler(queue_handler)
+    _logger.setLevel(logging.DEBUG)
     _logger.addHandler(_log_handler)
 
 
