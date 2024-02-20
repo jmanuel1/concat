@@ -10,9 +10,11 @@ import concurrent.futures as futures
 from enum import Enum, IntEnum
 from io import TextIOWrapper
 import logging
-from multiprocessing import Manager, Process, RLock
+from multiprocessing import Process
 import multiprocessing.connection as connection
+from multiprocessing.managers import BaseManager, SyncManager
 from multiprocessing.pool import Pool
+from multiprocessing.synchronize import RLock
 from pathlib import Path
 import queue
 import re
@@ -44,28 +46,28 @@ _logger = ConcatLogger(_python_logger)
 class Server:
     """A Language Server Protocol server."""
 
-    def __init__(self, manager) -> None:
+    def __init__(self, manager: SyncManager) -> None:
         self._rpc_server = concat.jsonrpc.Server(manager)
         self._rpc_server.set_receive_message_hook(self._receive_message_hook)
         self._rpc_server.set_send_message_hook(self._send_message_hook)
 
-        self._initialization_state = manager.dict(
+        # State shared between processes:
+        self._lifecycle_state = manager.dict(
             {
                 'has-received-initialize-request': False,
                 'has-responded-to-initialize-request': False,
+                'has-received-shutdown-request': False,
+                'should-exit': False,
             }
         )
+        self._text_document_lock = manager.RLock()
+        self._text_documents: Dict[str, _TextDocumentItem] = manager.dict({})
 
         self._rpc_server.handle('initialize')(self._initialize)
         self._rpc_server.handle('initialized')(self._on_initialized)
-
-        self._has_received_shutdown_request = False
         self._rpc_server.handle('shutdown')(self._shutdown)
-
-        self._should_exit = False
         self._rpc_server.handle('exit')(self._exit)
 
-        self._text_documents: Dict[str, _TextDocumentItem] = manager.dict({})
         self._rpc_server.handle('textDocument/didChange')(
             self._did_change_text_document
         )
@@ -80,30 +82,42 @@ class Server:
         )
 
     @property
+    def _has_received_shutdown_request(self) -> bool:
+        return self._lifecycle_state['has-received-shutdown-request']
+
+    @_has_received_shutdown_request.setter
+    def _has_received_shutdown_request(self, value: bool) -> None:
+        self._lifecycle_state['has-received-shutdown-request'] = value
+
+    @property
+    def _should_exit(self) -> bool:
+        return self._lifecycle_state['should-exit']
+
+    @_should_exit.setter
+    def _should_exit(self, value: bool) -> None:
+        self._lifecycle_state['should-exit'] = value
+
+    @property
     def _has_received_initialize_request(self) -> bool:
-        return self._initialization_state['has-received-initialize-request']
+        return self._lifecycle_state['has-received-initialize-request']
 
     @_has_received_initialize_request.setter
     def _has_received_initialize_request(self, value: bool) -> None:
-        self._initialization_state['has-received-initialize-request'] = value
+        self._lifecycle_state['has-received-initialize-request'] = value
 
     @property
     def _has_responded_to_initialize_request(self) -> bool:
-        return self._initialization_state[
-            'has-responded-to-initialize-request'
-        ]
+        return self._lifecycle_state['has-responded-to-initialize-request']
 
     @_has_responded_to_initialize_request.setter
     def _has_responded_to_initialize_request(self, value: bool) -> None:
-        self._initialization_state[
-            'has-responded-to-initialize-request'
-        ] = value
+        self._lifecycle_state['has-responded-to-initialize-request'] = value
 
     def start(
         self,
         pool: Pool,
         requests: connection.Connection,
-        manager: Manager,
+        manager: BaseManager,
         logging_lock: RLock,
     ) -> int:
         # Don't wrap the requests file in a TextIOWrapper to read the
@@ -167,7 +181,6 @@ class Server:
                 self._has_responded_to_initialize_request = True
 
     def _initialize(self, *args) -> Dict[str, object]:
-        print('HERE3')
         self._has_received_initialize_request = True
         return {'capabilities': self._get_server_capabilities()}
 
@@ -209,14 +222,21 @@ class Server:
             'text document object: {text_document!r}',
             text_document=text_document,
         )
-        self._text_documents[text_document_item['uri']] = text_document
         _logger.debug(
             'about to compute diagnostics for {}', text_document_item['uri']
         )
-        text_document.diagnose(_logger)
-        # Reassign into the text documents `Manager().dict` so that other
-        # processes get the modifications to `text_document`.
-        self._text_documents[text_document_item['uri']] = text_document
+        with self._text_document_lock:
+            if text_document_item['uri'] in self._text_documents:
+                _logger.warning(
+                    'text document {} is already open',
+                    text_document_item['uri'],
+                )
+                # Reassign into the text documents `Manager().dict` so that
+                # other processes get the modifications to `text_document`.
+                # Also, text document objects are immutable.
+            self._text_documents[
+                text_document_item['uri']
+            ] = text_document.diagnose(_logger)
         _logger.debug('about to publish diagnostics')
         self._publish_diagnostics()
 
@@ -225,10 +245,13 @@ class Server:
     ) -> Optional[dict]:
         if not isinstance(params, dict):
             raise concat.jsonrpc.InvalidParametersError
-        text_document = self._text_documents[params['textDocument']['uri']]
-        position = _Position.from_json(params['position'])
-        node = text_document.find_node_just_before_position(position)
-        self._text_documents[params['textDocument']['uri']] = text_document
+        with self._text_document_lock:
+            text_document = self._text_documents[
+                params['textDocument']['uri']
+            ].ensure_typechecked_ast()
+            position = _Position.from_json(params['position'])
+            node = text_document.find_node_just_before_position(position)
+            self._text_documents[params['textDocument']['uri']] = text_document
         if not node:
             return None
         stack_type_here = node.extra.get('typecheck-stack-type-after-here')
@@ -245,17 +268,20 @@ class Server:
         if not isinstance(params, dict):
             raise concat.jsonrpc.InvalidParametersError
         versioned_text_document_identifier = params['textDocument']
-        self._rpc_server.cancel_requests_matching_before(
-            lambda request: request['params']['textDocument']
-            == versioned_text_document_identifier,
+        self._rpc_server.cancel_requests_matching(
+            _has_text_document_identifier,
             internal_request_id,
+            versioned_text_document_identifier=versioned_text_document_identifier,
         )
         uri = versioned_text_document_identifier['uri']
         version = versioned_text_document_identifier['version']
         new_full_content = params['contentChanges'][0]['text']
-        self._text_documents[uri].update(version, new_full_content)
-        self._text_documents[uri].diagnose(_logger)
-        self._text_documents[uri] = self._text_documents[uri]
+        with self._text_document_lock:
+            self._text_documents[uri] = (
+                self._text_documents[uri]
+                .update(version, new_full_content)
+                .diagnose(_logger)
+            )
         _logger.debug('about to publish diagnostics')
         self._publish_diagnostics()
 
@@ -266,24 +292,26 @@ class Server:
             raise concat.jsonrpc.InvalidParametersError
         text_document_identifier = params['textDocument']
         uri = text_document_identifier['uri']
-        self._text_documents[uri].close()
-        self._text_documents[uri] = self._text_documents[uri]
+        with self._text_document_lock:
+            self._text_documents[uri] = self._text_documents[uri].close()
         # TODO: Diagnostics will be cleared for this document. This is fine
         # because Concat doesn't really have a full module system or a project
         # system, yet.
         self._publish_diagnostics()
-        del self._text_documents[uri]
+        with self._text_document_lock:
+            del self._text_documents[uri]
 
     def _publish_diagnostics(self) -> None:
-        for uri, document in self._text_documents.items():
-            diags = []
-            for d in document.diagnostics:
-                diags.append(d.to_json())
-            _logger.debug('publishing diagnostics for {uri}', uri=uri)
-            self._rpc_server.notify(
-                'textDocument/publishDiagnostics',
-                {'uri': uri, 'diagnostics': diags},
-            )
+        with self._text_document_lock:
+            for uri, document in self._text_documents.items():
+                diags = []
+                for d in document.diagnostics:
+                    diags.append(d.to_json())
+                _logger.debug('publishing diagnostics for {uri}', uri=uri)
+                self._rpc_server.notify(
+                    'textDocument/publishDiagnostics',
+                    {'uri': uri, 'diagnostics': diags},
+                )
 
     def _receive_message_hook(
         self,
@@ -343,6 +371,14 @@ class Server:
             return
         _logger.debug('dropping sent message: {message!r}\n', message=message)
         drop()
+
+
+def _has_text_document_identifier(
+    request, versioned_text_document_identifier
+) -> bool:
+    return (
+        request['params']['textDocument'] == versioned_text_document_identifier
+    )
 
 
 def _escape_markdown_string(string: str) -> str:
@@ -447,6 +483,12 @@ class _Diagnostic:
 
 
 class _TextDocumentItem:
+    """Representation of a TextDocumentItem.
+
+    To aid use from multiple processes, these objects are immutable, so that
+    you must reassign them to an object created from a Manager. However, that
+    means there should be a lock around their state."""
+
     def __init__(self, dictionary: Dict[str, object]) -> None:
         self._uri = cast(str, dictionary['uri'])
         self._language_id = cast(str, dictionary['languageId'])
@@ -455,26 +497,47 @@ class _TextDocumentItem:
         self._ast: Optional[Node] = None
         self.diagnostics: List[_Diagnostic] = []
 
-    def update(self, version: int, text: str) -> None:
-        self._version = version
-        self._text = text
+    def _copy(self) -> '_TextDocumentItem':
+        copy = _TextDocumentItem(
+            {
+                'uri': self._uri,
+                'languageId': self._language_id,
+                'version': self._version,
+                'text': self._text,
+            }
+        )
+        copy._ast = self._ast
+        copy.diagnostics = self.diagnostics
+        return copy
 
-    def close(self) -> None:
-        self.diagnostics = []
+    def update(self, version: int, text: str) -> '_TextDocumentItem':
+        copy = self._copy()
+        copy._version = version
+        copy._text = text
+        return copy
 
-    def diagnose(self, logger: ConcatLogger) -> None:
-        self.diagnostics = self._diagnose(logger)
+    def close(self) -> '_TextDocumentItem':
+        copy = self._copy()
+        copy.diagnostics = []
+        return copy
 
-    def _diagnose(self, logger: ConcatLogger) -> List[_Diagnostic]:
+    def diagnose(self, logger: ConcatLogger) -> '_TextDocumentItem':
+        copy = self._copy()
+        copy.diagnostics = copy._diagnose_mut(logger)
+        return copy
+
+    def _diagnose_mut(self, logger: ConcatLogger) -> List[_Diagnostic]:
         self._ast = None
-        return self._ensure_typechecked_ast(logger)[1]
+        return self._ensure_typechecked_ast_mut(logger)[1]
 
     def find_node_just_before_position(
         self, position: _Position
     ) -> Optional[Node]:
+        """ensure_typechecked_ast should be called before."""
+
         text_lines = self._text.splitlines(keepends=True)
         location = position.to_tokenizer_location(text_lines)
-        node = self._ensure_typechecked_ast(None)[0]
+        node = self._ast
         if not node:
             return None
         for child in _traverse_node_preorder_right_to_left(node):
@@ -482,8 +545,13 @@ class _TextDocumentItem:
                 return child
         return None
 
-    def _ensure_typechecked_ast(
-        self, logger: Optional[ConcatLogger]
+    def ensure_typechecked_ast(self) -> '_TextDocumentItem':
+        copy = self._copy()
+        copy._ensure_typechecked_ast_mut()
+        return copy
+
+    def _ensure_typechecked_ast_mut(
+        self, logger: Optional[ConcatLogger] = None
     ) -> Tuple[Optional[Node], List[_Diagnostic]]:
         if self._ast and self._ast.extra.get('typecheck-success', False):
             return self._ast, self.diagnostics

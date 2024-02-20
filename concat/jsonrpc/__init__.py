@@ -40,7 +40,7 @@ class Error(Enum):
     INTERNAL_ERROR = (-32603, 'Internal JSON-RPC error.')
 
 
-Handler = Callable[[Optional[Union[dict, list]]], object]
+Handler = Callable[[Optional[Union[dict, list]], int], object]
 _ReceiveMessageHook = Callable[
     [
         Mapping[str, object],
@@ -143,6 +143,7 @@ class Server:
                     (
                         cancellation_predicate,
                         id_limit,
+                        kwargs,
                     ) = self._cancellation_request_queue.get_nowait()
                 except queue.Empty:
                     break
@@ -152,7 +153,9 @@ class Server:
                     if identifier >= id_limit:
                         continue
                     try:
-                        should_cancel = cancellation_predicate(request)
+                        should_cancel = cancellation_predicate(
+                            request, **kwargs
+                        )
                     except Exception:
                         should_cancel = False
                     if should_cancel:
@@ -180,9 +183,14 @@ class Server:
         self._response_queue.put(string_to_send)
 
     def cancel_requests_matching(
-        self, fallible_predicate: Callable[[dict], bool], limit_id: int
+        self,
+        fallible_predicate: Callable[[dict], bool],
+        limit_id: int,
+        **kwargs,
     ) -> None:
-        self._cancellation_request_queue.put((fallible_predicate, limit_id))
+        self._cancellation_request_queue.put(
+            (fallible_predicate, limit_id, kwargs)
+        )
 
     def close(self) -> None:
         self._response_queue.close()
