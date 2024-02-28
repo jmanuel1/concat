@@ -6,6 +6,7 @@ from concat.transpile import transpile
 import concat.astutils
 import concat.execute
 import concat.lex
+import concat.parser_combinators
 import concat.stdlib.repl
 import concat.typecheck
 import io
@@ -81,7 +82,7 @@ else:
         if e.location:
             print(get_line_at(args.file, e.location), end='')
             print(' ' * e.location[1] + '^')
-    except concat.parse.ParseError as e:
+    except concat.parser_combinators.ParseError as e:
         print('Parse Error:')
         print(e)
     except Exception:

@@ -1,4 +1,4 @@
-import parsy
+import concat.parser_combinators
 from typing import Callable, Dict, Sequence, TypeVar, TYPE_CHECKING
 
 
@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 T = TypeVar('T')
 
 
-class ParserDict(Dict[str, parsy.Parser]):
+class ParserDict(Dict[str, concat.parser_combinators.Parser]):
     """A dictionary to hold named references to parsers.
 
     These references can be indirect, meaning you can add a new alternative to
@@ -23,8 +23,8 @@ class ParserDict(Dict[str, parsy.Parser]):
     def parse(self, tokens: Sequence['Token']) -> 'TopLevelNode':
         return self['top-level'].parse(list(tokens))
 
-    def ref_parser(self, name: str) -> parsy.Parser:
-        @parsy.generate
+    def ref_parser(self, name: str) -> concat.parser_combinators.Parser:
+        @concat.parser_combinators.generate
         def parser():
             return (yield self[name])
 

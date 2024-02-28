@@ -44,9 +44,8 @@ from typing import (
 )
 import concat.lex
 import concat.astutils
-from concat.parser_combinators import desc_cumulatively
+import concat.parser_combinators
 from concat.parser_dict import ParserDict
-import parsy
 
 if TYPE_CHECKING:
     from concat.lex import Token
@@ -236,10 +235,15 @@ if TYPE_CHECKING:
     from concat.typecheck import StackEffectTypeNode
 
 
-# Patches to parsy for better errors--useful for debugging
+class ParseError(Node):
+    def __init__(
+        self, stream: Iterable['concat.lex.Token'], index: int
+    ) -> int:
+        super.__init__()
+        self.children = []
+        self.stream = stream
+        self.index = index
 
-
-class ParseError(parsy.ParseError):
     def line_info(self):
         return '{}:{} ({!r} here)'.format(
             *self.get_start_position(), self.stream[self.index]
@@ -251,9 +255,8 @@ class ParseError(parsy.ParseError):
     def get_end_position(self) -> Tuple[int, int]:
         return self.stream[self.index].end
 
-
-# let's lie
-parsy.ParseError = ParseError  # type: ignore
+    def __str__(self) -> str:
+        return f'Syntax error at {self.line_info()}'
 
 
 class BytesWordNode(WordNode):
@@ -357,9 +360,11 @@ class ClassdefStatementNode(StatementNode):
         self.keyword_args = keyword_args
 
 
-def token(typ: str) -> parsy.Parser:
+def token(typ: str) -> concat.parser_combinators.Parser:
     description = f'{typ} token'
-    return parsy.test_item(lambda token: token.type == typ, description)
+    return concat.parser_combinators.test_item(
+        lambda token: token.type == typ, description
+    )
 
 
 def extension(parsers: ParserDict) -> None:
@@ -367,8 +372,10 @@ def extension(parsers: ParserDict) -> None:
     # top level =
     #   ENCODING, (word | statement | NEWLINE)*, [ NEWLINE ],
     #   ENDMARKER ;
-    @parsy.generate
-    def top_level_parser() -> Generator[parsy.Parser, Any, TopLevelNode]:
+    @concat.parser_combinators.generate
+    def top_level_parser() -> Generator[
+        concat.parser_combinators.Parser, Any, TopLevelNode
+    ]:
         encoding = yield token('ENCODING')
         newline = token('NEWLINE')
         statement = parsers['statement']
@@ -382,7 +389,7 @@ def extension(parsers: ParserDict) -> None:
         yield token('ENDMARKER')
         return TopLevelNode(encoding, children)
 
-    parsers['top-level'] = desc_cumulatively(top_level_parser, 'top level')
+    parsers['top-level'] = top_level_parser.desc('top level')
 
     # This parses one of many types of statement.
     # The specific statement node is returned.
@@ -390,7 +397,7 @@ def extension(parsers: ParserDict) -> None:
     parsers['statement'] = parsers.ref_parser('import-statement')
 
     ImportStatementParserGenerator = Generator[
-        parsy.Parser, Any, ImportStatementNode
+        concat.parser_combinators.Parser, Any, ImportStatementNode
     ]
 
     # This parses one of many types of word.
@@ -398,7 +405,7 @@ def extension(parsers: ParserDict) -> None:
     # word =
     #   push word | literal word | name word | attribute word | quote word ;
     # literal word = number word | string word ;
-    parsers['word'] = parsy.alt(
+    parsers['word'] = concat.parser_combinators.alt(
         parsers.ref_parser('push-word'),
         parsers.ref_parser('quote-word'),
         parsers.ref_parser('literal-word'),
@@ -417,8 +424,10 @@ def extension(parsers: ParserDict) -> None:
 
     # This parses a quotation.
     # quote word = LPAR, word*, RPAR ;
-    @parsy.generate('quote word')
-    def quote_word_parser() -> Generator[parsy.Parser, Any, QuoteWordNode]:
+    @concat.parser_combinators.generate('quote word')
+    def quote_word_parser() -> Generator[
+        concat.parser_combinators.Parser, Any, QuoteWordNode
+    ]:
         lpar = yield token('LPAR')
         if 'type-sequence' in parsers:
             input_stack_type_parser = parsers['type-sequence'] << token(
@@ -450,7 +459,7 @@ def extension(parsers: ParserDict) -> None:
     name = token('NAME')
     parsers['attribute-word'] = dot >> name.map(AttributeWordNode)
 
-    parsers['literal-word'] |= parsy.alt(
+    parsers['literal-word'] |= concat.parser_combinators.alt(
         parsers.ref_parser('bytes-word'),
         parsers.ref_parser('tuple-word'),
         parsers.ref_parser('list-word'),
@@ -462,15 +471,15 @@ def extension(parsers: ParserDict) -> None:
 
     def iterable_word_parser(
         delimiter: str, cls: Type[IterableWordNode], desc: str
-    ) -> 'parsy.Parser[Token, IterableWordNode]':
-        @parsy.generate
+    ) -> 'concat.parser_combinators.Parser[Token, IterableWordNode]':
+        @concat.parser_combinators.generate
         def parser() -> Generator:
             location = (yield token('L' + delimiter)).start
             element_words = yield word_list_parser
             yield token('R' + delimiter)
             return cls(element_words, location)
 
-        return concat.parser_combinators.desc_cumulatively(parser, desc)
+        return parser.desc(desc)
 
     # This parses a tuple word.
     # tuple word = LPAR, word list, RPAR ;
@@ -485,10 +494,14 @@ def extension(parsers: ParserDict) -> None:
     )
 
     # word list = (COMMA | word+, COMMA | word+, (COMMA, word+)+, [ COMMA ]) ;
-    @parsy.generate('word list')
+    @concat.parser_combinators.generate('word list')
     def word_list_parser() -> Generator:
-        empty: 'parsy.Parser[Token, List[Words]]' = token('COMMA').result([])
-        singleton = parsy.seq(parsers['word'].at_least(1) << token('COMMA'))
+        empty: 'concat.parser_combinators.Parser[Token, List[Words]]' = token(
+            'COMMA'
+        ).result([])
+        singleton = (parsers['word'].at_least(1) << token('COMMA')).map(
+            lambda words: [words]
+        )
         multiple_element = (
             parsers['word'].at_least(1).sep_by(token('COMMA'), min=2)
             << token('COMMA').optional()
@@ -496,7 +509,7 @@ def extension(parsers: ParserDict) -> None:
         element_words = yield (multiple_element | singleton | empty)
         return element_words
 
-    parsers['statement'] |= parsy.alt(
+    parsers['statement'] |= concat.parser_combinators.alt(
         parsers.ref_parser('classdef-statement'),
         parsers.ref_parser('funcdef-statement'),
     )
@@ -508,7 +521,7 @@ def extension(parsers: ParserDict) -> None:
         << token('COMMA').optional()
     ).map(flatten)
 
-    parsers['target-word'] = parsy.alt(
+    parsers['target-word'] = concat.parser_combinators.alt(
         parsers.ref_parser('name-word'),
         token('LPAR') >> parsers.ref_parser('target-words') << token('RPAR'),
         token('LSQB') >> parsers.ref_parser('target-words') << token('RSQB'),
@@ -525,7 +538,7 @@ def extension(parsers: ParserDict) -> None:
     # suite = NEWLINE, INDENT, (word | statement, NEWLINE)+, DEDENT | statement
     #    | word+ ;
     # The stack effect syntax is defined within the typecheck module.
-    @parsy.generate
+    @concat.parser_combinators.generate
     def funcdef_statement_parser() -> Generator:
         location = (yield token('DEF')).start
         name = yield token('NAME')
@@ -538,22 +551,22 @@ def extension(parsers: ParserDict) -> None:
             name, decorators, annotation, body, location, effect_ast
         )
 
-    parsers['funcdef-statement'] = concat.parser_combinators.desc_cumulatively(
-        funcdef_statement_parser, 'funcdef statement'
+    parsers['funcdef-statement'] = funcdef_statement_parser.desc(
+        'funcdef statement'
     )
 
     decorator = token('NAME').bind(
-        lambda token: parsy.success(token)
+        lambda token: concat.parser_combinators.success(token)
         if token.value == '@'
-        else parsy.fail('at sign (@)')
+        else concat.parser_combinators.fail('at sign (@)')
     ) >> parsers.ref_parser('word')
 
     annotation_parser = token('RARROW') >> parsers.ref_parser('word').many()
 
-    @parsy.generate
+    @concat.parser_combinators.generate
     def suite():
         words = parsers['word'].at_least(1)
-        statement = parsy.seq(parsers['statement'])
+        statement = concat.parser_combinators.seq(parsers['statement'])
         block_content = (
             parsers['word'] << token('NEWLINE').optional()
             | parsers['statement'] << token('NEWLINE')
@@ -566,9 +579,9 @@ def extension(parsers: ParserDict) -> None:
         )
         return (yield indented_block | statement | words)
 
-    suite = concat.parser_combinators.desc_cumulatively(suite, 'suite')
+    suite = suite.desc('suite')
 
-    @parsy.generate('module')
+    @concat.parser_combinators.generate('module')
     def module():
         name = token('NAME').map(operator.attrgetter('value'))
         return '.'.join((yield name.sep_by(token('DOT'), min=1)))
@@ -580,7 +593,7 @@ def extension(parsers: ParserDict) -> None:
     # module = NAME, (DOT, NAME)* ;
     # relative module = DOT*, module | DOT+ ;
 
-    @parsy.generate('import statement')
+    @concat.parser_combinators.generate('import statement')
     def import_statement_parser() -> Generator:
         location = (yield token('IMPORT')).start
         module_name = yield module
@@ -592,12 +605,12 @@ def extension(parsers: ParserDict) -> None:
 
     parsers['import-statement'] = import_statement_parser
 
-    @parsy.generate('relative module')
+    @concat.parser_combinators.generate('relative module')
     def relative_module():
         dot = token('DOT').map(operator.attrgetter('value'))
         return (yield (dot.many().concat() + module) | dot.at_least(1))
 
-    @parsy.generate('from-import statement')
+    @concat.parser_combinators.generate('from-import statement')
     def from_import_statement_parser() -> Generator:
         location = (yield token('FROM')).start
         module = yield relative_module
@@ -611,7 +624,7 @@ def extension(parsers: ParserDict) -> None:
 
     parsers['import-statement'] |= from_import_statement_parser
 
-    @parsy.generate('from-import-star statement')
+    @concat.parser_combinators.generate('from-import-star statement')
     def from_import_star_statement_parser() -> Generator:
         location = (yield token('FROM')).start
         module_name = yield module
@@ -626,7 +639,7 @@ def extension(parsers: ParserDict) -> None:
     #   COLON, suite ;
     # bases = tuple word ;
     # keyword arg = NAME, EQUAL, word ;
-    @parsy.generate('classdef statement')
+    @concat.parser_combinators.generate('classdef statement')
     def classdef_statement_parser():
         location = (yield token('CLASS')).start
         name_token = yield token('NAME')
@@ -650,14 +663,14 @@ def extension(parsers: ParserDict) -> None:
         operator.attrgetter('tuple_children')
     )
 
-    keyword_arg = parsy.seq(
+    keyword_arg = concat.parser_combinators.seq(
         token('NAME').map(operator.attrgetter('value')) << token('EQUAL'),
         parsers.ref_parser('word'),
     )
 
     parsers['word'] |= parsers.ref_parser('cast-word')
 
-    @parsy.generate
+    @concat.parser_combinators.generate
     def cast_word_parser() -> Generator:
         location = (yield token('CAST')).start
         yield token('LPAR')
@@ -668,18 +681,16 @@ def extension(parsers: ParserDict) -> None:
     # This parses a cast word.
     # none word = LPAR, type, RPAR, CAST ;
     # The grammar of 'type' is defined by the typechecker.
-    parsers['cast-word'] = concat.parser_combinators.desc_cumulatively(
-        cast_word_parser, 'cast word'
-    )
+    parsers['cast-word'] = cast_word_parser.desc('cast word')
 
-    @parsy.generate
+    @concat.parser_combinators.generate
     def tilde_parser() -> Generator:
         name = yield token('NAME')
         if name.value != '~':
-            yield parsy.fail('a tilde (~)')
+            yield concat.parser_combinators.fail('a tilde (~)')
         return name
 
-    @parsy.generate
+    @concat.parser_combinators.generate
     def freeze_word_parser() -> Generator:
         location = (yield token('COLON')).start
         yield tilde_parser
@@ -691,9 +702,7 @@ def extension(parsers: ParserDict) -> None:
     # The freeze word prevents instantiation of type variables in the word that
     # follows it. Inspiration: https://arxiv.org/pdf/2004.00396.pdf ("FreezeML:
     # Complete and Easy Type Inference for First-Class Polymorphism")
-    parsers['freeze-word'] = concat.parser_combinators.desc_cumulatively(
-        freeze_word_parser, 'freeze word'
-    )
+    parsers['freeze-word'] = freeze_word_parser.desc('freeze word')
 
     # TODO: Have an error message for called freeze words in particular. This
     # causes the parser to loop.

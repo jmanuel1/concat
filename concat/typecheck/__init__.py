@@ -27,7 +27,7 @@ from typing import (
     cast,
 )
 from typing_extensions import Protocol
-import parsy
+import concat.parser_combinators
 import concat.parse
 
 
@@ -828,41 +828,85 @@ class _ForallTypeNode(TypeNode):
         return forall_type, env
 
 
+class _ObjectTypeNode(IndividualTypeNode):
+    """The AST type for anonymous structural object types."""
+
+    def __init__(
+        self,
+        attribute_type_pairs: Iterable[Tuple[Token, IndividualTypeNode]],
+        location: concat.astutils.Location,
+        end_location: concat.astutils.Location,
+    ) -> None:
+        super().__init__(location, end_location)
+        self._attribute_type_pairs = attribute_type_pairs
+
+    def to_type(self, env: Environment) -> Tuple[ObjectType, Environment]:
+        temp_env = env.copy()
+        attribute_type_mapping: Dict[str, IndividualType] = {}
+        for attribute, type_node in self._attribute_type_pairs:
+            ty, temp_env = type_node.to_type(temp_env)
+            attribute_type_mapping[attribute.value] = ty
+        return (
+            ObjectType(
+                self_type=IndividualVariable(),  # FIXME: Support recursive types in syntax
+                attributes=attribute_type_mapping,
+            ),
+            env,
+        )
+
+
 def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
-    @parsy.generate
+    @concat.parser_combinators.generate
     def non_star_name_parser() -> Generator:
         name = yield concat.parse.token('NAME')
         if name.value == '*':
-            yield parsy.fail('name that is not star (*)')
+            yield concat.parser_combinators.fail('name that is not star (*)')
         return name
 
-    @parsy.generate
+    @concat.parser_combinators.generate
     def named_type_parser() -> Generator:
         name_token = yield concat.parse.token('NAME')
         return NamedTypeNode(name_token.start, name_token.value)
 
-    @parsy.generate
+    @concat.parser_combinators.generate
+    def possibly_nullary_generic_type_parser() -> Generator:
+        type_constructor_name = yield named_type_parser
+        left_square_bracket = yield concat.parse.token('LSQB').optional()
+        if left_square_bracket:
+            type_arguments = yield parsers['type'].sep_by(
+                concat.parse.token('COMMA'), min=1
+            )
+            end_location = (yield concat.parse.token('RSQB')).end
+            return _GenericTypeNode(
+                type_constructor_name.location,
+                # end_location,
+                type_constructor_name,
+                type_arguments,
+            )
+        return type_constructor_name
+
+    @concat.parser_combinators.generate
     def individual_type_variable_parser() -> Generator:
         yield concat.parse.token('BACKTICK')
         name = yield non_star_name_parser
 
         return _IndividualVariableNode(name)
 
-    @parsy.generate
+    @concat.parser_combinators.generate
     def sequence_type_variable_parser() -> Generator:
         star = yield concat.parse.token('NAME')
         if star.value != '*':
-            yield parsy.fail('star (*)')
+            yield concat.parser_combinators.fail('star (*)')
         name = yield non_star_name_parser
 
         return _SequenceVariableNode(name)
 
-    @parsy.generate
+    @concat.parser_combinators.generate
     def type_sequence_parser() -> Generator:
         type = parsers['type'] | individual_type_variable_parser
 
         # TODO: Allow type-only items
-        item = parsy.seq(
+        item = concat.parser_combinators.seq(
             non_star_name_parser,
             (concat.parse.token('COLON') >> type).optional(),
         ).map(_TypeSequenceIndividualTypeNode)
@@ -882,7 +926,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
 
         return TypeSequenceNode(location, seq_var_parsed, i)
 
-    @parsy.generate
+    @concat.parser_combinators.generate
     def stack_effect_type_parser() -> Generator:
         separator = concat.parse.token('MINUSMINUS')
 
@@ -895,11 +939,11 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
 
         return StackEffectTypeNode(location, i, o)
 
-    parsers['stack-effect-type'] = concat.parser_combinators.desc_cumulatively(
-        stack_effect_type_parser, 'stack effect type'
+    parsers['stack-effect-type'] = stack_effect_type_parser.desc(
+        'stack effect type'
     )
 
-    @parsy.generate
+    @concat.parser_combinators.generate
     def generic_type_parser() -> Generator:
         type = yield parsers['nonparameterized-type']
         yield concat.parse.token('LSQB')
@@ -909,11 +953,11 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         yield concat.parse.token('RSQB')
         return _GenericTypeNode(type.location, type, type_arguments)
 
-    @parsy.generate
+    @concat.parser_combinators.generate
     def forall_type_parser() -> Generator:
         forall = yield concat.parse.token('NAME')
         if forall.value != 'forall':
-            yield parsy.fail('the word "forall"')
+            yield concat.parser_combinators.fail('the word "forall"')
 
         type_variables = yield (
             individual_type_variable_parser | sequence_type_variable_parser
@@ -926,27 +970,43 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         return _ForallTypeNode(forall.start, type_variables, ty)
 
     # TODO: Parse type variables
-    parsers['nonparameterized-type'] = parsy.alt(
-        concat.parser_combinators.desc_cumulatively(
-            named_type_parser, 'named type'
-        ),
+    parsers['nonparameterized-type'] = concat.parser_combinators.alt(
+        named_type_parser.desc('named type'),
         parsers.ref_parser('stack-effect-type'),
     )
 
-    parsers['type'] = parsy.alt(
+    @concat.parser_combinators.generate
+    def object_type_parser() -> Generator:
+        location = (yield concat.parse.token('LBRACE')).start
+        attribute_type_pair = concat.parser_combinators.seq(
+            concat.parse.token('NAME') << concat.parse.token('COLON'),
+            parsers['type'],
+        )
+        pairs = yield (attribute_type_pair.sep_by(concat.parse.token('COMMA')))
+        end_location = (yield concat.parse.token('RBRACE')).end
+        return _ObjectTypeNode(pairs, location, end_location)
+
+    individual_type_parser = concat.parser_combinators.alt(
+        possibly_nullary_generic_type_parser.desc(
+            'named type or generic type',
+        ),
+        parsers.ref_parser('stack-effect-type'),
+        object_type_parser.desc('object type'),
+        individual_type_variable_parser,
+    ).desc('individual type')
+
+    # TODO: Parse sequence type variables
+
+    parsers['type'] = concat.parser_combinators.alt(
         # NOTE: There's a parsing ambiguity that might come back to bite me...
-        concat.parser_combinators.desc_cumulatively(
-            forall_type_parser, 'forall type'
-        ),
-        concat.parser_combinators.desc_cumulatively(
-            generic_type_parser, 'generic type'
-        ),
-        parsers.ref_parser('nonparameterized-type'),
+        forall_type_parser.desc('forall type'),
+        individual_type_parser,
+        concat.parse.token('LPAR')
+        >> parsers.ref_parser('type-sequence')
+        << concat.parse.token('RPAR'),
     )
 
-    parsers['type-sequence'] = concat.parser_combinators.desc_cumulatively(
-        type_sequence_parser, 'type sequence'
-    )
+    parsers['type-sequence'] = type_sequence_parser.desc('type sequence')
 
 
 _seq_var = SequenceVariable()

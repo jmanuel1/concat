@@ -35,8 +35,8 @@ above.
 
 All files are under the MIT license unless otherwise specified.
 
-**Our `desc_cumulatively` parser combinator is based on the source code of
-`parsy.desc`. [Parsy is under its own
+**Our `desc` parser combinator is based on the source code of `parsy.desc`. [Parsy
+is under its own
 license.](https://github.com/python-parsy/parsy/blob/master/LICENSE)**
 
 ---

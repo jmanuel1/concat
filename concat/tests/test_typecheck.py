@@ -30,7 +30,7 @@ import concat.tests.strategies  # for side-effects
 import unittest
 from textwrap import dedent
 from typing import List, Dict, cast
-import parsy
+import concat.parser_combinators
 from hypothesis import HealthCheck, given, example, note, settings
 from hypothesis.strategies import (
     dictionaries,
@@ -230,7 +230,7 @@ class TestStackEffectParser(unittest.TestCase):
                 tokens = tokens[1:-2]
                 try:
                     effect = build_parsers()['stack-effect-type'].parse(tokens)
-                except parsy.ParseError as e:
+                except concat.parser_combinators.ParseError as e:
                     self.fail(f'could not parse {effect_string}\n{e}')
                 env = Environment(concat.typecheck.preamble_types.types)
                 actual = effect.to_type(env)[0].generalized_wrt(env)

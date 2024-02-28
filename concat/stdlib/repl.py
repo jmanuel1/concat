@@ -8,6 +8,7 @@ import concat.astutils
 import concat.typecheck
 import concat.stdlib.importlib
 import concat.parse
+import concat.parser_combinators
 import concat.stdlib.types
 import concat.lex
 import concat.transpile
@@ -76,7 +77,7 @@ def read_form(stack: List[object], stash: List[object]) -> None:
     string = _read_until_complete_line()
     try:
         ast = _parse('$(' + string + ')')
-    except concat.parse.ParseError:
+    except concat.parser_combinators.ParseError:
         ast = _parse(string)
         concat.typecheck.check(caller_globals['@@extra_env'], ast.children)
         # I don't think it makes sense for us to get multiple children if what
@@ -177,7 +178,7 @@ def _repl_impl(
                 eval(
                     'concat.stdlib.repl.read_form(stack, [])', globals, locals,
                 )
-            except concat.parse.ParseError as e:
+            except concat.parser_combinators.ParseError as e:
                 print('Syntax error:\n')
                 print(e)
             except concat.execute.ConcatRuntimeError as e:
