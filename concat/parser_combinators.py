@@ -1,3 +1,9 @@
+"""Parser combinators.
+
+Error handling is based on the blog post "Parser Combinators and Error
+Reporting" for better error messages.
+"""
+
 import itertools
 import functools
 import operator
@@ -416,6 +422,21 @@ def generate(generator: ParserGeneratingFunction[T, U, V]) -> Parser[T, V]:
     ...
 
 
+def _result_with_furthest_failure(
+    results: List[Result[T]],
+) -> Optional[Result[T]]:
+    furthest_index = -1
+    ret = None
+    for result in results:
+        if (
+            result.failures is not None
+            and result.failures.furthest_index > furthest_index
+        ):
+            furthest_index = result.failures.furthest_index
+            ret = result
+    return ret
+
+
 def generate(
     desc: Union[str, ParserGeneratingFunction[T, U, V]]
 ) -> Union[
@@ -428,14 +449,23 @@ def generate(
     def new_parser(stream: Sequence[T], index: int) -> Result[V]:
         failures = []
         iterator = desc()
+        results = []
         output = None
         try:
             while True:
                 parser = iterator.send(output)
                 result = parser(stream, index)
-                if not result.is_success:
-                    return result
+                results.append(result)
                 output = result.output
+                if not result.is_success:
+                    result = _result_with_furthest_failure(results)
+                    assert result is not None
+                    return Result(
+                        result.output,
+                        result.current_index,
+                        False,
+                        result.failures,
+                    )
                 if result.failures is not None:
                     failures.append(result.failures)
                 index = result.current_index
