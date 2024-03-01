@@ -512,6 +512,11 @@ def infer(
                         current_effect.input, TypeSequence([*rest, new_type])
                     )
                 )
+            elif isinstance(node, concat.parse.ParseError):
+                current_effect = StackEffect(
+                    current_effect.input,
+                    TypeSequence([SequenceVariable()]),
+                )
             else:
                 raise UnhandledNodeTypeError(
                     "don't know how to handle '{}'".format(node)
