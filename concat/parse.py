@@ -45,6 +45,7 @@ from typing import (
 import concat.lex
 import concat.astutils
 import concat.parser_combinators
+from concat.parser_combinators.recovery import bracketed, recover, skip_until
 from concat.parser_dict import ParserDict
 
 if TYPE_CHECKING:
@@ -236,27 +237,10 @@ if TYPE_CHECKING:
 
 
 class ParseError(Node):
-    def __init__(
-        self, stream: Iterable['concat.lex.Token'], index: int
-    ) -> int:
-        super.__init__()
+    def __init__(self, result: concat.parser_combinators.Result) -> int:
+        super().__init__()
         self.children = []
-        self.stream = stream
-        self.index = index
-
-    def line_info(self):
-        return '{}:{} ({!r} here)'.format(
-            *self.get_start_position(), self.stream[self.index]
-        )
-
-    def get_start_position(self) -> Tuple[int, int]:
-        return self.stream[self.index].start
-
-    def get_end_position(self) -> Tuple[int, int]:
-        return self.stream[self.index].end
-
-    def __str__(self) -> str:
-        return f'Syntax error at {self.line_info()}'
+        self.result = result
 
 
 class BytesWordNode(WordNode):
@@ -380,13 +364,21 @@ def extension(parsers: ParserDict) -> None:
         newline = token('NEWLINE')
         statement = parsers['statement']
         word = parsers['word']
-        children = yield (word | statement | newline).many()
+        children = yield recover(
+            (word | statement | newline).many(), skip_until(token('ENDMARKER'))
+        ).map(lambda w: [ParseError(w[1])] if isinstance(w, tuple) else w)
         children = [
             child
             for child in children
             if not isinstance(child, concat.lex.Token)
         ]
-        yield token('ENDMARKER')
+        end_marker = yield recover(
+            token('ENDMARKER'), skip_until(token('ENDMARKER'))
+        )
+        if isinstance(end_marker, tuple):
+            children.append(ParseError(end_marker[1]))
+            yield token('ENDMARKER')
+
         return TopLevelNode(encoding, children)
 
     parsers['top-level'] = top_level_parser.desc('top level')
@@ -422,13 +414,8 @@ def extension(parsers: ParserDict) -> None:
 
     parsers['string-word'] = token('STRING').map(StringWordNode)
 
-    # This parses a quotation.
-    # quote word = LPAR, word*, RPAR ;
-    @concat.parser_combinators.generate('quote word')
-    def quote_word_parser() -> Generator[
-        concat.parser_combinators.Parser, Any, QuoteWordNode
-    ]:
-        lpar = yield token('LPAR')
+    @concat.parser_combinators.generate
+    def quote_word_contents() -> Generator:
         if 'type-sequence' in parsers:
             input_stack_type_parser = parsers['type-sequence'] << token(
                 'COLON'
@@ -437,6 +424,24 @@ def extension(parsers: ParserDict) -> None:
         else:
             input_stack_type = None
         children = yield parsers['word'].many()
+        return {'children': children, 'input-stack-type': input_stack_type}
+
+    # This parses a quotation.
+    # quote word = LPAR, word*, RPAR ;
+    @concat.parser_combinators.generate('quote word')
+    def quote_word_parser() -> Generator[
+        concat.parser_combinators.Parser, Any, QuoteWordNode
+    ]:
+        lpar = yield token('LPAR')
+        input_stack_type = None
+        children = yield recover(
+            quote_word_contents, skip_until(token('RPAR'))
+        )
+        if isinstance(children, tuple):
+            children = [children[1]]
+        else:
+            input_stack_type = children['input-stack-type']
+            children = children['children']
         yield token('RPAR')
         return QuoteWordNode(children, lpar.start, input_stack_type)
 
@@ -571,12 +576,9 @@ def extension(parsers: ParserDict) -> None:
             parsers['word'] << token('NEWLINE').optional()
             | parsers['statement'] << token('NEWLINE')
         ).at_least(1)
-        indented_block = (
-            token('NEWLINE').optional()
-            >> token('INDENT')
-            >> block_content
-            << token('DEDENT')
-        )
+        indented_block = token('NEWLINE').optional() >> bracketed(
+            token('INDENT'), block_content, token('DEDENT')
+        ).map(lambda x: [ParseError(x[1])] if isinstance(x, tuple) else x)
         return (yield indented_block | statement | words)
 
     suite = suite.desc('suite')
