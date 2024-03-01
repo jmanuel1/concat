@@ -30,6 +30,7 @@ import abc
 import operator
 from typing import (
     Iterable,
+    Iterator,
     Optional,
     Type,
     TypeVar,
@@ -58,7 +59,14 @@ class Node(abc.ABC):
     @abc.abstractmethod
     def __init__(self):
         self.location = (0, 0)
-        self.children: Iterable[Node]
+        self.children: Iterable[Node] = []
+
+    @property
+    def parsing_failures(
+        self,
+    ) -> Iterator[concat.parser_combinators.FailureTree]:
+        for child in self.children:
+            yield from child.parsing_failures
 
 
 class TopLevelNode(Node):
@@ -241,6 +249,12 @@ class ParseError(Node):
         super().__init__()
         self.children = []
         self.result = result
+
+    @property
+    def parsing_failures(
+        self,
+    ) -> Iterator[concat.parser_combinators.FailureTree]:
+        yield self.result.failures
 
 
 class BytesWordNode(WordNode):

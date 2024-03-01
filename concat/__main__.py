@@ -2,7 +2,7 @@
 
 
 import argparse
-from concat.transpile import transpile
+from concat.transpile import parse, transpile_ast, typecheck
 import concat.astutils
 import concat.execute
 import concat.lex
@@ -93,7 +93,15 @@ if args.file.isatty():
     concat.stdlib.repl.repl([], [], args.debug)
 else:
     try:
-        python_ast = transpile(args.file.read(), os.path.dirname(filename))
+        tokens = concat.lex.tokenize(args.file.read())
+        concat_ast = parse(tokens)
+        recovered_parsing_failures = concat_ast.parsing_failures
+        for failure in recovered_parsing_failures:
+            print('Parse Error:')
+            print(create_parsing_failure_message(args.file, tokens, failure))
+        source_dir = os.path.dirname(filename)
+        typecheck(concat_ast, source_dir)
+        python_ast = transpile_ast(concat_ast)
     except concat.typecheck.StaticAnalysisError as e:
         print('Static Analysis Error:\n')
         print(e, 'in line:')
@@ -101,12 +109,10 @@ else:
             print(get_line_at(args.file, e.location), end='')
             print(' ' * e.location[1] + '^')
     except concat.parser_combinators.ParseError as e:
-        args.file.seek(0, io.SEEK_SET)
-        stream = concat.lex.tokenize(args.file.read())
         print('Parse Error:')
         print(
             create_parsing_failure_message(
-                args.file, stream, e.args[0].failures
+                args.file, tokens, e.args[0].failures
             )
         )
     except Exception:
@@ -119,7 +125,7 @@ else:
             python_ast,
             {},
             should_log_stacks=args.debug,
-            import_resolution_start_directory=os.path.dirname(filename),
+            import_resolution_start_directory=source_dir,
         )
     finally:
         args.file.close()
