@@ -127,5 +127,7 @@ else:
             should_log_stacks=args.debug,
             import_resolution_start_directory=source_dir,
         )
+        if list(concat_ast.parsing_failures):
+            exit(1)
     finally:
         args.file.close()
