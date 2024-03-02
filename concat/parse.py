@@ -249,6 +249,7 @@ class ParseError(Node):
         super().__init__()
         self.children = []
         self.result = result
+        # TODO: Set location
 
     @property
     def parsing_failures(

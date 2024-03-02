@@ -180,6 +180,11 @@ def _do_preamble(globals: Dict[str, object], should_log_stacks=False) -> None:
     globals.setdefault('-', lambda s, _: s.append(s.pop(-2) - s.pop()))
     globals.setdefault('+', lambda s, _: s.append(s.pop(-2) + s.pop()))
 
+    def hole(stack: List[object], stash: List[object]) -> None:
+        raise Exception('Hole generated from parse error reached')
+
+    globals.setdefault('@@concat_parse_error_hole', hole)
+
 
 def execute(
     filename: str,

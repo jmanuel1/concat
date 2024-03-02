@@ -97,7 +97,26 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         Visitor[concat.parse.Node, ast.AST], top_level_visitor
     )
 
+    @visitors.add_alternative_to('top-level', 'parse-error-top-level')
+    @assert_annotated_type
+    def parse_error_top_level_visitor(
+        node: concat.parse.ParseError,
+    ) -> ast.Module:
+        statements = [visitors['parse-error-statement'].visit(node)]
+        module = ast.Module(body=statements)
+        ast.fix_missing_locations(module)
+        return module
+
     visitors['statement'] = visitors.ref_visitor('import-statement')
+
+    @visitors.add_alternative_to('statement', 'parse-error-statement')
+    @assert_annotated_type
+    def parse_error_statement_visitor(
+        node: concat.parse.ParseError,
+    ) -> ast.stmt:
+        return concat.astutils.statementfy(visitors['parse-error-word']).visit(
+            node
+        )
 
     # Converts an ImportStatementNode to a Python import statement node
 
@@ -151,6 +170,13 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
     )
 
     visitors['word'] = visitors.ref_visitor('literal-word')
+
+    @visitors.add_alternative_to('word', 'parse-error-word')
+    @assert_annotated_type
+    def parse_error_word_visitor(node: concat.parse.ParseError) -> ast.expr:
+        hole = ast.Name(id='@@concat_parse_error_hole', ctx=ast.Load())
+        hole.lineno, hole.col_offset = node.location
+        return hole
 
     @visitors.add_alternative_to('word', 'quote-word')
     @assert_annotated_type

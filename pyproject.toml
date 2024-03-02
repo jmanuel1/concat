@@ -45,3 +45,4 @@ pattern = "version = '(?P<version>.*)'"
 features = [
   "dev"
 ]
+python = "3.7"
