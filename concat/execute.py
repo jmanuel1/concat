@@ -14,7 +14,8 @@ import concat.stdlib.pyinterop.user_defined_function as udf
 import contextlib
 import sys
 import types
-from typing import Callable, Dict, Iterator, List, Optional
+from typing import Callable, Dict, Iterator, List, Optional, Union, cast
+from typing_extensions import SupportsIndex
 import os
 
 
@@ -39,7 +40,7 @@ class LoggableStack(List[object]):
             self._name, ':: after push (.append):', self
         )
 
-    def pop(self, i: int = -1) -> object:
+    def pop(self, i: SupportsIndex = -1) -> object:
         r = super().pop(i)
         self._should_log and print(self._name, ':: after pop (.pop):', self)
         return r
@@ -59,7 +60,7 @@ def _compile(filename: str, ast_: ast.Module) -> types.CodeType:
 
 def _run(
     prog: types.CodeType,
-    import_resolution_start_directory: os.PathLike,
+    import_resolution_start_directory: Union[os.PathLike, str],
     globals: Optional[Dict[str, object]] = None,
     locals: Optional[Dict[str, object]] = None,
 ) -> None:
@@ -72,12 +73,15 @@ def _run(
     except Exception as e:
         # TODO: throw away all of the traceback outside the code, but have an
         # option to keep the traceback.
-        raise ConcatRuntimeError(globals['stack'], globals['stash']) from e
+        raise ConcatRuntimeError(
+            cast(List[object], globals['stack']),
+            cast(List[object], globals['stash']),
+        ) from e
 
 
 @contextlib.contextmanager
 def _override_import_resolution_start_directory(
-    import_resolution_start_directory: os.PathLike,
+    import_resolution_start_directory: Union[os.PathLike, str],
 ) -> Iterator[None]:
     # This is similar to how Python sets sys.path[0] when running just a file
     # (like `python blah.py`, not `python -m blah`). This should probably be
@@ -193,7 +197,7 @@ def execute(
     locals: Optional[Dict[str, object]] = None,
     should_log_stacks=False,
     # By default, sys.path[0] is '' when executing a package.
-    import_resolution_start_directory: os.PathLike = '',
+    import_resolution_start_directory: Union[os.PathLike, str] = '',
 ) -> None:
     _do_preamble(globals, should_log_stacks)
 

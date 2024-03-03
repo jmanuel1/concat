@@ -114,8 +114,8 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
     def parse_error_statement_visitor(
         node: concat.parse.ParseError,
     ) -> ast.stmt:
-        return concat.astutils.statementfy(visitors['parse-error-word']).visit(
-            node
+        return concat.astutils.statementfy(
+            cast(ast.expr, visitors['parse-error-word'].visit(node))
         )
 
     # Converts an ImportStatementNode to a Python import statement node
@@ -420,5 +420,5 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
     # This converts a CastWordNode to a Python lambda expression that returns
     # None.
     visitors['cast-word'] = assert_type(concat.parse.CastWordNode).then(
-        node_to_py_string('lambda s,t:None')
+        node_to_py_string('lambda s,t:None')  # type: ignore
     )

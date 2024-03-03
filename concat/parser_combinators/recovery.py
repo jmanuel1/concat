@@ -32,6 +32,7 @@ def skip_until(p: Parser[_T, Any]) -> Parser[_T, List[_T]]:
                 return Result(
                     list(stream[original_index:index]), index, True, None
                 )
+            assert result.failures is not None
             failures.append(result.failures)
             index += 1
         return Result(
@@ -71,7 +72,7 @@ def recover(
 
     @Parser
     def parser(
-        stream: Parser[_T, _U], index: int
+        stream: Sequence[_T], index: int
     ) -> Result[Union[_U, Tuple[_V, Result[_U]]]]:
         result = p(stream, index)
         if result.is_success:

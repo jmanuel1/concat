@@ -245,7 +245,7 @@ if TYPE_CHECKING:
 
 
 class ParseError(Node):
-    def __init__(self, result: concat.parser_combinators.Result) -> int:
+    def __init__(self, result: concat.parser_combinators.Result) -> None:
         super().__init__()
         self.children = []
         self.result = result
@@ -255,6 +255,7 @@ class ParseError(Node):
     def parsing_failures(
         self,
     ) -> Iterator[concat.parser_combinators.FailureTree]:
+        assert self.result.failures is not None
         yield self.result.failures
 
 

@@ -8,6 +8,7 @@ import itertools
 import functools
 import operator
 from typing import (
+    Any,
     Callable,
     Generator,
     Generic,
@@ -40,7 +41,7 @@ _V = TypeVar('_V')
 V = TypeVar('V')
 
 
-def _maybe_inf_range(min: int, max: float) -> Iterator[int]:
+def _maybe_inf_range(min: int, max: float) -> Iterable[int]:
     if max == float('inf'):
         return itertools.count(min)
     else:
@@ -114,7 +115,7 @@ class Result(Generic[_T_co]):
                 other.is_success,
                 other.failures,
             )
-        return NotImplementedError
+        return NotImplemented
 
     def __hash__(self) -> int:
         return hash(
@@ -133,12 +134,13 @@ class Parser(Generic[_T_contra, _U_co]):
     ) -> 'Parser[_T_contra, Union[_U_co, _V]]':
         @Parser
         def new_parser(
-            stream: Sequence[T], index: int
+            stream: Sequence[_T_contra], index: int
         ) -> Result[Union[_U_co, _V]]:
             left_result = self(stream, index)
             if left_result.is_success:
                 return left_result
             right_result = other(stream, index)
+            new_failure: Optional[FailureTree]
             if right_result.is_success:
                 if left_result.current_index > right_result.current_index:
                     if (
@@ -160,10 +162,12 @@ class Parser(Generic[_T_contra, _U_co]):
                     else:
                         raise Exception('todo')
                 return right_result
+            assert left_result.failures is not None
+            assert right_result.failures is not None
             new_failure = furthest_failure(
                 [left_result.failures, right_result.failures]
             )
-            output = (
+            output: Union[_U_co, _V] = (
                 left_result.output
                 if new_failure is left_result.failures
                 else right_result.output
@@ -214,9 +218,13 @@ class Parser(Generic[_T_contra, _U_co]):
 
         return new_parser
 
-    def map(self, fn: Callable[[_U_co], V]) -> 'Parser[_T_contra, V]':
+    def map(
+        self, fn: Callable[[_U_co], V]
+    ) -> 'Parser[_T_contra, Union[_U_co, V]]':
         @Parser
-        def new_parser(stream: Sequence[_T_contra], index: int) -> Result[V]:
+        def new_parser(
+            stream: Sequence[_T_contra], index: int
+        ) -> Result[Union[_U_co, V]]:
             result = self(stream, index)
             if result.is_success:
                 return Result(
@@ -241,12 +249,12 @@ class Parser(Generic[_T_contra, _U_co]):
 
     def __rshift__(
         self, other: 'Parser[_T_contra, V]'
-    ) -> 'Parser[_T_contra, V]':
+    ) -> 'Parser[_T_contra, Union[tuple, V]]':
         return seq(self, other).map(lambda tup: tup[1])
 
     def __lshift__(
         self, other: 'Parser[_T_contra, V]'
-    ) -> 'Parser[_T_contra, _U_co]':
+    ) -> 'Parser[_T_contra, Union[tuple, _U_co]]':
         return seq(self, other).map(lambda tup: tup[0])
 
     def times(
@@ -259,7 +267,7 @@ class Parser(Generic[_T_contra, _U_co]):
                 result = yield self
                 output.append(result)
             for i in _maybe_inf_range(min, max):
-                result = yield self.map(lambda val: (val,)).optional()
+                result = yield self.map(lambda val: (val,)).optional()  # type: ignore
                 if result is not None:
                     output.append(result[0])
                     continue
@@ -296,10 +304,10 @@ class Parser(Generic[_T_contra, _U_co]):
                 return output
             for i in _maybe_inf_range(min, max):
                 if i == 0:
-                    maybe_item = yield self.map(lambda val: (val,)).optional()
+                    maybe_item = yield self.map(lambda val: (val,)).optional()  # type: ignore
                 else:
                     maybe_item = yield (
-                        sep >> self.map(lambda val: (val,))
+                        sep >> self.map(lambda val: (val,))  # type: ignore
                     ).optional()
                 if maybe_item is None:
                     break
@@ -322,7 +330,7 @@ class Parser(Generic[_T_contra, _U_co]):
 
     def concat(
         self: 'Parser[_T_contra, Iterable[str]]',
-    ) -> 'Parser[_T_contra, str]':
+    ) -> 'Parser[_T_contra, Iterable[str]]':
         return self.map(''.join)
 
     def __call__(
@@ -333,14 +341,16 @@ class Parser(Generic[_T_contra, _U_co]):
     def parse(self, seq: Sequence[_T_contra]) -> _U_co:
         result = self(seq, 0)
         if result.current_index < len(seq):
+            if result.failures is None:
+                failure_children = []
+            else:
+                failure_children = [result.failures]
             result = Result(
                 result.output,
                 result.current_index,
                 False,
                 FailureTree(
-                    'end of input',
-                    result.current_index,
-                    list(filter(lambda x: x is not None, [result.failures])),
+                    'end of input', result.current_index, failure_children,
                 ),
             )
         if result.is_success:
@@ -352,14 +362,11 @@ class ParseError(Exception):
     pass
 
 
-_Us = TypeVarTuple('_Us')
-
-
-def success(val: T) -> Parser[U, T]:
+def success(val: T) -> Parser[Any, T]:
     return seq().result(val)
 
 
-def seq(*parsers: 'Parser[T, *_Us]') -> 'Parser[T, Tuple[*_Us]]':
+def seq(*parsers: 'Parser[T, Any]') -> 'Parser[T, tuple]':
     @Parser
     def new_parser(stream: Sequence[T], index: int) -> Result:
         failures = []
@@ -379,8 +386,8 @@ def seq(*parsers: 'Parser[T, *_Us]') -> 'Parser[T, Tuple[*_Us]]':
     return new_parser
 
 
-def alt(*parsers: 'Parser[T, *_Us]') -> 'Parser[T, Union[*_Us]]':
-    parser = fail('nothing')
+def alt(*parsers: 'Parser[T, Any]') -> 'Parser[T, Any]':
+    parser: Parser[T, None] = fail('nothing')
     for p in parsers:
         parser |= p
     return parser
@@ -407,19 +414,60 @@ def test_item(
     return parser
 
 
-ParserGeneratingFunction = Callable[[], Generator[Parser[T, U], U, V]]
+ParserGeneratingFunction = Callable[[], Generator[Parser[T, Any], Any, V]]
 
 
 @overload
 def generate(
-    desc: str,
-) -> Callable[[ParserGeneratingFunction[T, U, V]], Parser[T, V]]:
+    desc_or_generator: str,
+) -> Callable[[ParserGeneratingFunction[T, V]], Parser[T, V]]:
     ...
 
 
 @overload
-def generate(generator: ParserGeneratingFunction[T, U, V]) -> Parser[T, V]:
+def generate(
+    desc_or_generator: ParserGeneratingFunction[T, V]
+) -> Parser[T, V]:
     ...
+
+
+def generate(
+    desc_or_generator: Union[str, ParserGeneratingFunction[T, V]]
+) -> Union[
+    Callable[[ParserGeneratingFunction[T, V]], Parser[T, V]], Parser[T, V],
+]:
+    if isinstance(desc_or_generator, str):
+        return lambda generator: generate(generator).desc(desc_or_generator)
+
+    @Parser
+    def new_parser(stream: Sequence[T], index: int) -> Result[V]:
+        failures = []
+        iterator = desc_or_generator()
+        results = []
+        output = None
+        try:
+            while True:
+                parser = iterator.send(output)
+                result = parser(stream, index)
+                results.append(result)
+                output = result.output
+                if not result.is_success:
+                    result = cast(
+                        Result[Any], _result_with_furthest_failure(results)
+                    )
+                    return Result(
+                        result.output,
+                        result.current_index,
+                        False,
+                        result.failures,
+                    )
+                if result.failures is not None:
+                    failures.append(result.failures)
+                index = result.current_index
+        except StopIteration as e:
+            return Result(e.value, index, True, furthest_failure(failures))
+
+    return new_parser
 
 
 def _result_with_furthest_failure(
@@ -435,41 +483,3 @@ def _result_with_furthest_failure(
             furthest_index = result.failures.furthest_index
             ret = result
     return ret
-
-
-def generate(
-    desc: Union[str, ParserGeneratingFunction[T, U, V]]
-) -> Union[
-    Callable[[ParserGeneratingFunction[T, U, V]], Parser[T, V]], Parser[T, V]
-]:
-    if isinstance(desc, str):
-        return lambda generator: generate(generator).desc(desc)
-
-    @Parser
-    def new_parser(stream: Sequence[T], index: int) -> Result[V]:
-        failures = []
-        iterator = desc()
-        results = []
-        output = None
-        try:
-            while True:
-                parser = iterator.send(output)
-                result = parser(stream, index)
-                results.append(result)
-                output = result.output
-                if not result.is_success:
-                    result = _result_with_furthest_failure(results)
-                    assert result is not None
-                    return Result(
-                        result.output,
-                        result.current_index,
-                        False,
-                        result.failures,
-                    )
-                if result.failures is not None:
-                    failures.append(result.failures)
-                index = result.current_index
-        except StopIteration as e:
-            return Result(e.value, index, True, furthest_failure(failures))
-
-    return new_parser

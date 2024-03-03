@@ -18,7 +18,7 @@ import tokenize as tokize
 import ast
 import inspect
 import traceback
-from typing import List, Dict, Optional, Set, Callable, NoReturn, cast
+from typing import Any, List, Dict, Optional, Set, Callable, NoReturn, cast
 
 
 sys.modules[__name__].__class__ = concat.stdlib.importlib.Module
@@ -70,7 +70,7 @@ def _read_until_complete_line() -> str:
 
 def read_form(stack: List[object], stash: List[object]) -> None:
     caller_frame = inspect.stack()[1].frame
-    caller_globals: Dict[str, object] = {**caller_frame.f_globals}
+    caller_globals: Dict[str, Any] = {**caller_frame.f_globals}
     caller_locals = caller_frame.f_locals
     scope = {**caller_globals, **caller_locals, 'stack': stack, 'stash': stash}
 
