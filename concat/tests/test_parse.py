@@ -2,7 +2,7 @@
 import concat.parse
 from concat.tests.small_example_programs import examples
 import unittest
-import parsy
+import concat.parser_combinators
 
 
 class TestSmallExamples(unittest.TestCase):
@@ -28,7 +28,7 @@ class TestSmallExamples(unittest.TestCase):
 
                 try:
                     parsers.parse(tuple(tokens))
-                except parsy.ParseError:
+                except concat.parser_combinators.ParseError:
                     message = '{} was not accepted by the parser'.format(
                         repr(example)
                     )

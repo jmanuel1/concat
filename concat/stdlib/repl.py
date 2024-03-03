@@ -8,6 +8,7 @@ import concat.astutils
 import concat.typecheck
 import concat.stdlib.importlib
 import concat.parse
+import concat.parser_combinators
 import concat.stdlib.types
 import concat.lex
 import concat.transpile
@@ -17,7 +18,7 @@ import tokenize as tokize
 import ast
 import inspect
 import traceback
-from typing import List, Dict, Optional, Set, Callable, NoReturn, cast
+from typing import Any, List, Dict, Optional, Set, Callable, NoReturn, cast
 
 
 sys.modules[__name__].__class__ = concat.stdlib.importlib.Module
@@ -69,14 +70,14 @@ def _read_until_complete_line() -> str:
 
 def read_form(stack: List[object], stash: List[object]) -> None:
     caller_frame = inspect.stack()[1].frame
-    caller_globals: Dict[str, object] = {**caller_frame.f_globals}
+    caller_globals: Dict[str, Any] = {**caller_frame.f_globals}
     caller_locals = caller_frame.f_locals
     scope = {**caller_globals, **caller_locals, 'stack': stack, 'stash': stash}
 
     string = _read_until_complete_line()
     try:
         ast = _parse('$(' + string + ')')
-    except concat.parse.ParseError:
+    except concat.parser_combinators.ParseError:
         ast = _parse(string)
         concat.typecheck.check(caller_globals['@@extra_env'], ast.children)
         # I don't think it makes sense for us to get multiple children if what
@@ -122,7 +123,7 @@ def read_quot(
 def _exit_repl() -> NoReturn:
     print_exit_message()
     # TODO: Don't exit the whole program because we can nest REPLs.
-    exit()
+    sys.exit()
 
 
 def print_exit_message() -> None:
@@ -177,7 +178,7 @@ def _repl_impl(
                 eval(
                     'concat.stdlib.repl.read_form(stack, [])', globals, locals,
                 )
-            except concat.parse.ParseError as e:
+            except concat.parser_combinators.ParseError as e:
                 print('Syntax error:\n')
                 print(e)
             except concat.execute.ConcatRuntimeError as e:
