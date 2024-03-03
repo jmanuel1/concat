@@ -123,7 +123,7 @@ def read_quot(
 def _exit_repl() -> NoReturn:
     print_exit_message()
     # TODO: Don't exit the whole program because we can nest REPLs.
-    exit()
+    sys.exit()
 
 
 def print_exit_message() -> None:
