@@ -78,7 +78,6 @@ $(
     ]
     $(dup $.file$[1] cast (file) [,] [,] pick $.read py_call nip [(),] [,] swap $transpile py_call)
     try
-    # FIXME: An empty dict {,} is parsed as a set.
     dup None is $([,] [pick$.file$[0], over, {},] execute$.execute py_call drop) if_not
     drop  # drop the Python AST
 )
