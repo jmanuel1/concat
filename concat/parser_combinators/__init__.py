@@ -5,8 +5,6 @@ Reporting" for better error messages.
 """
 
 import itertools
-import functools
-import operator
 from typing import (
     Any,
     Callable,
@@ -23,7 +21,7 @@ from typing import (
     cast,
     overload,
 )
-from typing_extensions import Protocol, TypeVarTuple
+from typing_extensions import Protocol
 
 
 class _SupportsPlus(Protocol):
@@ -41,14 +39,17 @@ _V = TypeVar('_V')
 V = TypeVar('V')
 
 
-def _maybe_inf_range(min: int, max: float) -> Iterable[int]:
-    if max == float('inf'):
-        return itertools.count(min)
-    else:
-        return range(min, int(max))
+def _maybe_inf_range(minimum: int, maximum: float) -> Iterable[int]:
+    if maximum == float('inf'):
+        return itertools.count(minimum)
+    return range(minimum, int(maximum))
 
 
 class FailureTree:
+    """Failure messages and positions from parsing.
+
+    Failures can be nested."""
+
     def __init__(
         self, expected: str, furthest_index: int, children: List['FailureTree']
     ) -> None:
@@ -83,6 +84,8 @@ def furthest_failure(failures: Iterable[FailureTree]) -> Optional[FailureTree]:
 
 
 class Result(Generic[_T_co]):
+    """Class representing the output of a parser and the parsing state."""
+
     def __init__(
         self,
         output: _T_co,
@@ -124,6 +127,8 @@ class Result(Generic[_T_co]):
 
 
 class Parser(Generic[_T_contra, _U_co]):
+    """A parser in the functional style."""
+
     def __init__(
         self, f: Callable[[Sequence[_T_contra], int], Result[_U_co]]
     ) -> None:
@@ -159,8 +164,7 @@ class Parser(Generic[_T_contra, _U_co]):
                             True,
                             new_failure,
                         )
-                    else:
-                        raise Exception('todo')
+                    raise Exception('todo')
                 return right_result
             assert left_result.failures is not None
             assert right_result.failures is not None
@@ -263,10 +267,10 @@ class Parser(Generic[_T_contra, _U_co]):
         @generate
         def new_parser() -> Generator:
             output = []
-            for i in range(min):
+            for _ in range(min):
                 result = yield self
                 output.append(result)
-            for i in _maybe_inf_range(min, max):
+            for _ in _maybe_inf_range(min, max):
                 result = yield self.map(lambda val: (val,)).optional()  # type: ignore
                 if result is not None:
                     output.append(result[0])
@@ -359,7 +363,7 @@ class Parser(Generic[_T_contra, _U_co]):
 
 
 class ParseError(Exception):
-    pass
+    """Exception raised for unrecoverable parser errors."""
 
 
 def success(val: T) -> Parser[Any, T]:
@@ -395,7 +399,7 @@ def alt(*parsers: 'Parser[T, Any]') -> 'Parser[T, Any]':
 
 def fail(expected: str) -> Parser[T, None]:
     @Parser
-    def parser(stream: Sequence[T], index: int) -> Result[None]:
+    def parser(_: Sequence[T], index: int) -> Result[None]:
         failure = FailureTree(expected, index, [])
         return Result(None, index, False, failure)
 

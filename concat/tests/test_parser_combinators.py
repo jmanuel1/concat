@@ -1,12 +1,10 @@
 import concat.parser_combinators
-from hypothesis import given, assume, example
+from hypothesis import given, strategies as st
 from hypothesis.strategies import (
-    SearchStrategy,
     composite,
     integers,
     text,
     one_of,
-    sampled_from,
 )
 import unittest
 from typing import Callable, Optional, Tuple
@@ -62,8 +60,6 @@ class TestOr(unittest.TestCase):
             ),
         )
 
-
-from hypothesis import given, strategies as st
 
 failure_trees = st.builds(
     concat.parser_combinators.FailureTree,

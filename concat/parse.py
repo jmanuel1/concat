@@ -245,6 +245,8 @@ if TYPE_CHECKING:
 
 
 class ParseError(Node):
+    """AST node for a parsing error that was recovered from."""
+
     def __init__(self, result: concat.parser_combinators.Result) -> None:
         super().__init__()
         self.children = []
