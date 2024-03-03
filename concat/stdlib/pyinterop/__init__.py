@@ -1,8 +1,10 @@
 """Concat-Python interoperation helpers."""
+from concat.common_types import ConcatFunction
 import concat.stdlib.ski
 from concat.typecheck.types import (
     ForAll,
     IndividualVariable,
+    ObjectType,
     SequenceVariable,
     StackEffect,
     TypeSequence,
@@ -50,6 +52,25 @@ globals()['@@types'] = {
             TypeSequence([_stack_type_var, subscriptable_type[_x, _y], _x,]),
             TypeSequence([_stack_type_var, _y]),
         ),
+    ),
+    'map': ObjectType(
+        _x,
+        {
+            '__call__': StackEffect(
+                TypeSequence(
+                    [
+                        _rest_var,
+                        StackEffect(
+                            TypeSequence([_rest_var, _y]),
+                            TypeSequence([_rest_var, _z]),
+                        ),
+                        iterable_type[_y,],
+                    ]
+                ),
+                TypeSequence([_rest_var, iterable_type[_z,]]),
+            )
+        },
+        [_rest_var, _y, _z],
     ),
     'to_dict': ForAll(
         [_stack_type_var, _x, _y],
@@ -337,6 +358,19 @@ def import_advanced(stack: List[object], stash: List[object]) -> None:
             0 if level is None else cast(int, level),
         )
     )
+
+
+def map(stack: List[object], stash: List[object]) -> None:
+    'f iterable -- map(f, iterable)'
+    iterable = cast(Iterable[object], stack.pop())
+    f = cast(ConcatFunction, stack.pop())
+
+    def python_f(x: object) -> object:
+        stack.append(x)
+        f(stack, stash)
+        return stack.pop()
+
+    stack.append(map(python_f, iterable))
 
 
 def open(stack: List[object], stash: List[object]) -> None:

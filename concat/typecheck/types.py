@@ -1935,6 +1935,13 @@ str_type = ObjectType(
             int_type,
         ],
         'join': py_function_type[TypeSequence([_x, iterable_type[_x,]]), _x],
+        '__iter__': py_function_type[TypeSequence([]), iterator_type[_x,]],
+        'index': py_function_type[
+            TypeSequence(
+                [_x, optional_type[int_type,], optional_type[int_type,]]
+            ),
+            int_type,
+        ],
     },
     nominal=True,
 )
