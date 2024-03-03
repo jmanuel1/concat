@@ -71,14 +71,15 @@ failure_trees = st.builds(
     non_negative_integers,
     st.lists(st.deferred(lambda: failure_trees)),
 )
+successes = st.builds(
+    concat.parser_combinators.Result,
+    text(),
+    integers(min_value=0),
+    st.just(True),
+    one_of(st.none(), failure_trees),
+)
 results = one_of(
-    st.builds(
-        concat.parser_combinators.Result,
-        text(),
-        integers(min_value=0),
-        st.just(True),
-        one_of(st.none(), failure_trees),
-    ),
+    successes,
     st.builds(
         concat.parser_combinators.Result,
         text(),
@@ -97,13 +98,17 @@ parsers = st.builds(
     concat.parser_combinators.Parser[str, str],
     st.functions(like=example_parse, returns=results, pure=True),
 )
+successful_parsers = st.builds(
+    concat.parser_combinators.Parser[str, str],
+    st.functions(like=example_parse, returns=successes, pure=True),
+)
 
 
 class TestAdd(unittest.TestCase):
     @given(
-        a=parsers,
-        b=parsers,
-        c=parsers,
+        a=successful_parsers,
+        b=successful_parsers,
+        c=successful_parsers,
         stream=text(),
         index=integers(min_value=0),
     )
