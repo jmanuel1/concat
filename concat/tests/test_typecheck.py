@@ -62,7 +62,7 @@ def build_parsers() -> concat.parse.ParserDict:
 class TestTypeChecker(unittest.TestCase):
     @given(from_type(concat.parse.AttributeWordNode))
     def test_attribute_word(self, attr_word) -> None:
-        _, type = concat.typecheck.infer(
+        _, type, _ = concat.typecheck.infer(
             concat.typecheck.Environment(),
             [attr_word],
             initial_stack=TypeSequence(
@@ -84,7 +84,7 @@ class TestTypeChecker(unittest.TestCase):
     def test_add_operator_inference(self, a: int, b: int) -> None:
         try_prog = '{!r} {!r} +\n'.format(a, b)
         tree = parse(try_prog)
-        _, type = concat.typecheck.infer(
+        _, type, _ = concat.typecheck.infer(
             concat.typecheck.Environment(
                 {'+': concat.typecheck.preamble_types.types['+']}
             ),
@@ -99,7 +99,7 @@ class TestTypeChecker(unittest.TestCase):
     def test_if_then_inference(self) -> None:
         try_prog = 'True $() if_then\n'
         tree = parse(try_prog)
-        _, type = concat.typecheck.infer(
+        _, type, _ = concat.typecheck.infer(
             concat.typecheck.Environment(
                 concat.typecheck.preamble_types.types
             ),
@@ -111,7 +111,7 @@ class TestTypeChecker(unittest.TestCase):
     def test_call_inference(self) -> None:
         try_prog = '$(42) call\n'
         tree = parse(try_prog)
-        _, type = concat.typecheck.infer(
+        _, type, _ = concat.typecheck.infer(
             concat.typecheck.Environment(
                 concat.typecheck.preamble_types.types
             ),
@@ -124,7 +124,7 @@ class TestTypeChecker(unittest.TestCase):
 
     @given(sampled_from(['None', '...', 'NotImplemented']))
     def test_constants(self, constant_name) -> None:
-        _, effect = concat.typecheck.infer(
+        _, effect, _ = concat.typecheck.infer(
             concat.typecheck.Environment(
                 concat.typecheck.preamble_types.types
             ),
@@ -173,7 +173,7 @@ class TestTypeChecker(unittest.TestCase):
     def test_cast_word(self) -> None:
         """Test that the type checker properly checks casts."""
         tree = parse('"str" cast (int)')
-        _, type = concat.typecheck.infer(
+        _, type, _ = concat.typecheck.infer(
             Environment(concat.typecheck.preamble_types.types),
             tree.children,
             is_top_level=True,

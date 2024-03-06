@@ -1,0 +1,5 @@
+def getitem(*stack_type_var obj:subscriptable[`x, `y] index:`x -- *stack_type_var res:`y):
+  ()
+
+def to_dict(*stack_type_var it:Optional[iterable[tuple[`x, `y]]] -- *stack_type_var d:dict[`x, `y]):
+  ()

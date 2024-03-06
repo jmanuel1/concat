@@ -127,6 +127,16 @@ class IndividualType(Type, abc.ABC):
             return False
         return super().is_subtype_of(supertype)
 
+    def instantiate(self) -> 'IndividualType':
+        return cast(IndividualType, super().instantiate())
+
+    @abc.abstractmethod
+    def apply_substitution(
+        self,
+        sub: 'concat.typecheck.Substitutions',
+    ) -> 'IndividualType':
+        pass
+
 
 class _Variable(Type, abc.ABC):
     """Objects that represent type variables.
@@ -906,7 +916,7 @@ class ObjectType(IndividualType):
         self,
         self_type: IndividualVariable,
         # Attributes can be universally quantified since ObjectType allows it.
-        attributes: Dict[str, IndividualType],
+        attributes: Mapping[str, IndividualType],
         type_parameters: Sequence[_Variable] = (),
         nominal_supertypes: Sequence[IndividualType] = (),
         nominal: bool = False,
@@ -937,6 +947,7 @@ class ObjectType(IndividualType):
             del self._other_kwargs['_type_arguments']
         if 'nominal' in self._other_kwargs:
             del self._other_kwargs['nominal']
+        self.is_variadic = bool(self._other_kwargs.get('is_variadic'))
 
         self._instantiations: Dict[TypeArguments, ObjectType] = {}
 
@@ -1312,7 +1323,8 @@ class ObjectType(IndividualType):
         )
 
     def __getitem__(
-        self, type_arguments: Sequence[StackItemType]
+        self,
+        type_arguments: TypeArguments,
     ) -> 'ObjectType':
         from concat.typecheck import Substitutions
 
@@ -1955,7 +1967,8 @@ tuple_type = ObjectType(
     _x,
     {'__getitem__': py_function_type},
     [_element_types_var],
-    nominal=True
+    nominal=True,
+    is_variadic=True,
     # iterable_type is a structural supertype
 )
 tuple_type.set_internal_name('tuple_type')

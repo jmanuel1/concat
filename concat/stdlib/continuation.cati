@@ -1,0 +1,20 @@
+class ContinuationMonad[`r, `a]:
+  ()
+
+def call_with_current_continuation(*s f:forall *t. (*t g:forall *u. (*u x:`a -- *u cont1:ContinuationMonad[`r, `b]) -- *t cont2:ContinuationMonad[`r, `a]) -- *s cont:ContinuationMonad[`r, `a]):
+  ()
+
+def eval_cont(*s cont:ContinuationMonad[`r, `r] -- *s res:`r):
+  ()
+
+def cont_pure(*s x:`a -- *s cont:ContinuationMonad[`r, `a]):
+  ()
+
+def map_cont(*s cont:ContinuationMonad[`r, `a] f:forall *t. (*t x:`a -- *t y:`b) -- *s cont2:ContinuationMonad[`r, `b]):
+    ()
+
+def bind_cont(*s cont:ContinuationMonad[`r, `a] f:forall *t. (*t x:`a -- *t cont:ContinuationMonad[`r, `b]) -- *s cont2:ContinuationMonad[`r, `b]):
+  ()
+
+def cont_from_cps(*s cps:forall *t. (*t k:forall *u. (*u x:`a -- *u res:`r) -- *t res:`r) -- *s cont:ContinuationMonad[`r, `a]):
+  ()

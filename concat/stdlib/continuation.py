@@ -7,7 +7,7 @@ from concat.typecheck.types import (
     TypeSequence,
     continuation_monad_type,
 )
-from typing import Callable, Generic, List, NoReturn, Type, TypeVar, cast
+from typing import Any, Callable, Generic, List, NoReturn, Type, TypeVar, cast
 
 
 _A = TypeVar('_A', covariant=True)
@@ -93,112 +93,6 @@ def compose(
 _s, _t, _u = SequenceVariable(), SequenceVariable(), SequenceVariable()
 _a, _b, _r = IndividualVariable(), IndividualVariable(), IndividualVariable()
 
-globals()['@@types'] = {
-    'ContinuationMonad': continuation_monad_type,
-    'call_with_current_continuation': ForAll(
-        [_s, _r, _a, _b],
-        StackEffect(
-            TypeSequence(
-                [
-                    _s,
-                    ForAll(
-                        [_t],
-                        StackEffect(
-                            TypeSequence(
-                                [
-                                    _t,
-                                    ForAll(
-                                        [_u],
-                                        StackEffect(
-                                            TypeSequence([_u, _a]),
-                                            TypeSequence(
-                                                [
-                                                    _u,
-                                                    continuation_monad_type[
-                                                        _r, _b
-                                                    ],
-                                                ]
-                                            ),
-                                        ),
-                                    ),
-                                ]
-                            ),
-                            TypeSequence(
-                                [_t, continuation_monad_type[_r, _a]]
-                            ),
-                        ),
-                    ),
-                ]
-            ),
-            TypeSequence([_s, continuation_monad_type[_r, _a]]),
-        ),
-    ),
-    'eval_cont': ForAll(
-        [_s, _r],
-        StackEffect(
-            TypeSequence([_s, continuation_monad_type[_r, _r]]),
-            TypeSequence([_s, _r]),
-        ),
-    ),
-    'cont_pure': ForAll(
-        [_s, _a, _r],
-        StackEffect(
-            TypeSequence([_s, _a]),
-            TypeSequence([_s, continuation_monad_type[_r, _a]]),
-        ),
-    ),
-    'bind_cont': ForAll(
-        [_s, _r, _a, _b],
-        StackEffect(
-            TypeSequence(
-                [
-                    _s,
-                    continuation_monad_type[_r, _a],
-                    ForAll(
-                        [_t],
-                        StackEffect(
-                            TypeSequence([_t, _a]),
-                            TypeSequence(
-                                [_t, continuation_monad_type[_r, _b]]
-                            ),
-                        ),
-                    ),
-                ]
-            ),
-            TypeSequence([_s, continuation_monad_type[_r, _b]]),
-        ),
-    ),
-    'cont_from_cps': ForAll(
-        [_s, _t, _u, _a, _r],
-        StackEffect(
-            TypeSequence(
-                [
-                    _s,
-                    ForAll(
-                        [_t],
-                        StackEffect(
-                            TypeSequence(
-                                [
-                                    _t,
-                                    ForAll(
-                                        [_u],
-                                        StackEffect(
-                                            TypeSequence([_u, _a]),
-                                            TypeSequence([_u, _r]),
-                                        ),
-                                    ),
-                                ]
-                            ),
-                            TypeSequence([_t, _r]),
-                        ),
-                    ),
-                ]
-            ),
-            TypeSequence([_s, continuation_monad_type[_r, _a]]),
-        ),
-    ),
-}
-
 
 def call_with_current_continuation(
     stack: List[object], stash: List[object]
@@ -232,6 +126,21 @@ def eval_cont(stack: List[object], _: List[object]) -> None:
 def cont_pure(stack: List[object], _: List[object]) -> None:
     value = stack.pop()
     result = ContinuationMonad[NoReturn, object].pure(value)
+    stack.append(result)
+
+
+def map_cont(stack: List[Any], stash: List[Any]) -> None:
+    f, cont = (
+        cast(ConcatFunction, stack.pop()),
+        cast(ContinuationMonad, stack.pop()),
+    )
+
+    def python_function(b: _B) -> _C:
+        stack.append(b)
+        f(stack, stash)
+        return stack.pop()
+
+    result = cont.map(f)
     stack.append(result)
 
 

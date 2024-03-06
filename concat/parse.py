@@ -352,6 +352,7 @@ class ClassdefStatementNode(StatementNode):
         decorators: Optional['Words'] = None,
         bases: Iterable['Words'] = (),
         keyword_args: Iterable[Tuple[str, WordNode]] = (),
+        type_parameters: Iterable[Node] = (),
     ):
         super().__init__()
         self.location = location
@@ -360,6 +361,7 @@ class ClassdefStatementNode(StatementNode):
         self.decorators = [] if decorators is None else decorators
         self.bases = bases
         self.keyword_args = keyword_args
+        self.type_parameters = type_parameters
 
 
 def token(typ: str) -> concat.parser_combinators.Parser:
@@ -654,15 +656,24 @@ def extension(parsers: ParserDict) -> None:
 
     parsers['import-statement'] |= from_import_star_statement_parser
 
-    # This parses a class definition statement.
-    # classdef statement = CLASS, NAME, decorator*, [ bases ], keyword arg*,
-    #   COLON, suite ;
-    # bases = tuple word ;
-    # keyword arg = NAME, EQUAL, word ;
     @concat.parser_combinators.generate('classdef statement')
     def classdef_statement_parser():
+        """This parses a class definition statement.
+
+        classdef statement = CLASS, NAME,
+            [ LSQB, type variable, (COMMA, type variable)*, [ COMMA ], RSQB ],
+            decorator*, [ bases ], keyword arg*,
+            COLON, suite ;
+        bases = tuple word ;
+        keyword arg = NAME, EQUAL, word ;"""
         location = (yield token('CLASS')).start
         name_token = yield token('NAME')
+        type_parameters = yield bracketed(
+            token('LSQB'),
+            parsers['type-variable'].sep_by(token('COMMA'))
+            << token('COMMA').optional(),
+            token('RSQB'),
+        ).optional()
         decorators = yield decorator.many()
         bases_list = yield bases.optional()
         keyword_args = yield keyword_arg.map(tuple).many()
@@ -675,6 +686,7 @@ def extension(parsers: ParserDict) -> None:
             decorators,
             bases_list,
             keyword_args,
+            type_parameters=type_parameters or []
         )
 
     parsers['classdef-statement'] = classdef_statement_parser
