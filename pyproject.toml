@@ -27,10 +27,11 @@ readme = "README.md"
 [project.optional-dependencies]
 dev = [
   "axblack==20220330",
+  "hypothesis>=6.75.1,<7",
   "mypy>=1.1.1",
   "pre-commit>=2.6.0,<3",
+  "snakeviz",
   "tox>=4.5.1,<5",
-  "hypothesis>=6.75.1,<7"
 ]
 
 
