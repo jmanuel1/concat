@@ -4,6 +4,7 @@
 import argparse
 from concat.transpile import parse, transpile_ast, typecheck
 import concat.astutils
+from concat.error_reporting import get_line_at, create_parsing_failure_message
 import concat.execute
 import concat.lex
 import concat.parser_combinators
@@ -29,29 +30,6 @@ def file_type(mode: str) -> Callable[[str], IO[AnyStr]]:
         return open(name, mode=mode)
 
     return func
-
-
-def get_line_at(file: TextIO, location: concat.astutils.Location) -> str:
-    file.seek(0, io.SEEK_SET)
-    lines = [*file]
-    return lines[location[0] - 1]
-
-
-def create_parsing_failure_message(
-    file: TextIO,
-    stream: Sequence[concat.lex.Token],
-    failure: concat.parser_combinators.FailureTree,
-) -> str:
-    location = stream[failure.furthest_index].start
-    line = get_line_at(file, location)
-    message = f'Expected {failure.expected} at line {location[0]}, column {location[1] + 1}:\n{line.rstrip()}\n{" " * location[1] + "^"}'
-    if failure.children:
-        message += '\nbecause:'
-        for f in failure.children:
-            message += '\n' + textwrap.indent(
-                create_parsing_failure_message(file, stream, f), '  '
-            )
-    return message
 
 
 arg_parser = argparse.ArgumentParser(description='Run a Concat program.')
@@ -103,10 +81,18 @@ else:
         typecheck(concat_ast, source_dir)
         python_ast = transpile_ast(concat_ast)
     except concat.typecheck.StaticAnalysisError as e:
-        print('Static Analysis Error:\n')
+        if e.path is None:
+            in_path = ''
+        else:
+            in_path = ' in file ' + str(e.path)
+        print(f'Static Analysis Error{in_path}:\n')
         print(e, 'in line:')
         if e.location:
-            print(get_line_at(args.file, e.location), end='')
+            if e.path is not None:
+                with e.path.open() as f:
+                    print(get_line_at(f, e.location), end='')
+            else:
+                print(get_line_at(args.file, e.location), end='')
             print(' ' * e.location[1] + '^')
     except concat.parser_combinators.ParseError as e:
         print('Parse Error:')
