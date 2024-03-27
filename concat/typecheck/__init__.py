@@ -39,7 +39,11 @@ class _Substitutable(Protocol[_Result]):
 class Substitutions(collections.abc.Mapping, Mapping['_Variable', 'Type']):
     def __init__(self, sub: Iterable[Tuple['_Variable', 'Type']] = {}) -> None:
         self._sub = dict(sub)
-        self._by_identity_cache: Dict[int, Any] = {}
+        for variable, ty in self._sub.items():
+            if variable.kind != ty.kind:
+                raise TypeError(
+                    f'{variable} is being substituted by {ty}, which has the wrong kind ({variable.kind} vs {ty.kind})'
+                )
 
     def __getitem__(self, var: '_Variable') -> 'Type':
         return self._sub[var]
@@ -51,10 +55,10 @@ class Substitutions(collections.abc.Mapping, Mapping['_Variable', 'Type']):
         return len(self._sub)
 
     def __call__(self, arg: _Substitutable[_Result]) -> _Result:
-        # if id(arg) not in self._by_identity_cache:
-        #     self._by_identity_cache[id(arg)] = arg.apply_substitution(self)
-        # return self._by_identity_cache[id(arg)]
-        # Using the id is wrong because a different object can have the same id later
+        # Previously I tried caching results by the id of the argument. But
+        # since the id is the memory address of the object in CPython, another
+        # object might have the same id later. I think this was leading to
+        # nondeterministic Concat type errors from the type checker.
         return arg.apply_substitution(self)
 
     def _dom(self) -> Set['_Variable']:
