@@ -3,3 +3,9 @@ def getitem(*stack_type_var obj:subscriptable[`x, `y] index:`x -- *stack_type_va
 
 def to_dict(*stack_type_var it:Optional[iterable[tuple[`x, `y]]] -- *stack_type_var d:dict[`x, `y]):
   ()
+
+def to_str(*stack_type_var errors:object encoding:object obj:object -- *stack_type_var string:str):
+  ()
+
+def to_py_function(*rest_var f:(*rest_var_2 -- *rest_var_3) -- *rest_var py_f:py_function[*any_args, `any_ret]):
+  ()

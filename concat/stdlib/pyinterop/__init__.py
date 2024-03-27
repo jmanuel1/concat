@@ -10,11 +10,8 @@ from concat.typecheck.types import (
     TypeSequence,
     dict_type,
     iterable_type,
-    object_type,
     optional_type,
-    py_function_type,
     slice_type,
-    str_type,
     subscriptable_type,
     tuple_type,
 )
@@ -98,17 +95,6 @@ globals()['@@types'] = {
                 ]
             ),
             TypeSequence([_stack_type_var, slice_type[_z, _y, _x]]),
-        ),
-    ),
-    'to_str': StackEffect(
-        TypeSequence([_stack_type_var, object_type, object_type, object_type]),
-        TypeSequence([_stack_type_var, str_type]),
-    ),
-    'to_py_function': ForAll(
-        [_rest_var, _rest_var_2, _rest_var_3],
-        StackEffect(
-            [_rest_var, StackEffect([_rest_var_2], [_rest_var_3])],
-            [_rest_var, py_function_type],
         ),
     ),
 }
