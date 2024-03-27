@@ -1,4 +1,3 @@
-import itertools
 from typing import AbstractSet, Any, Iterable, Iterator, Tuple, TypeVar
 
 _T = TypeVar('_T', covariant=True)
@@ -415,7 +414,7 @@ class _Tree23:
                     # 2-node parent, 3-node sibling, hole on right
                     z = x
                     d = right._data[1]
-                    a, x, b, y, c = w._data
+                    a, x, b, y, c = left._data
                     return _Tree23((_Tree23((a, x, b)), y, _Tree23((c, z, d))))
             # no hole in key or children
             return self

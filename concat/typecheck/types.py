@@ -1,28 +1,25 @@
 from concat.orderedset import OrderedSet
-from concat.typecheck import (
-    AttributeError,
-    StackMismatchError,
-    TypeError,
-)
 import concat.typecheck
+import functools
 from typing import (
     AbstractSet,
-    Optional,
+    Callable,
     Dict,
     Iterable,
     Iterator,
+    Iterator,
+    List,
+    Mapping,
+    NoReturn,
+    Optional,
     Sequence,
+    Set,
+    TYPE_CHECKING,
     Tuple,
     TypeVar,
     Union,
-    List,
-    Iterator,
-    Set,
-    Mapping,
-    NoReturn,
     cast,
     overload,
-    TYPE_CHECKING,
 )
 from typing_extensions import Literal
 import abc
@@ -35,6 +32,11 @@ if TYPE_CHECKING:
 
 
 class Type(abc.ABC):
+    def __init__(self) -> None:
+        self._free_type_variables_cached: Optional[
+            OrderedSet[_Variable]
+        ] = None
+
     # TODO: Fully replace with <=.
     def is_subtype_of(self, supertype: 'Type') -> bool:
         return (
@@ -70,8 +72,13 @@ class Type(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def free_type_variables(self) -> OrderedSet['_Variable']:
+    def _free_type_variables(self) -> OrderedSet['_Variable']:
         pass
+
+    def free_type_variables(self) -> OrderedSet['_Variable']:
+        if self._free_type_variables_cached is None:
+            self._free_type_variables_cached = self._free_type_variables()
+        return self._free_type_variables_cached
 
     @abc.abstractmethod
     def apply_substitution(
@@ -110,6 +117,14 @@ class Type(abc.ABC):
     def instantiate(self) -> 'Type':
         return self
 
+    @abc.abstractmethod
+    def resolve_forward_references(self) -> 'Type':
+        pass
+
+    @abc.abstractproperty
+    def kind(self) -> 'Kind':
+        pass
+
 
 class IndividualType(Type, abc.ABC):
     def to_for_all(self) -> Type:
@@ -132,10 +147,13 @@ class IndividualType(Type, abc.ABC):
 
     @abc.abstractmethod
     def apply_substitution(
-        self,
-        sub: 'concat.typecheck.Substitutions',
+        self, sub: 'concat.typecheck.Substitutions',
     ) -> 'IndividualType':
         pass
+
+    @property
+    def kind(self) -> 'Kind':
+        return IndividualKind()
 
 
 class _Variable(Type, abc.ABC):
@@ -149,11 +167,21 @@ class _Variable(Type, abc.ABC):
         self, sub: 'concat.typecheck.Substitutions'
     ) -> Union[IndividualType, '_Variable', 'TypeSequence']:
         if self in sub:
-            return sub[self]  # type: ignore
+            result = sub[self]
+            assert self.kind == result.kind, f'{self!r} --> {result!r}'
+            return result  # type: ignore
         return self
 
-    def free_type_variables(self) -> OrderedSet['_Variable']:
+    def _free_type_variables(self) -> OrderedSet['_Variable']:
         return OrderedSet({self})
+
+    def __lt__(self, other) -> bool:
+        """Comparator for storing variables in OrderedSets."""
+        return id(self) < id(other)
+
+    def __gt__(self, other) -> bool:
+        """Comparator for storing variables in OrderedSets."""
+        return id(self) > id(other)
 
 
 class IndividualVariable(_Variable, IndividualType):
@@ -245,6 +273,13 @@ class IndividualVariable(_Variable, IndividualType):
             )
         )
 
+    def resolve_forward_references(self) -> 'IndividualVariable':
+        return self
+
+    @property
+    def kind(self) -> 'Kind':
+        return IndividualKind()
+
 
 class SequenceVariable(_Variable):
     def __init__(self) -> None:
@@ -319,9 +354,17 @@ class SequenceVariable(_Variable):
             'the sequence type {} does not hold attributes'.format(self)
         )
 
+    def resolve_forward_references(self) -> 'SequenceVariable':
+        return self
+
+    @property
+    def kind(self) -> 'Kind':
+        return SequenceKind()
+
 
 class TypeSequence(Type, Iterable['StackItemType']):
     def __init__(self, sequence: Sequence['StackItemType']) -> None:
+        super().__init__()
         self._rest: Optional[SequenceVariable]
         if sequence and isinstance(sequence[0], SequenceVariable):
             self._rest = sequence[0]
@@ -412,7 +455,7 @@ class TypeSequence(Type, Iterable['StackItemType']):
                 and self._rest
                 and not self._individual_types
             ):
-                raise StackMismatchError(self, supertype)
+                raise concat.typecheck.StackMismatchError(self, supertype)
             elif not self._individual_types:
                 if (
                     self._is_empty()
@@ -435,7 +478,7 @@ class TypeSequence(Type, Iterable['StackItemType']):
                 ):
                     return Substitutions({supertype._rest: self})
                 else:
-                    raise StackMismatchError(self, supertype)
+                    raise concat.typecheck.StackMismatchError(self, supertype)
             elif (
                 not supertype._individual_types
                 and supertype._rest
@@ -479,11 +522,11 @@ class TypeSequence(Type, Iterable['StackItemType']):
                         sub
                     )
                     return sub
-                except StackMismatchError:
-                    raise StackMismatchError(self, supertype)
+                except concat.typecheck.StackMismatchError:
+                    raise concat.typecheck.StackMismatchError(self, supertype)
             else:
                 # TODO: Add info about occurs check and rigid variables.
-                raise StackMismatchError(self, supertype)
+                raise concat.typecheck.StackMismatchError(self, supertype)
         else:
             raise TypeError(
                 '{} must be a sequence type, not {}'.format(self, supertype)
@@ -509,7 +552,7 @@ class TypeSequence(Type, Iterable['StackItemType']):
                 and not supertype._individual_types
                 and supertype._rest not in rigid_variables
             ):
-                raise StackMismatchError(self, supertype)
+                raise concat.typecheck.StackMismatchError(self, supertype)
             elif (
                 supertype._is_empty()
                 and self._rest
@@ -536,16 +579,16 @@ class TypeSequence(Type, Iterable['StackItemType']):
                     and not supertype._individual_types
                 ):
                     # QUESTION: Should this be allowed? I'm being defensive here.
-                    raise StackMismatchError(self, supertype)
+                    raise concat.typecheck.StackMismatchError(self, supertype)
                 else:
-                    raise StackMismatchError(self, supertype)
+                    raise concat.typecheck.StackMismatchError(self, supertype)
             elif (
                 not supertype._individual_types
                 and supertype._rest
                 and supertype._rest not in self.free_type_variables()
                 and supertype._rest not in rigid_variables
             ):
-                raise StackMismatchError(self, supertype)
+                raise concat.typecheck.StackMismatchError(self, supertype)
             elif self._individual_types and supertype._individual_types:
                 sub = self._individual_types[
                     -1
@@ -575,16 +618,16 @@ class TypeSequence(Type, Iterable['StackItemType']):
                         subtyping_assumptions,
                     )(sub)
                     return sub
-                except StackMismatchError:
-                    raise StackMismatchError(self, supertype)
+                except concat.typecheck.StackMismatchError:
+                    raise concat.typecheck.StackMismatchError(self, supertype)
             else:
-                raise StackMismatchError(self, supertype)
+                raise concat.typecheck.StackMismatchError(self, supertype)
         else:
             raise TypeError(
                 '{} must be a sequence type, not {}'.format(self, supertype)
             )
 
-    def free_type_variables(self) -> OrderedSet['_Variable']:
+    def _free_type_variables(self) -> OrderedSet['_Variable']:
         ftv: OrderedSet[_Variable] = OrderedSet([])
         for t in self:
             ftv |= t.free_type_variables()
@@ -629,6 +672,16 @@ class TypeSequence(Type, Iterable['StackItemType']):
     def __hash__(self) -> int:
         return hash(tuple(self.as_sequence()))
 
+    def resolve_forward_references(self) -> 'TypeSequence':
+        self._individual_types = [
+            t.resolve_forward_references() for t in self._individual_types
+        ]
+        return self
+
+    @property
+    def kind(self) -> 'Kind':
+        return SequenceKind()
+
 
 # TODO: Actually get rid of ForAll uses. This is a temporary measure since I
 # don't want to do that work right now.
@@ -641,6 +694,16 @@ class _Function(IndividualType):
     def __init__(
         self, input_types: TypeSequence, output_types: TypeSequence,
     ) -> None:
+        for ty in input_types[1:]:
+            if ty.kind != IndividualKind():
+                raise concat.typeheck.TypeError(
+                    f'{ty} must be an individual type'
+                )
+        for ty in output_types[1:]:
+            if ty.kind != IndividualKind():
+                raise concat.typeheck.TypeError(
+                    f'{ty} must be an individual type'
+                )
         super().__init__()
         self.input = input_types
         self.output = output_types
@@ -764,7 +827,7 @@ class _Function(IndividualType):
         )(sub)
         return sub
 
-    def free_type_variables(self) -> OrderedSet['_Variable']:
+    def _free_type_variables(self) -> OrderedSet['_Variable']:
         return (
             self.input.free_type_variables()
             | self.output.free_type_variables()
@@ -783,7 +846,9 @@ class _Function(IndividualType):
             and isinstance(subtype_list[0], SequenceVariable)
         ):
             if supertype_list[0] not in sub:
-                sub[supertype_list[0]] = subtype_list[0]
+                # FIXME: Treat sub immutably, or better yet, don't use
+                # substitutions here if possible
+                sub._sub[supertype_list[0]] = subtype_list[0]
             else:
                 if sub(supertype_list[0]) is not subtype_list[0]:
                     return False
@@ -815,6 +880,11 @@ class _Function(IndividualType):
 
     def bind(self) -> '_Function':
         return _Function(self.input[:-1], self.output)
+
+    def resolve_forward_references(self) -> 'StackEffect':
+        self.input = self.input.resolve_forward_references()
+        self.output = self.output.resolve_forward_references()
+        return self
 
 
 class QuotationType(_Function):
@@ -924,6 +994,7 @@ class ObjectType(IndividualType):
         _head: Optional['ObjectType'] = None,
         **_other_kwargs,
     ) -> None:
+        super().__init__()
         # There should be no need to make the self_type variable unique because
         # it is treated as a bound variable in apply_substitution. In other
         # words, it is removed from any substitution received.
@@ -950,6 +1021,25 @@ class ObjectType(IndividualType):
         self.is_variadic = bool(self._other_kwargs.get('is_variadic'))
 
         self._instantiations: Dict[TypeArguments, ObjectType] = {}
+
+    def resolve_forward_references(self) -> 'ObjectType':
+        self._attributes = {
+            attr: t.resolve_forward_references()
+            for attr, t in self._attributes.items()
+        }
+        self._nominal_supertypes = [
+            t.resolve_forward_references() for t in self._nominal_supertypes
+        ]
+        self._type_arguments = [
+            t.resolve_forward_references() for t in self._type_arguments
+        ]
+        return self
+
+    @property
+    def kind(self) -> 'Kind':
+        if len(self._type_parameters) == 0:
+            return IndividualKind()
+        return GenericTypeKind([var.kind for var in self._type_parameters])
 
     def apply_substitution(
         self,
@@ -1268,7 +1358,7 @@ class ObjectType(IndividualType):
             None if self._head is self else self._head,
         )
 
-    def free_type_variables(self) -> OrderedSet[_Variable]:
+    def _free_type_variables(self) -> OrderedSet[_Variable]:
         ftv = free_type_variables_of_mapping(self.attributes)
         for arg in self.type_arguments:
             ftv |= arg.free_type_variables()
@@ -1309,6 +1399,7 @@ class ObjectType(IndividualType):
         if ObjectType._hash_variable is None:
             ObjectType._hash_variable = IndividualVariable()
         sub = Substitutions({self._self_type: ObjectType._hash_variable})
+        # Avoid sub(self) since the lru cache on that will hash self
         type_to_hash = sub(self)
         return hash(
             (
@@ -1322,10 +1413,7 @@ class ObjectType(IndividualType):
             )
         )
 
-    def __getitem__(
-        self,
-        type_arguments: TypeArguments,
-    ) -> 'ObjectType':
+    def __getitem__(self, type_arguments: TypeArguments,) -> 'ObjectType':
         from concat.typecheck import Substitutions
 
         if self._arity != len(type_arguments):
@@ -1430,11 +1518,25 @@ class PythonFunctionType(ObjectType):
         )
         if self._arity == 0:
             assert isinstance(self.input, collections.abc.Sequence)
+            assert self._type_arguments[1].kind == IndividualKind()
         self._args = list(args)
         self._overloads = _overloads
         if '_head' in self._kwargs:
             del self._kwargs['_head']
         self._head: PythonFunctionType
+
+    def resolve_forward_references(self) -> 'PythonFunctionType':
+        super().resolve_forward_references()
+        overloads = []
+        for args, ret in overloads:
+            overloads.append(
+                (
+                    [arg.resolve_forward_references() for arg in args],
+                    ret.resolve_forward_references(),
+                )
+            )
+        self._overloads = overloads
+        return self
 
     def __str__(self) -> str:
         if not self._type_arguments:
@@ -1496,7 +1598,7 @@ class PythonFunctionType(ObjectType):
     @property
     def output(self) -> IndividualType:
         assert self._arity == 0
-        assert isinstance(self._type_arguments[1], IndividualType)
+        assert self._type_arguments[1].kind == IndividualKind()
         return self._type_arguments[1]
 
     def select_overload(
@@ -1677,6 +1779,71 @@ class PythonFunctionType(ObjectType):
         )
 
 
+class _PythonOverloadedType(Type):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def __getitem__(self, args: Sequence[Type]) -> '_PythonOverloadedType':
+        import concat.typecheck
+
+        if len(args) == 0:
+            raise concat.typecheck.TypeError(
+                'py_overloaded must be applied to at least one argument'
+            )
+        for arg in args:
+            if not isinstance(arg, PythonFunctionType):
+                raise concat.typecheck.TypeError(
+                    'Arguments to py_overloaded must be Python function types'
+                )
+        fun_type = args[0]
+        for arg in args[1:]:
+            fun_type = fun_type.with_overload(arg.input, arg.output)
+        return fun_type
+
+    def attributes(self) -> Mapping[str, 'Type']:
+        raise TypeError('py_overloaded does not have attributes')
+
+    def _free_type_variables(self) -> OrderedSet['_Variable']:
+        return OrderedSet([])
+
+    def apply_substitution(
+        self, _: 'concat.typecheck.Substitutions'
+    ) -> '_PythonOverloadedType':
+        return self
+
+    def constrain_and_bind_supertype_variables(
+        self,
+        supertype: 'Type',
+        rigid_variables: AbstractSet['_Variable'],
+        subtyping_assumptions: List[Tuple['IndividualType', 'IndividualType']],
+    ) -> 'Substitutions':
+        raise concat.typecheck.TypeError('py_overloaded is a generic type')
+
+    def constrain_and_bind_subtype_variables(
+        self,
+        supertype: 'Type',
+        rigid_variables: AbstractSet['_Variable'],
+        subtyping_assumptions: List[Tuple['IndividualType', 'IndividualType']],
+    ) -> 'Substitutions':
+        raise concat.typecheck.TypeError('py_overloaded is a generic type')
+
+    def resolve_forward_references(self) -> '_PythonOverloadedType':
+        return self
+
+    @property
+    def kind(self) -> 'Kind':
+        return GenericTypeKind([SequenceKind()])
+
+    def __hash__(self) -> int:
+        return hash(type(self).__qualname__)
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, type(self))
+
+
+py_overloaded_type = _PythonOverloadedType()
+
+
 class _NoReturnType(ObjectType):
     def __init__(self) -> None:
         x = IndividualVariable()
@@ -1714,6 +1881,158 @@ class _OptionalType(ObjectType):
     ) -> '_OptionalType':
         # FIXME: self._type_arguments might not be a valid stack type.
         return _OptionalType(tuple(sub(TypeSequence(self._type_arguments))))
+
+
+class Kind(abc.ABC):
+    @abc.abstractmethod
+    def __eq__(self, other: object) -> bool:
+        pass
+
+    @abc.abstractmethod
+    def __hash__(self) -> int:
+        pass
+
+
+class IndividualKind(Kind):
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, IndividualKind)
+
+    def __hash__(self) -> int:
+        return hash(type(self).__qualname__)
+
+
+class SequenceKind(Kind):
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, SequenceKind)
+
+    def __hash__(self) -> int:
+        return hash(type(self).__qualname__)
+
+
+class GenericTypeKind(Kind):
+    def __init__(self, parameter_kinds: Sequence[Kind]) -> None:
+        assert parameter_kinds
+        self.parameter_kinds = parameter_kinds
+
+    def __eq__(self, other: object) -> bool:
+        return (
+            isinstance(other, GenericTypeKind)
+            and self.parameter_kinds == other.parameter_kinds
+        )
+
+    def __hash__(self) -> int:
+        return hash(tuple(self.parameter_kinds))
+
+
+class ForwardTypeReference(Type):
+    def __init__(
+        self,
+        kind: Kind,
+        name_to_resolve: str,
+        resolution_env: 'Environment',
+        _type_arguments: TypeArguments = (),
+    ) -> None:
+        super().__init__()
+        self._kind = kind
+        self._name_to_resolve = name_to_resolve
+        self._resolution_env = resolution_env
+        self._resolved_type: Optional[Type] = None
+        self._type_arguments = _type_arguments
+
+    def _resolve(self) -> Type:
+        ty = self._resolution_env[self._name_to_resolve]
+        if self._type_arguments:
+            ty = ty[self._type_arguments]
+        return ty
+
+    def _as_hashable_tuple(self) -> tuple:
+        return (
+            self._kind,
+            id(self._resolution_env),
+            self._name_to_resolve,
+            tuple(self._type_arguments),
+        )
+
+    def __hash__(self) -> int:
+        return hash(self._as_hashable_tuple())
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Type):
+            return NotImplemented
+        if not isinstance(other, ForwardTypeReference):
+            return False
+        return self._as_hashable_tuple() == other._as_hashable_tuple()
+
+    def __getitem__(self, args: TypeArguments) -> IndividualType:
+        import concat.typecheck
+
+        if isinstance(self.kind, GenericTypeKind):
+            if len(self.kind.parameter_kinds) != len(args):
+                raise concat.typecheck.TypeError(
+                    'Wrong number of arguments to generic type'
+                )
+            for kind, arg in zip(self.kind.parameter_kinds, args):
+                if kind != arg.kind:
+                    raise concat.typecheck.TypeError(
+                        f'Type argument has kind {arg.kind}, expected kind {kind}'
+                    )
+            return ForwardTypeReference(
+                IndividualKind(),
+                self._name_to_resolve,
+                self._resolution_env,
+                _type_arguments=args,
+            )
+        raise TypeError(f'{self} is not a generic type')
+
+    def resolve_forward_references(self) -> Type:
+        if self._resolved_type is None:
+            self._resolved_type = self._resolve()
+        return self._resolved_type
+
+    def apply_substitution(
+        self, sub: 'concat.typecheck.Substitutions'
+    ) -> 'ForwardTypeReference':
+        return self
+        # return ForwardTypeReference(self.kind, lambda: sub(self._resolve()))
+
+    @property
+    def attributes(self) -> Mapping[str, Type]:
+        import concat.typecheck
+
+        raise concat.typecheck.TypeError(
+            'Cannot access attributes of type before they are defined'
+        )
+
+    def constrain_and_bind_subtype_variables(
+        self,
+        supertype: Type,
+        rigid_variables: AbstractSet['_Variable'],
+        subtyping_assumptions: List[Tuple[IndividualType, IndividualType]],
+    ) -> 'Substitutions':
+        import concat.typecheck
+
+        raise concat.typecheck.TypeError(
+            'Supertypes of type are not known before its definition'
+        )
+
+    def constrain_and_bind_supertype_variables(
+        self,
+        supertype: Type,
+        rigid_variables: AbstractSet['_Variable'],
+        subtyping_assumptions: List[Tuple[IndividualType, IndividualType]],
+    ) -> 'Substitutions':
+        import concat.typecheck
+
+        raise concat.typecheck.TypeError(
+            'Supertypes of type are not known before its definition'
+        )
+
+    def _free_type_variables(self) -> OrderedSet[_Variable]:
+        return OrderedSet([])
+
+    @property
+    def kind(self) -> Kind:
+        return self._kind
 
 
 def _iterable_to_str(iterable: Iterable) -> str:
@@ -1815,7 +2134,6 @@ int_type = ObjectType(
         '__add__': _int_add_type,
         '__invert__': py_function_type[TypeSequence([]), _x],
         '__sub__': _int_add_type,
-        '__invert__': py_function_type[TypeSequence([]), _x],
         '__le__': py_function_type[TypeSequence([_x]), bool_type],
         '__lt__': py_function_type[TypeSequence([_x]), bool_type],
         '__ge__': py_function_type[TypeSequence([_x]), bool_type],

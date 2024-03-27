@@ -1,0 +1,94 @@
+# NOTE: I will probably need to mark this as "THE object type" in the future
+# since other classes implicitly inherit from it.
+class object:
+  ()
+
+class bool:
+  ()
+
+class int:
+  def __add__(--) @cast (py_function[(object), str]):
+    ()
+
+  def __invert__(--) @cast (py_function[(), int]):
+    ()
+
+  def __sub__(--) @cast (py_function[(object), str]):
+    ()
+
+  def __le__(--) @cast (py_function[(int), bool]):
+    ()
+
+  def __lt__(--) @cast (py_function[(int), bool]):
+    ()
+
+  def __ge__(--) @cast (py_function[(int), bool]):
+    ()
+
+class float:
+  ()
+
+class slice[`start, `stop, `step]:
+  ()
+
+class str:
+  def __getitem__(--) @cast (py_overloaded[
+    py_function[(int), str],
+    py_function[
+      (slice[Optional[int], Optional[int], Optional[int]]),
+      str
+    ]
+  ]):
+    ()
+
+  def __add__(--) @cast (py_function[(object), str]):
+    ()
+
+  def find(--) @cast (py_function[(str Optional[int] Optional[int]), int]):
+    ()
+
+  def join(--) @cast (py_function[(str iterable[str]), str]):
+    ()
+
+  def __iter__(--) @cast (py_function[(), iterator[str]]):
+    ()
+
+  def index(--) @cast (py_function[(str Optional[int] Optional[int]), int]):
+      ()
+
+def eval(--) @cast (py_function[(str), object]):
+  ()
+
+def print(--) @cast (py_function[(), none]):
+  ()
+
+class BaseException:
+  ()
+
+class Exception($BaseException,):
+  ()
+
+def input(--) @cast (py_function[(str), str]):
+  ()
+
+class tuple[`t...]:
+  # NOTE: Will need a new feature to get the type of __getitem__ right.
+  def __getitem__(--) @cast (py_function[(int), object]):
+    ()
+
+class dict[`key, `value]:
+  def __iter__(--) @cast (py_function[(), iterator[`key]]):
+    ()
+
+class list[`element]:
+  def __getitem__(--) @cast (py_overloaded[
+    py_function[(int), `element],
+    py_function[
+      (slice[Optional[int], Optional[int], Optional[int]]),
+      list[`element]
+    ]
+  ]):
+    ()
+
+  def __iter__(--) @cast (py_function[(), iterator[`element]]):
+    ()

@@ -4,9 +4,122 @@ The type inference algorithm was originally based on the one described in
 "Robert Kleffner: A Foundation for Typed Concatenative Languages, April 2017."
 """
 
+
+import collections.abc
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generator,
+    Iterable,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Set,
+    TYPE_CHECKING,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+    overload,
+)
+from typing_extensions import Protocol
+
+
+_Result = TypeVar('_Result', covariant=True)
+
+
+class _Substitutable(Protocol[_Result]):
+    def apply_substitution(self, sub: 'Substitutions') -> _Result:
+        pass
+
+
+class Substitutions(collections.abc.Mapping, Mapping['_Variable', 'Type']):
+    def __init__(self, sub: Iterable[Tuple['_Variable', 'Type']] = {}) -> None:
+        self._sub = dict(sub)
+        self._by_identity_cache: Dict[int, Any] = {}
+
+    def __getitem__(self, var: '_Variable') -> 'Type':
+        return self._sub[var]
+
+    def __iter__(self) -> Iterator['_Variable']:
+        return iter(self._sub)
+
+    def __len__(self) -> int:
+        return len(self._sub)
+
+    def __call__(self, arg: _Substitutable[_Result]) -> _Result:
+        # if id(arg) not in self._by_identity_cache:
+        #     self._by_identity_cache[id(arg)] = arg.apply_substitution(self)
+        # return self._by_identity_cache[id(arg)]
+        # Using the id is wrong because a different object can have the same id later
+        return arg.apply_substitution(self)
+
+    def _dom(self) -> Set['_Variable']:
+        return {*self}
+
+    def __str__(self) -> str:
+        return (
+            '{'
+            + ',\n'.join(
+                map(lambda i: '{}: {}'.format(i[0], i[1]), self.items())
+            )
+            + '}'
+        )
+
+    def apply_substitution(self, sub: 'Substitutions') -> 'Substitutions':
+        return Substitutions(
+            {
+                **sub,
+                **{a: sub(i) for a, i in self.items() if a not in sub._dom()},
+            }
+        )
+
+    def __hash__(self) -> int:
+        return hash(tuple(self.items()))
+
+
+from concat.typecheck.types import (
+    ForwardTypeReference,
+    ForAll,
+    GenericTypeKind,
+    IndividualKind,
+    IndividualType,
+    IndividualVariable,
+    ObjectType,
+    PythonFunctionType,
+    QuotationType,
+    SequenceKind,
+    SequenceVariable,
+    StackEffect,
+    StackItemType,
+    Type,
+    TypeSequence,
+    bool_type,
+    context_manager_type,
+    ellipsis_type,
+    free_type_variables_of_mapping,
+    init_primitives,
+    int_type,
+    invertible_type,
+    iterable_type,
+    list_type,
+    module_type,
+    none_type,
+    not_implemented_type,
+    object_type,
+    py_function_type,
+    slice_type,
+    str_type,
+    subscriptable_type,
+    subtractable_type,
+    tuple_type,
+)
 import abc
 import builtins
-import collections.abc
+from concat.error_reporting import create_parsing_failure_message
 from concat.lex import Token
 import functools
 import importlib
@@ -14,23 +127,6 @@ import importlib.util
 import itertools
 import pathlib
 import sys
-from typing import (
-    Generator,
-    Iterable,
-    List,
-    Set,
-    Tuple,
-    Dict,
-    Union,
-    Optional,
-    Callable,
-    Sequence,
-    TypeVar,
-    TYPE_CHECKING,
-    overload,
-    cast,
-)
-from typing_extensions import Protocol
 import concat.parser_combinators
 import concat.parse
 
@@ -45,12 +141,17 @@ class StaticAnalysisError(Exception):
     def __init__(self, message: str) -> None:
         self.message = message
         self.location: Optional['concat.astutils.Location'] = None
+        self.path: Optional[pathlib.Path] = None
 
     def set_location_if_missing(
         self, location: 'concat.astutils.Location'
     ) -> None:
         if not self.location:
             self.location = location
+
+    def set_path_if_missing(self, path: pathlib.Path) -> None:
+        if self.path is None:
+            self.path = path
 
     def __str__(self) -> str:
         return '{} at {}'.format(self.message, self.location)
@@ -106,73 +207,6 @@ class UnhandledNodeTypeError(builtins.NotImplementedError):
     pass
 
 
-_Result = TypeVar('_Result', covariant=True)
-
-
-class _Substitutable(Protocol[_Result]):
-    def apply_substitution(self, sub: 'Substitutions') -> _Result:
-        pass
-
-
-class Substitutions(Dict['_Variable', 'Type']):
-    def __call__(self, arg: _Substitutable[_Result]) -> _Result:
-        return arg.apply_substitution(self)
-
-    def _dom(self) -> Set['_Variable']:
-        return {*self}
-
-    def __str__(self) -> str:
-        return (
-            '{'
-            + ',\n'.join(
-                map(lambda i: '{}: {}'.format(i[0], i[1]), self.items())
-            )
-            + '}'
-        )
-
-    def apply_substitution(self, sub: 'Substitutions') -> 'Substitutions':
-        return Substitutions(
-            {
-                **sub,
-                **{a: sub(i) for a, i in self.items() if a not in sub._dom()},
-            }
-        )
-
-
-from concat.typecheck.types import (
-    Type,
-    IndividualVariable,
-    StackEffect,
-    ForAll,
-    IndividualType,
-    ObjectType,
-    PythonFunctionType,
-    SequenceVariable,
-    TypeSequence,
-    StackItemType,
-    QuotationType,
-    bool_type,
-    context_manager_type,
-    ellipsis_type,
-    free_type_variables_of_mapping,
-    int_type,
-    init_primitives,
-    invertible_type,
-    iterable_type,
-    list_type,
-    module_type,
-    none_type,
-    not_implemented_type,
-    object_type,
-    py_function_type,
-    slice_type,
-    str_type,
-    subscriptable_type,
-    subtractable_type,
-    tuple_type,
-)
-
-
 class Environment(Dict[str, Type]):
     def copy(self) -> 'Environment':
         return Environment(super().copy())
@@ -183,19 +217,43 @@ class Environment(Dict[str, Type]):
     def free_type_variables(self) -> 'OrderedSet[_Variable]':
         return free_type_variables_of_mapping(self)
 
+    def resolve_forward_references(self) -> None:
+        for name, t in self.items():
+            self[name] = t.resolve_forward_references()
+
 
 def check(
     environment: Environment,
     program: concat.astutils.WordsOrStatements,
     source_dir: str = '.',
-    check_bodies: bool = True
+    _should_check_bodies: bool = True,
+    _should_load_builtins: bool = True,
 ) -> Environment:
     import concat.typecheck.preamble_types
 
+    if _should_load_builtins:
+        builtins_stub_env = _check_stub(
+            pathlib.Path(__file__).with_name('py_builtins.cati'),
+            is_builtins=True,
+        )
+    else:
+        builtins_stub_env = Environment()
     environment = Environment(
-        {**concat.typecheck.preamble_types.types, **environment}
+        {
+            **builtins_stub_env,
+            **concat.typecheck.preamble_types.types,
+            **environment,
+        }
     )
-    res = infer(environment, program, None, True, source_dir, check_bodies=check_bodies)
+    res = infer(
+        environment,
+        program,
+        None,
+        True,
+        source_dir,
+        check_bodies=_should_check_bodies,
+    )
+    # res[2].resolve_forward_references()
     return res[2]
 
 
@@ -208,7 +266,7 @@ def infer(
     is_top_level=False,
     source_dir='.',
     initial_stack: Optional[TypeSequence] = None,
-    check_bodies: bool = True
+    check_bodies: bool = True,
 ) -> Tuple[Substitutions, StackEffect, Environment]:
     """The infer function described by Kleffner."""
     e = list(e)
@@ -218,6 +276,26 @@ def infer(
             [] if is_top_level else [SequenceVariable()]
         )
     current_effect = StackEffect(initial_stack, initial_stack)
+
+    # Prepare for forward references.
+    # TODO: Do this in a more principled way with scope graphs.
+    gamma = gamma.copy()
+    for node in e:
+        if isinstance(node, concat.parse.ClassdefStatementNode):
+            type_name = node.class_name
+            kind = IndividualKind()
+            type_parameters = []
+            if node.is_variadic:
+                parameter_kinds = [SequenceKind()]
+            else:
+                for param in node.type_parameters:
+                    type_parameters.append(param.to_type(gamma)[0])
+            if type_parameters:
+                parameter_kinds = [
+                    variable.kind for variable in type_parameters
+                ]
+                kind = GenericTypeKind(parameter_kinds)
+            gamma[type_name] = ForwardTypeReference(kind, type_name, gamma)
 
     for node in e:
         try:
@@ -253,6 +331,8 @@ def infer(
                     if child.value not in gamma:
                         raise NameError(child)
                     name_type = gamma[child.value]
+                    if isinstance(name_type, ForwardTypeReference):
+                        raise NameError(child)
                     if not isinstance(name_type, IndividualType):
                         raise TypeError(
                             f'{name_type} must be an individual type'
@@ -278,7 +358,7 @@ def infer(
                         extensions=extensions,
                         source_dir=source_dir,
                         initial_stack=input_stack,
-                        check_bodies=check_bodies
+                        check_bodies=check_bodies,
                     )
                     current_subs, current_effect = (
                         S2(S1),
@@ -304,7 +384,7 @@ def infer(
                         extensions=extensions,
                         source_dir=source_dir,
                         initial_stack=collected_type,
-                        check_bodies=check_bodies
+                        check_bodies=check_bodies,
                     )
                     collected_type = fun_type.output
                     # FIXME: Infer the type of elements in the list based on
@@ -337,7 +417,7 @@ def infer(
                         extensions=extensions,
                         source_dir=source_dir,
                         initial_stack=collected_type,
-                        check_bodies=check_bodies
+                        check_bodies=check_bodies,
                     )
                     collected_type = fun_type.output
                     assert isinstance(collected_type[-1], IndividualType)
@@ -364,7 +444,9 @@ def infer(
                 module_parts = node.value.split('.')
                 module_spec = None
                 path = None
-                for module_prefix in itertools.accumulate(module_parts, lambda a, b: f'{a}.{b}'):
+                for module_prefix in itertools.accumulate(
+                    module_parts, lambda a, b: f'{a}.{b}'
+                ):
                     for finder in sys.meta_path:
                         module_spec = finder.find_spec(module_prefix, path)
                         if module_spec is not None:
@@ -376,11 +458,11 @@ def infer(
                 stub_env = _check_stub(stub_path)
                 imported_type = stub_env.get(node.imported_name)
                 if imported_type is None:
-                    raise TypeError(f'Cannot find {node.imported_name} in module {node.value}')
+                    raise TypeError(
+                        f'Cannot find {node.imported_name} in module {node.value}'
+                    )
                 # TODO: Support star imports
-                gamma[imported_name] = current_subs(
-                    imported_type
-                )
+                gamma[imported_name] = current_subs(imported_type)
             elif isinstance(node, concat.parse.ImportStatementNode):
                 # TODO: Support all types of import correctly.
                 if node.asname is not None:
@@ -404,12 +486,19 @@ def infer(
                 S = current_subs
                 f = current_effect
                 name = node.name
-                # NOTE: To continue the "bidirectional" bent, we will require a
+                # NOTE: To continue the "bidirectional" bent, we will require a ghg
                 # type annotation.
                 # TODO: Make the return types optional?
+                print('node', repr(node.stack_effect))
                 declared_type, _ = node.stack_effect.to_type(S(gamma))
+                print('type from node', declared_type)
                 declared_type = S(declared_type)
+                print('subbed', declared_type)
                 recursion_env = gamma.copy()
+                if not isinstance(declared_type, StackEffect):
+                    raise TypeError(
+                        f'declared type of {name} must be a stack effect, got {declared_type}'
+                    )
                 recursion_env[name] = declared_type.generalized_wrt(S(gamma))
                 if check_bodies:
                     phi1, inferred_type, _ = infer(
@@ -418,7 +507,7 @@ def infer(
                         is_top_level=False,
                         extensions=extensions,
                         initial_stack=declared_type.input,
-                        check_bodies=check_bodies
+                        check_bodies=check_bodies,
                     )
                     # We want to check that the inferred outputs are subtypes of
                     # the declared outputs. Thus, inferred_type.output should be a subtype
@@ -431,17 +520,40 @@ def infer(
                         )(
                             S
                         )
-                    except TypeError:
+                    except TypeError as e:
                         message = (
                             'declared function type {} is not compatible with '
                             'inferred type {}'
                         )
                         raise TypeError(
                             message.format(declared_type, inferred_type)
-                        )
+                        ) from e
                 effect = declared_type
+                # type check decorators
+                _, final_type_stack, _ = infer(
+                    gamma,
+                    node.decorators,
+                    is_top_level=False,
+                    extensions=extensions,
+                    initial_stack=TypeSequence([effect]),
+                    check_bodies=check_bodies,
+                )
+                final_type_stack_output = final_type_stack.output.as_sequence()
+                if len(final_type_stack_output) != 1:
+                    raise TypeError(
+                        f'Decorators produce too many stack items: only 1 should be left. Stack: {final_type_stack.output}'
+                    )
+                final_type = final_type_stack_output[0]
+                if not isinstance(final_type, IndividualType):
+                    raise TypeError(
+                        f'Decorators should produce something of individual type, got {final_type}'
+                    )
                 # we *mutate* the type environment
-                gamma[name] = effect.generalized_wrt(S(gamma))
+                gamma[name] = (
+                    final_type.generalized_wrt(S(gamma))
+                    if isinstance(final_type, StackEffect)
+                    else final_type
+                )
             elif isinstance(node, concat.parse.NumberWordNode):
                 if isinstance(node.value, int):
                     current_effect = StackEffect(
@@ -453,7 +565,10 @@ def infer(
                 (i1, o1) = current_effect
                 if node.value not in current_subs(gamma):
                     raise NameError(node)
-                type_of_name = current_subs(gamma)[node.value].instantiate()
+                type_of_name = current_subs(gamma)[node.value]
+                if isinstance(type_of_name, ForwardTypeReference):
+                    raise NameError(node)
+                type_of_name = type_of_name.instantiate()
                 type_of_name = type_of_name.get_type_of_attribute(
                     '__call__'
                 ).instantiate()
@@ -486,7 +601,7 @@ def infer(
                     extensions=extensions,
                     source_dir=source_dir,
                     initial_stack=input_stack,
-                    check_bodies=check_bodies
+                    check_bodies=check_bodies,
                 )
                 current_subs, current_effect = (
                     S1(S),
@@ -529,22 +644,39 @@ def infer(
                 )
             elif isinstance(node, concat.parse.ParseError):
                 current_effect = StackEffect(
-                    current_effect.input,
-                    TypeSequence([SequenceVariable()]),
+                    current_effect.input, TypeSequence([SequenceVariable()]),
                 )
-            elif not check_bodies and isinstance(node, concat.parse.ClassdefStatementNode):
+            elif not check_bodies and isinstance(
+                node, concat.parse.ClassdefStatementNode
+            ):
                 type_parameters = []
                 temp_gamma = gamma
-                for param_node in node.type_parameters:
-                    param, temp_gamma = param_node.to_type(temp_gamma)
-                    type_parameters.append(param)
+                if node.is_variadic:
+                    type_parameters.append(SequenceVariable())
+                else:
+                    for param_node in node.type_parameters:
+                        param, temp_gamma = param_node.to_type(temp_gamma)
+                        type_parameters.append(param)
+
+                _, _, body_attrs = infer(
+                    temp_gamma,
+                    node.children,
+                    extensions=extensions,
+                    source_dir=source_dir,
+                    initial_stack=TypeSequence([]),
+                    check_bodies=check_bodies,
+                )
                 gamma[node.class_name] = ObjectType(
                     IndividualVariable(),
-                    {},
+                    body_attrs,
                     type_parameters,
                     (),
                     True,
+                    is_variadic=node.is_variadic,
                 )
+                gamma[node.class_name].set_internal_name(node.class_name)
+            # elif isinstance(node, concat.parse.TypeAliasStatementNode):
+            #     gamma[node.name], _ = node.type_node.to_type(gamma)
             else:
                 raise UnhandledNodeTypeError(
                     "don't know how to handle '{}'".format(node)
@@ -556,7 +688,9 @@ def infer(
 
 
 @functools.lru_cache(maxsize=None)
-def _check_stub_resolved_path(path: pathlib.Path) -> 'Environment':
+def _check_stub_resolved_path(
+    path: pathlib.Path, is_builtins: bool = False
+) -> 'Environment':
     try:
         source = path.read_text()
     except FileNotFoundError as e:
@@ -564,16 +698,45 @@ def _check_stub_resolved_path(path: pathlib.Path) -> 'Environment':
     except IOError as e:
         raise TypeError(f'Failed to read type stubs at {path}') from e
     tokens = concat.lex.tokenize(source)
-    from concat.transpile import parse
-    concat_ast = parse(tokens)
-    print(concat_ast)
-    print(list(concat_ast.parsing_failures))
+    # print(tokens)
     env = Environment()
-    return check(env, concat_ast.children, str(path.parent), check_bodies=False)
+    from concat.transpile import parse
+
+    try:
+        concat_ast = parse(tokens)
+    except concat.parser_combinators.ParseError as e:
+        print('Parse Error:')
+        with path.open() as file:
+            print(
+                create_parsing_failure_message(
+                    file, tokens, e.args[0].failures
+                )
+            )
+        return env
+    # print(concat_ast)
+    recovered_parsing_failures = concat_ast.parsing_failures
+    with path.open() as file:
+        for failure in recovered_parsing_failures:
+            print('Parse Error:')
+            print(create_parsing_failure_message(file, tokens, failure))
+    return check(
+        env,
+        concat_ast.children,
+        str(path.parent),
+        _should_check_bodies=False,
+        _should_load_builtins=not is_builtins,
+    )
 
 
-def _check_stub(path: pathlib.Path) -> 'Environment':
-    return _check_stub_resolved_path(path.resolve())
+def _check_stub(
+    path: pathlib.Path, is_builtins: bool = False
+) -> 'Environment':
+    path = path.resolve()
+    try:
+        return _check_stub_resolved_path(path, is_builtins)
+    except StaticAnalysisError as e:
+        e.set_path_if_missing(path)
+        raise
 
 
 # Parsing type annotations
@@ -651,7 +814,9 @@ class _GenericTypeNode(IndividualTypeNode):
         generic_type, env = self._generic_type.to_type(env)
         if isinstance(generic_type, ObjectType):
             if generic_type.is_variadic:
-                args = (TypeSequence(args), )
+                args = (TypeSequence(args),)
+            return generic_type[args], env
+        if isinstance(generic_type.kind, GenericTypeKind):
             return generic_type[args], env
         raise TypeError('{} is not a generic type'.format(generic_type))
 
@@ -786,19 +951,13 @@ class StackEffectTypeNode(IndividualTypeNode):
         in_types = []
         for item in self.input:
             type, new_env = _ensure_type(
-                item[1],
-                new_env,
-                item[0],
-                known_stack_item_names,
+                item[1], new_env, item[0], known_stack_item_names,
             )
             in_types.append(type)
         out_types = []
         for item in self.output:
             type, new_env = _ensure_type(
-                item[1],
-                new_env,
-                item[0],
-                known_stack_item_names,
+                item[1], new_env, item[0], known_stack_item_names,
             )
             out_types.append(type)
 
@@ -975,8 +1134,8 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         return _SequenceVariableNode(name)
 
     @concat.parser_combinators.generate
-    def type_sequence_parser() -> Generator:
-        type = parsers['type'] | individual_type_variable_parser
+    def stack_effect_type_sequence_parser() -> Generator:
+        type = parsers['type']
 
         # TODO: Allow type-only items
         item = concat.parser_combinators.seq(
@@ -1000,13 +1159,34 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         return TypeSequenceNode(location, seq_var_parsed, i)
 
     @concat.parser_combinators.generate
+    def type_sequence_parser() -> Generator:
+        type = parsers['type']
+
+        item = type.map(lambda t: _TypeSequenceIndividualTypeNode((None, t)))
+        items = item.many()
+
+        seq_var = sequence_type_variable_parser
+        seq_var_parsed: Optional[_SequenceVariableNode]
+        seq_var_parsed = yield seq_var.optional()
+        i = yield items
+
+        if seq_var_parsed is None and i:
+            location = i[0].location
+        elif seq_var_parsed is not None:
+            location = seq_var_parsed.location
+        else:
+            location = None
+
+        return TypeSequenceNode(location, seq_var_parsed, i)
+
+    @concat.parser_combinators.generate
     def stack_effect_type_parser() -> Generator:
         separator = concat.parse.token('MINUSMINUS')
 
         location = (yield concat.parse.token('LPAR')).start
 
-        i = yield parsers['type-sequence'] << separator
-        o = yield parsers['type-sequence']
+        i = yield stack_effect_type_sequence_parser << separator
+        o = yield stack_effect_type_sequence_parser
 
         yield concat.parse.token('RPAR')
 
@@ -1043,8 +1223,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         return _ForallTypeNode(forall.start, type_variables, ty)
 
     parsers['type-variable'] = concat.parser_combinators.alt(
-        sequence_type_variable_parser,
-        individual_type_variable_parser,
+        sequence_type_variable_parser, individual_type_variable_parser,
     )
 
     parsers['nonparameterized-type'] = concat.parser_combinators.alt(
@@ -1166,8 +1345,7 @@ def _ensure_type(
         type = IndividualVariable()
     elif isinstance(typename, TypeNode):
         type, env = cast(
-            Tuple[StackItemType, Environment],
-            typename.to_type(env),
+            Tuple[StackItemType, Environment], typename.to_type(env),
         )
     else:
         raise NotImplementedError(

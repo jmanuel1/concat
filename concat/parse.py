@@ -29,19 +29,20 @@ tokenization phase.
 import abc
 import operator
 from typing import (
-    Iterable,
-    Iterator,
-    Optional,
-    Type,
-    TypeVar,
     Any,
-    Sequence,
-    Tuple,
+    Callable,
     Dict,
     Generator,
+    Iterable,
+    Iterator,
     List,
-    Callable,
+    Optional,
+    Sequence,
     TYPE_CHECKING,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
 )
 import concat.lex
 import concat.astutils
@@ -212,6 +213,9 @@ class QuoteWordNode(WordNode):
         )
         return '(' + input_stack_type + ' '.join(map(str, self.children)) + ')'
 
+    def __repr__(self) -> str:
+        return f'{type(self).__qualname__}(children={self.children!r}, location={self.location!r}, input_stack_type={self.input_stack_type!r})'
+
 
 class NameWordNode(WordNode):
     def __init__(self, name: 'concat.lex.Token'):
@@ -259,6 +263,9 @@ class ParseError(Node):
     ) -> Iterator[concat.parser_combinators.FailureTree]:
         assert self.result.failures is not None
         yield self.result.failures
+
+    def __repr__(self) -> str:
+        return f'{type(self).__qualname__}(result={self.result!r})'
 
 
 class BytesWordNode(WordNode):
@@ -353,6 +360,7 @@ class ClassdefStatementNode(StatementNode):
         bases: Iterable['Words'] = (),
         keyword_args: Iterable[Tuple[str, WordNode]] = (),
         type_parameters: Iterable[Node] = (),
+        is_variadic: bool = False,
     ):
         super().__init__()
         self.location = location
@@ -362,6 +370,7 @@ class ClassdefStatementNode(StatementNode):
         self.bases = bases
         self.keyword_args = keyword_args
         self.type_parameters = type_parameters
+        self.is_variadic = is_variadic
 
 
 def token(typ: str) -> concat.parser_combinators.Parser:
@@ -594,7 +603,7 @@ def extension(parsers: ParserDict) -> None:
         statement = concat.parser_combinators.seq(parsers['statement'])
         block_content = (
             parsers['word'] << token('NEWLINE').optional()
-            | parsers['statement'] << token('NEWLINE')
+            | parsers['statement'] << token('NEWLINE').optional()
         ).at_least(1)
         indented_block = token('NEWLINE').optional() >> bracketed(
             token('INDENT'), block_content, token('DEDENT')
@@ -661,19 +670,56 @@ def extension(parsers: ParserDict) -> None:
         """This parses a class definition statement.
 
         classdef statement = CLASS, NAME,
-            [ LSQB, type variable, (COMMA, type variable)*, [ COMMA ], RSQB ],
+            [ LSQB, ((type variable, (COMMA, type variable)*, [ COMMA ]) | (type variable, NAME=...)), RSQB) ],
             decorator*, [ bases ], keyword arg*,
             COLON, suite ;
         bases = tuple word ;
         keyword arg = NAME, EQUAL, word ;"""
         location = (yield token('CLASS')).start
         name_token = yield token('NAME')
-        type_parameters = yield bracketed(
-            token('LSQB'),
-            parsers['type-variable'].sep_by(token('COMMA'))
-            << token('COMMA').optional(),
-            token('RSQB'),
-        ).optional()
+        is_variadic = False
+
+        def ellispis_verify(
+            tok: concat.lex.Token,
+        ) -> concat.parser_combinators.Parser[concat.lex.Token, Any]:
+            nonlocal is_variadic
+
+            if tok.value == '...':
+                is_variadic = True
+                return concat.parser_combinators.success(None)
+            return concat.parser_combinators.fail('a literal ellispis (...)')
+
+        def handle_recovery(
+            x: Union[
+                Sequence[Node],
+                Tuple[Any, concat.parser_combinators.Result[Any]],
+            ]
+        ) -> Sequence[Node]:
+            if (
+                isinstance(x, tuple)
+                and len(x) > 1
+                and isinstance(x[1], concat.parser_combinators.Result)
+            ):
+                return [ParseError(x[1])]
+            return x
+
+        ellispis_parser = token('NAME').bind(ellispis_verify)
+        type_parameters = (
+            yield bracketed(
+                token('LSQB'),
+                (
+                    concat.parser_combinators.seq(parsers['type-variable'])
+                    << ellispis_parser
+                )
+                | (
+                    parsers['type-variable'].sep_by(token('COMMA'))
+                    << token('COMMA').optional()
+                ),
+                token('RSQB'),
+            )
+            .map(handle_recovery)
+            .optional()
+        )
         decorators = yield decorator.many()
         bases_list = yield bases.optional()
         keyword_args = yield keyword_arg.map(tuple).many()
@@ -686,7 +732,8 @@ def extension(parsers: ParserDict) -> None:
             decorators,
             bases_list,
             keyword_args,
-            type_parameters=type_parameters or []
+            type_parameters=type_parameters or [],
+            is_variadic=is_variadic,
         )
 
     parsers['classdef-statement'] = classdef_statement_parser
