@@ -1,7 +1,7 @@
-# NOTE: I will probably need to mark this as "THE object type" in the future
-# since other classes implicitly inherit from it.
 class object:
   ()
+
+!@@concat.typecheck.builtin_object object
 
 class bool:
   ()
@@ -54,7 +54,9 @@ class str:
     ()
 
   def index(--) @cast (py_function[(str Optional[int] Optional[int]), int]):
-      ()
+    ()
+
+!@@concat.typecheck.builtin_str str
 
 def eval(--) @cast (py_function[(str), object]):
   ()
@@ -92,3 +94,5 @@ class list[`element]:
 
   def __iter__(--) @cast (py_function[(), iterator[`element]]):
     ()
+
+!@@concat.typecheck.builtin_list list

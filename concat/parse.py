@@ -373,6 +373,16 @@ class ClassdefStatementNode(StatementNode):
         self.is_variadic = is_variadic
 
 
+class PragmaNode(Node):
+    def __init__(
+        self, location: 'Location', pragma_name: str, args: Sequence[str]
+    ) -> None:
+        super().__init__()
+        self.location = location
+        self.pragma = pragma_name
+        self.args = args
+
+
 def token(typ: str) -> concat.parser_combinators.Parser:
     description = f'{typ} token'
     return concat.parser_combinators.test_item(
@@ -393,9 +403,7 @@ def extension(parsers: ParserDict) -> None:
         newline = token('NEWLINE')
         statement = parsers['statement']
         word = parsers['word']
-        children = yield recover(
-            (word | statement | newline).many(), skip_until(token('ENDMARKER'))
-        ).map(lambda w: [ParseError(w[1])] if isinstance(w, tuple) else w)
+        children = yield (word | statement | newline).commit().many()
         children = [
             child
             for child in children
@@ -445,10 +453,10 @@ def extension(parsers: ParserDict) -> None:
 
     @concat.parser_combinators.generate
     def quote_word_contents() -> Generator:
-        if 'type-sequence' in parsers:
-            input_stack_type_parser = parsers['type-sequence'] << token(
-                'COLON'
-            )
+        if 'stack-effect-type-sequence' in parsers:
+            input_stack_type_parser = parsers[
+                'stack-effect-type-sequence'
+            ] << token('COLON')
             input_stack_type = yield input_stack_type_parser.optional()
         else:
             input_stack_type = None
@@ -746,6 +754,24 @@ def extension(parsers: ParserDict) -> None:
         token('NAME').map(operator.attrgetter('value')) << token('EQUAL'),
         parsers.ref_parser('word'),
     )
+
+    @concat.parser_combinators.generate('internal pragma')
+    def pragma_parser() -> Generator:
+        """This parses a pragma for internal use.
+
+        pragma = EXCLAMATIONMARK, @, @, qualified name+
+        qualified name = module"""
+        location = (yield token('EXCLAMATIONMARK')).start
+        for _ in range(2):
+            name_token = yield token('NAME')
+            if name_token.value != '@':
+                return concat.parser_combinators.fail('a literal at sign (@)')
+        pragma_name = yield module
+        args = yield module.many()
+        return PragmaNode(location, pragma_name, args)
+
+    parsers['pragma'] = pragma_parser
+    parsers['statement'] |= parsers.ref_parser('pragma')
 
     parsers['word'] |= parsers.ref_parser('cast-word')
 

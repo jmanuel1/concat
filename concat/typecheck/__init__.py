@@ -86,8 +86,8 @@ class Substitutions(collections.abc.Mapping, Mapping['_Variable', 'Type']):
 
 
 from concat.typecheck.types import (
-    ForwardTypeReference,
     ForAll,
+    ForwardTypeReference,
     GenericTypeKind,
     IndividualKind,
     IndividualType,
@@ -105,18 +105,19 @@ from concat.typecheck.types import (
     context_manager_type,
     ellipsis_type,
     free_type_variables_of_mapping,
+    get_list_type,
+    get_object_type,
     init_primitives,
     int_type,
     invertible_type,
     iterable_type,
-    list_type,
     module_type,
+    no_return_type,
     none_type,
     not_implemented_type,
-    object_type,
     py_function_type,
     slice_type,
-    str_type,
+    get_str_type,
     subscriptable_type,
     subtractable_type,
     tuple_type,
@@ -305,7 +306,17 @@ def infer(
         try:
             S, (i, o) = current_subs, current_effect
 
-            if isinstance(node, concat.parse.PushWordNode):
+            if isinstance(node, concat.parse.PragmaNode):
+                if node.pragma == 'concat.typecheck.builtin_object':
+                    name = node.args[0]
+                    concat.typecheck.types.set_object_type(gamma[name])
+                if node.pragma == 'concat.typecheck.builtin_list':
+                    name = node.args[0]
+                    concat.typecheck.types.set_list_type(gamma[name])
+                if node.pragma == 'concat.typecheck.builtin_str':
+                    name = node.args[0]
+                    concat.typecheck.types.set_str_type(gamma[name])
+            elif isinstance(node, concat.parse.PushWordNode):
                 S1, (i1, o1) = S, (i, o)
                 child = node.children[0]
                 if isinstance(child, concat.parse.FreezeWordNode):
@@ -405,7 +416,10 @@ def infer(
                         StackEffect(
                             i,
                             TypeSequence(
-                                [*collected_type, list_type[element_type,]]
+                                [
+                                    *collected_type,
+                                    get_list_type()[element_type,],
+                                ]
                             ),
                         )
                     ),
@@ -616,7 +630,7 @@ def infer(
                     S,
                     StackEffect(
                         current_effect.input,
-                        TypeSequence([*current_effect.output, str_type]),
+                        TypeSequence([*current_effect.output, get_str_type()]),
                     ),
                 )
             elif isinstance(node, concat.parse.AttributeWordNode):
@@ -717,7 +731,6 @@ def _check_stub_resolved_path(
                 )
             )
         return env
-    # print(concat_ast)
     recovered_parsing_failures = concat_ast.parsing_failures
     with path.open() as file:
         for failure in recovered_parsing_failures:
@@ -1287,7 +1300,7 @@ def _generate_type_of_innermost_module(
         sys.path = old_path
     module_attributes = {}
     for name in dir(module):
-        attribute_type = object_type
+        attribute_type = get_object_type()
         if isinstance(getattr(module, name), int):
             attribute_type = int_type
         elif callable(getattr(module, name)):

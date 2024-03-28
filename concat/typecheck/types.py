@@ -42,7 +42,7 @@ class Type(abc.ABC):
         return (
             supertype is self
             or isinstance(self, IndividualType)
-            and supertype is object_type
+            and supertype is get_object_type()
         )
 
     def __le__(self, other: object) -> bool:
@@ -183,6 +183,9 @@ class _Variable(Type, abc.ABC):
         """Comparator for storing variables in OrderedSets."""
         return id(self) > id(other)
 
+    def __eq__(self, other) -> bool:
+        return id(self) == id(other)
+
 
 class IndividualVariable(_Variable, IndividualType):
     def __init__(self) -> None:
@@ -196,7 +199,7 @@ class IndividualVariable(_Variable, IndividualType):
     ) -> 'Substitutions':
         from concat.typecheck import Substitutions
 
-        if self is supertype or supertype == object_type:
+        if self is supertype or supertype == get_object_type():
             return Substitutions()
         if not isinstance(supertype, IndividualType):
             raise TypeError(
@@ -233,8 +236,8 @@ class IndividualVariable(_Variable, IndividualType):
 
         if self is supertype:
             return Substitutions()
-        if supertype == object_type:
-            return Substitutions({self: object_type})
+        if supertype == get_object_type():
+            return Substitutions({self: get_object_type()})
         if not isinstance(supertype, IndividualType):
             raise TypeError(
                 '{} must be an individual type: expected {}'.format(
@@ -1115,7 +1118,7 @@ class ObjectType(IndividualType):
             return super().is_subtype_of(supertype)
         if self._arity != supertype._arity:
             return False
-        if self._arity == 0 and supertype is object_type:
+        if self._arity == 0 and supertype is get_object_type():
             return True
         if supertype._nominal and self._head is not supertype._head:
             return False
@@ -1196,7 +1199,7 @@ class ObjectType(IndividualType):
                 '{} is not as polymorphic as {}'.format(self, supertype)
             )
         # every object type is a subtype of object_type
-        if supertype == object_type:
+        if supertype == get_object_type():
             return Substitutions()
         # Don't forget that there's nominal subtyping too.
         if supertype._nominal:
@@ -1292,7 +1295,7 @@ class ObjectType(IndividualType):
                 '{} is not as polymorphic as {}'.format(self, supertype)
             )
         # every object type is a subtype of object_type
-        if supertype == object_type:
+        if supertype == get_object_type():
             return Substitutions()
         # Don't forget that there's nominal subtyping too.
         if supertype._nominal:
@@ -1337,7 +1340,6 @@ class ObjectType(IndividualType):
             type = instantiated_self.get_type_of_attribute(name)
             # FIXME: Really types of attributes should not be higher-kinded
             type = type.instantiate()
-            # print('in constrain_and_bind_subtype_variables, objecttype', repr(type))
             sub = type.constrain_and_bind_subtype_variables(
                 supertype.get_type_of_attribute(name).instantiate(),
                 rigid_variables,
@@ -2113,8 +2115,46 @@ _x = IndividualVariable()
 
 float_type = ObjectType(_x, {}, nominal=True)
 no_return_type = _NoReturnType()
-object_type = ObjectType(_x, {}, nominal=True)
-object_type.set_internal_name('object_type')
+
+
+_object_type: Optional[Type] = None
+
+
+def get_object_type() -> Type:
+    assert _object_type is not None
+    return _object_type
+
+
+def set_object_type(ty: Type) -> None:
+    global _object_type
+    _object_type = ty
+
+
+_list_type: Optional[Type] = None
+
+
+def get_list_type() -> Type:
+    assert _list_type is not None
+    return _list_type
+
+
+def set_list_type(ty: Type) -> None:
+    global _list_type
+    _list_type = ty
+
+
+_str_type: Optional[Type] = None
+
+
+def get_str_type() -> Type:
+    assert _str_type is not None
+    return _str_type
+
+
+def set_str_type(ty: Type) -> None:
+    global _str_type
+    _str_type = ty
+
 
 _arg_type_var = SequenceVariable()
 _return_type_var = IndividualVariable()
@@ -2149,7 +2189,9 @@ addable_type = ObjectType(
     _x,
     {
         '__add__': py_function_type[
-            TypeSequence([object_type]), _add_result_type
+            # FIXME: object should be the parameter type
+            TypeSequence([_x]),
+            _add_result_type,
         ]
     },
     [_add_result_type],
@@ -2183,7 +2225,8 @@ lt_comparable_type = ObjectType(
 )
 lt_comparable_type.set_internal_name('lt_comparable_type')
 
-_int_add_type = py_function_type[TypeSequence([object_type]), _x]
+# FIXME: The parameter type should be object.
+_int_add_type = py_function_type[TypeSequence([_x]), _x]
 
 int_type = ObjectType(
     _x,
@@ -2277,62 +2320,6 @@ slice_type = ObjectType(
     _x, {}, [_start_type_var, _stop_type_var, _step_type_var], nominal=True
 )
 slice_type.set_internal_name('slice_type')
-
-_element_type_var = IndividualVariable()
-_list_getitem_type = py_function_type[
-    TypeSequence([int_type]), _element_type_var
-].with_overload((slice_type[(optional_type[int_type,],) * 3],), _x)
-list_type = ObjectType(
-    _x,
-    {
-        '__getitem__': _list_getitem_type,
-        '__iter__': py_function_type[
-            TypeSequence([]), iterator_type[_element_type_var,]
-        ],
-    },
-    [_element_type_var],
-    nominal=True,
-)
-list_type.set_internal_name('list_type')
-
-_str_getitem_type = py_function_type[
-    TypeSequence([int_type]), _x
-].with_overload(
-    [
-        slice_type[
-            optional_type[int_type,],
-            optional_type[int_type,],
-            optional_type[int_type,],
-        ]
-    ],
-    _x,
-)
-str_type = ObjectType(
-    _x,
-    {
-        '__getitem__': _str_getitem_type,
-        '__add__': py_function_type[TypeSequence([object_type]), _x],
-        # FIXME: str doesn't have an __radd__. I added it only to help with
-        # type checking.
-        '__radd__': py_function_type[TypeSequence([object_type]), _x],
-        'find': py_function_type[
-            TypeSequence(
-                [_x, optional_type[int_type,], optional_type[int_type,]]
-            ),
-            int_type,
-        ],
-        'join': py_function_type[TypeSequence([_x, iterable_type[_x,]]), _x],
-        '__iter__': py_function_type[TypeSequence([]), iterator_type[_x,]],
-        'index': py_function_type[
-            TypeSequence(
-                [_x, optional_type[int_type,], optional_type[int_type,]]
-            ),
-            int_type,
-        ],
-    },
-    nominal=True,
-)
-str_type.set_internal_name('str_type')
 
 ellipsis_type = ObjectType(_x, {})
 not_implemented_type = ObjectType(_x, {})
