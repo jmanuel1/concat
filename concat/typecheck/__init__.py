@@ -138,7 +138,7 @@ import concat.parse
 
 if TYPE_CHECKING:
     import concat.astutils
-    from concat.orderedset import OrderedSet
+    from concat.orderedset import InsertionOrderedSet
     from concat.typecheck.types import _Variable
 
 
@@ -219,7 +219,7 @@ class Environment(Dict[str, Type]):
     def apply_substitution(self, sub: 'Substitutions') -> 'Environment':
         return Environment({name: sub(t) for name, t in self.items()})
 
-    def free_type_variables(self) -> 'OrderedSet[_Variable]':
+    def free_type_variables(self) -> 'InsertionOrderedSet[_Variable]':
         return free_type_variables_of_mapping(self)
 
     def resolve_forward_references(self) -> None:

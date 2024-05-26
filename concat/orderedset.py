@@ -1,4 +1,16 @@
-from typing import AbstractSet, Any, Iterable, Iterator, Tuple, TypeVar
+from concat.linked_list import LinkedList, empty_list
+from typing import (
+    AbstractSet,
+    Any,
+    Generic,
+    Iterable,
+    Iterator,
+    Optional,
+    Reversible,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 _T = TypeVar('_T', covariant=True)
 
@@ -8,7 +20,7 @@ class OrderedSet(AbstractSet[_T]):
         super().__init__()
         self._data = _Tree23.from_iterable(elements)
 
-    def __sub__(self, other: object) -> 'OrderedSet[_T]':
+    def __sub__(self, other: object) -> 'OrderedSet[Any]':
         if not isinstance(other, AbstractSet):
             return NotImplemented
         data = self._data
@@ -16,7 +28,7 @@ class OrderedSet(AbstractSet[_T]):
             data = data.delete(el)
         return OrderedSet(data)
 
-    def __or__(self, other: object) -> 'OrderedSet[_T]':
+    def __or__(self, other: object) -> 'OrderedSet[Any]':
         if not isinstance(other, AbstractSet):
             return NotImplemented
         data = self._data
@@ -30,8 +42,69 @@ class OrderedSet(AbstractSet[_T]):
     def __iter__(self) -> Iterator[_T]:
         return iter(self._data)
 
+    def __reversed__(self) -> Iterator[_T]:
+        return reversed(self._data)
+
     def __len__(self) -> int:
         return len(self._data)
+
+
+# Inspired by Java's LinkedHashSet
+# https://github.com/anjbur/java-immutable-collections/blob/master/src/main/java/org/javimmutable/collections/inorder/JImmutableInsertOrderSet.java
+class InsertionOrderedSet(AbstractSet[_T]):
+    def __init__(
+        self,
+        elements: 'Reversible[_T]',
+        _order: Optional[LinkedList[_T]] = None,
+    ) -> None:
+        super().__init__()
+        self._data = OrderedSet(elements)
+        self._order = (
+            LinkedList.from_iterable(elements) if _order is None else _order
+        )
+
+    def __sub__(self, other: object) -> 'InsertionOrderedSet[_T]':
+        if not isinstance(other, AbstractSet):
+            return NotImplemented
+        data = self._data - other
+        new_set = InsertionOrderedSet[_T](
+            data, self._order.filter(lambda x: x not in other)
+        )
+        return new_set
+
+    def __or__(self, other: object) -> 'InsertionOrderedSet[Any]':
+        if not isinstance(other, AbstractSet):
+            return NotImplemented
+        data = self._data | other
+        if isinstance(other, InsertionOrderedSet):
+            order = self._order + other._order
+        else:
+            order = self._order + LinkedList.from_iterable(list(other))
+        order = filter_duplicates(order)
+        new_set = InsertionOrderedSet(data, order)
+        return new_set
+
+    def __contains__(self, element: object) -> bool:
+        return element in self._data
+
+    def __iter__(self) -> Iterator[_T]:
+        return iter(self._order)
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+
+def filter_duplicates(xs: LinkedList[_T]) -> LinkedList[_T]:
+    found = set()
+
+    def predicate(x: _T) -> bool:
+        nonlocal found
+        if x in found:
+            return False
+        found.add(x)
+        return True
+
+    return xs.filter(predicate)
 
 
 class _Tree23Hole:
@@ -113,13 +186,22 @@ class _Tree23:
     def __iter__(self) -> Iterator:
         if self.is_leaf():
             return
-        if self.is_2_node():
-            yield from self._data[0]
-            yield self._data[1]
-            yield from self._data[2]
+        yield from self._data[0]
+        yield self._data[1]
+        yield from self._data[2]
         if self.is_3_node():
             yield self._data[3]
             yield from self._data[4]
+
+    def __reversed__(self) -> Iterator:
+        if self.is_leaf():
+            return
+        if self.is_3_node():
+            yield from reversed(self._data[4])
+            yield self._data[3]
+        yield from reversed(self._data[2])
+        yield self._data[1]
+        yield from reversed(self._data[0])
 
     def __len__(self) -> int:
         if self.is_leaf():
@@ -385,7 +467,7 @@ class _Tree23:
                         return _Tree23(
                             (a, w, _Tree23((b, x, c)), y, _Tree23((d, z, e)))
                         )
-            # 3-node that either has no in data or children, or has bad heights
+            # 3-node that either has no data or children, or has bad heights
             return self
         if self.is_2_node():
             left, x, right = self._data
@@ -426,7 +508,7 @@ class _Tree23:
             return tree._data[1]
         return tree
 
-    def max(self) -> Any:
+    def max(self, default: object = None) -> Any:
         tree = self
         while not tree.is_leaf():
             if tree.is_2_node():
@@ -437,7 +519,9 @@ class _Tree23:
                 if tree._is_3_node_terminal():
                     return tree._data[3]
                 tree = tree._data[4]
-        raise ValueError('Empty 2-3 tree has no max')
+        if default is None:
+            raise ValueError('Empty 2-3 tree has no max')
+        return default
 
     __hole = _Tree23Hole()
 

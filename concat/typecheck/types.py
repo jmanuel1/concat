@@ -1,4 +1,4 @@
-from concat.orderedset import OrderedSet
+from concat.orderedset import InsertionOrderedSet
 import concat.typecheck
 import functools
 from typing import (
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 class Type(abc.ABC):
     def __init__(self) -> None:
         self._free_type_variables_cached: Optional[
-            OrderedSet[_Variable]
+            InsertionOrderedSet[_Variable]
         ] = None
 
     # TODO: Fully replace with <=.
@@ -72,10 +72,10 @@ class Type(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def _free_type_variables(self) -> OrderedSet['_Variable']:
+    def _free_type_variables(self) -> InsertionOrderedSet['_Variable']:
         pass
 
-    def free_type_variables(self) -> OrderedSet['_Variable']:
+    def free_type_variables(self) -> InsertionOrderedSet['_Variable']:
         if self._free_type_variables_cached is None:
             self._free_type_variables_cached = self._free_type_variables()
         return self._free_type_variables_cached
@@ -172,8 +172,8 @@ class _Variable(Type, abc.ABC):
             return result  # type: ignore
         return self
 
-    def _free_type_variables(self) -> OrderedSet['_Variable']:
-        return OrderedSet({self})
+    def _free_type_variables(self) -> InsertionOrderedSet['_Variable']:
+        return InsertionOrderedSet([self])
 
     def __lt__(self, other) -> bool:
         """Comparator for storing variables in OrderedSets."""
@@ -628,8 +628,8 @@ class TypeSequence(Type, Iterable['StackItemType']):
                 '{} must be a sequence type, not {}'.format(self, supertype)
             )
 
-    def _free_type_variables(self) -> OrderedSet['_Variable']:
-        ftv: OrderedSet[_Variable] = OrderedSet([])
+    def _free_type_variables(self) -> InsertionOrderedSet['_Variable']:
+        ftv: InsertionOrderedSet[_Variable] = InsertionOrderedSet([])
         for t in self:
             ftv |= t.free_type_variables()
         return ftv
@@ -697,12 +697,12 @@ class _Function(IndividualType):
     ) -> None:
         for ty in input_types[1:]:
             if ty.kind != IndividualKind():
-                raise concat.typeheck.TypeError(
+                raise concat.typecheck.TypeError(
                     f'{ty} must be an individual type'
                 )
         for ty in output_types[1:]:
             if ty.kind != IndividualKind():
-                raise concat.typeheck.TypeError(
+                raise concat.typecheck.TypeError(
                     f'{ty} must be an individual type'
                 )
         super().__init__()
@@ -713,10 +713,11 @@ class _Function(IndividualType):
         return iter((self.input, self.output))
 
     def generalized_wrt(self, gamma: 'Environment') -> Type:
+        parameters = list(
+            self.free_type_variables() - gamma.free_type_variables()
+        )
         return ObjectType(
-            IndividualVariable(),
-            {'__call__': self,},
-            list(self.free_type_variables() - gamma.free_type_variables()),
+            IndividualVariable(), {'__call__': self,}, parameters,
         )
 
     def __hash__(self) -> int:
@@ -828,7 +829,7 @@ class _Function(IndividualType):
         )(sub)
         return sub
 
-    def _free_type_variables(self) -> OrderedSet['_Variable']:
+    def _free_type_variables(self) -> InsertionOrderedSet['_Variable']:
         return (
             self.input.free_type_variables()
             | self.output.free_type_variables()
@@ -962,8 +963,8 @@ StackItemType = Union[SequenceVariable, IndividualType]
 
 def free_type_variables_of_mapping(
     attributes: Mapping[str, Type]
-) -> OrderedSet[_Variable]:
-    ftv: OrderedSet[_Variable] = OrderedSet([])
+) -> InsertionOrderedSet[_Variable]:
+    ftv: InsertionOrderedSet[_Variable] = InsertionOrderedSet([])
     for sigma in attributes.values():
         ftv |= sigma.free_type_variables()
     return ftv
@@ -1178,16 +1179,12 @@ class ObjectType(IndividualType):
                 )
             )
 
-        # To support higher-rank polymorphism, polymorphic types are subtypes
-        # of their instances.
-
         if isinstance(supertype, StackEffect):
             subtyping_assumptions.append((self, supertype))
 
-            instantiated_self = self.instantiate()
             # We know instantiated_self is not a type constructor here, so
             # there's no need to worry about variable binding
-            return instantiated_self.get_type_of_attribute(
+            return self.get_type_of_attribute(
                 '__call__'
             ).constrain_and_bind_supertype_variables(
                 supertype, rigid_variables, subtyping_assumptions
@@ -1349,7 +1346,7 @@ class ObjectType(IndividualType):
 
     def get_type_of_attribute(self, attribute: str) -> IndividualType:
         if attribute not in self._attributes:
-            raise AttributeError(self, attribute)
+            raise concat.typecheck.AttributeError(self, attribute)
 
         self_sub = concat.typecheck.Substitutions({self._self_type: self})
 
@@ -1367,7 +1364,7 @@ class ObjectType(IndividualType):
             None if self._head is self else self._head,
         )
 
-    def _free_type_variables(self) -> OrderedSet[_Variable]:
+    def _free_type_variables(self) -> InsertionOrderedSet[_Variable]:
         ftv = free_type_variables_of_mapping(self.attributes)
         for arg in self.type_arguments:
             ftv |= arg.free_type_variables()
@@ -1835,8 +1832,8 @@ class _PythonOverloadedType(Type):
     def attributes(self) -> Mapping[str, 'Type']:
         raise TypeError('py_overloaded does not have attributes')
 
-    def _free_type_variables(self) -> OrderedSet['_Variable']:
-        return OrderedSet([])
+    def _free_type_variables(self) -> InsertionOrderedSet['_Variable']:
+        return InsertionOrderedSet([])
 
     def apply_substitution(
         self, _: 'concat.typecheck.Substitutions'
@@ -2086,8 +2083,8 @@ class ForwardTypeReference(Type):
             'Supertypes of type are not known before its definition'
         )
 
-    def _free_type_variables(self) -> OrderedSet[_Variable]:
-        return OrderedSet([])
+    def _free_type_variables(self) -> InsertionOrderedSet[_Variable]:
+        return InsertionOrderedSet([])
 
     @property
     def kind(self) -> Kind:
