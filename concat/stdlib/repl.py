@@ -77,8 +77,10 @@ def read_form(stack: List[object], stash: List[object]) -> None:
     string = _read_until_complete_line()
     try:
         ast = _parse('$(' + string + ')')
+        ast.assert_no_parse_errors()
     except concat.parser_combinators.ParseError:
         ast = _parse(string)
+        ast.assert_no_parse_errors()
         concat.typecheck.check(caller_globals['@@extra_env'], ast.children)
         # I don't think it makes sense for us to get multiple children if what
         # we got was a statement, so we assert.

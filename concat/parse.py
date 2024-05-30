@@ -57,10 +57,14 @@ if TYPE_CHECKING:
 
 
 class Node(abc.ABC):
-    @abc.abstractmethod
     def __init__(self):
         self.location = (0, 0)
         self.children: Iterable[Node] = []
+
+    def assert_no_parse_errors(self) -> None:
+        failures = list(self.parsing_failures)
+        if failures:
+            raise concat.parser_combinators.ParseError(failures)
 
     @property
     def parsing_failures(

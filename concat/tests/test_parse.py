@@ -23,6 +23,9 @@ class TestSmallExamples(unittest.TestCase):
                     >> concat.parse.token('NAME').many()
                     >> concat.parse.token('RPAR')
                 )
+                parsers['type-variable'] = concat.parser_combinators.fail(
+                    'not implemented'
+                )
 
                 # for example programs, we only test acceptance
 
