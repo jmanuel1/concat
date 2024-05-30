@@ -1,5 +1,4 @@
 from typing import (
-    Any,
     Callable,
     Iterator,
     List,
@@ -10,7 +9,6 @@ from typing import (
     TypeVar,
     Union,
     overload,
-    cast,
 )
 from typing_extensions import Never
 
@@ -61,7 +59,7 @@ class LinkedList(Sequence[_T_co]):
     def __len__(self) -> int:
         return self._length
 
-    def __add__(self, other: object) -> 'LinkedList[Any]':
+    def __add__(self, other: 'LinkedList[_T_co]') -> 'LinkedList[_T_co]':
         if not isinstance(other, LinkedList):
             return NotImplemented
         for el in reversed(list(self)):
@@ -96,9 +94,12 @@ class LinkedList(Sequence[_T_co]):
     def __repr__(self) -> str:
         return f'LinkedList.from_iterable({list(self)!r})'
 
+    # "supertype defines the argument type as object"
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, LinkedList):
             return NotImplemented
+        if len(self) != len(other):
+            return False
         for a, b in zip(self, other):
             if a != b:
                 return False
