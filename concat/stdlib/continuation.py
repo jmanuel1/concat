@@ -1,11 +1,7 @@
 from concat.common_types import ConcatFunction
 from concat.typecheck.types import (
-    ForAll,
     IndividualVariable,
     SequenceVariable,
-    StackEffect,
-    TypeSequence,
-    continuation_monad_type,
 )
 from typing import Any, Callable, Generic, List, NoReturn, Type, TypeVar, cast
 
@@ -135,12 +131,12 @@ def map_cont(stack: List[Any], stash: List[Any]) -> None:
         cast(ContinuationMonad, stack.pop()),
     )
 
-    def python_function(b: _B) -> _C:
+    def python_function(b: Any) -> Any:
         stack.append(b)
         f(stack, stash)
         return stack.pop()
 
-    result = cont.map(f)
+    result = cont.map(python_function)
     stack.append(result)
 
 
@@ -156,7 +152,7 @@ def bind_cont(stack: List[object], stash: List[object]) -> None:
         f(stack, stash)
         return cast(ContinuationMonad[_R, _C], stack.pop())
 
-    result = cont.bind(python_function)
+    result: ContinuationMonad = cont.bind(python_function)
     stack.append(result)
 
 
@@ -173,5 +169,5 @@ def cont_from_cps(stack: List[object], stash: List[object]) -> None:
         concat_run(stack, stash)
         return cast(_R, stack.pop())
 
-    result = ContinuationMonad(python_run)
+    result: ContinuationMonad = ContinuationMonad(python_run)
     stack.append(result)
