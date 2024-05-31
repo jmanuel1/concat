@@ -2,7 +2,7 @@
 from concat.common_types import ConcatFunction
 import concat.stdlib.ski
 from concat.typecheck.types import (
-    ForAll,
+    GenericType,
     IndividualVariable,
     ObjectType,
     SequenceVariable,
@@ -43,7 +43,7 @@ _x = IndividualVariable()
 _y = IndividualVariable()
 _z = IndividualVariable()
 globals()['@@types'] = {
-    'getitem': ForAll(
+    'getitem': GenericType(
         [_stack_type_var, _x, _y],
         StackEffect(
             TypeSequence([_stack_type_var, subscriptable_type[_x, _y], _x,]),
@@ -69,7 +69,7 @@ globals()['@@types'] = {
         },
         [_rest_var, _y, _z],
     ),
-    'to_dict': ForAll(
+    'to_dict': GenericType(
         [_stack_type_var, _x, _y],
         StackEffect(
             TypeSequence(
@@ -83,7 +83,7 @@ globals()['@@types'] = {
             TypeSequence([_stack_type_var, dict_type[_x, _y]]),
         ),
     ),
-    'to_slice': ForAll(
+    'to_slice': GenericType(
         [_stack_type_var, _x, _y, _z],
         StackEffect(
             TypeSequence(

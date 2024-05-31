@@ -11,18 +11,16 @@ from concat.typecheck.types import (
     StackEffect,
     Type as ConcatType,
     TypeSequence,
-    int_type,
-    dict_type,
+    addable_type,
     ellipsis_type,
-    file_type,
     float_type,
-    list_type,
-    none_type,
+    get_object_type,
+    int_type,
     no_return_type,
+    none_type,
     not_implemented_type,
-    object_type,
+    optional_type,
     py_function_type,
-    str_type,
 )
 import concat.typecheck.preamble_types
 import concat.astutils
@@ -39,6 +37,10 @@ from hypothesis.strategies import (
     sampled_from,
     text,
 )
+
+
+default_env = concat.typecheck.load_builtins_and_preamble()
+default_env.resolve_forward_references()
 
 
 def lex_string(string: str) -> List[concat.lex.Token]:
@@ -84,14 +86,14 @@ class TestTypeChecker(unittest.TestCase):
     def test_add_operator_inference(self, a: int, b: int) -> None:
         try_prog = '{!r} {!r} +\n'.format(a, b)
         tree = parse(try_prog)
-        _, type, _ = concat.typecheck.infer(
-            concat.typecheck.Environment(
-                {'+': concat.typecheck.preamble_types.types['+']}
-            ),
+        sub, type, _ = concat.typecheck.infer(
+            concat.typecheck.Environment({'+': default_env['+']}),
             tree.children,
             is_top_level=True,
         )
-        note(str(type))
+        note(repr(type))
+        note(str(sub))
+        note(repr(default_env['+']))
         self.assertEqual(
             type, StackEffect(TypeSequence([]), TypeSequence([int_type]))
         )
@@ -101,7 +103,7 @@ class TestTypeChecker(unittest.TestCase):
         tree = parse(try_prog)
         _, type, _ = concat.typecheck.infer(
             concat.typecheck.Environment(
-                concat.typecheck.preamble_types.types
+                {**default_env, **concat.typecheck.preamble_types.types,}
             ),
             tree.children,
             is_top_level=True,
@@ -165,7 +167,7 @@ class TestTypeChecker(unittest.TestCase):
             )
         )
         env = concat.typecheck.Environment(
-            concat.typecheck.preamble_types.types
+            {**default_env, **concat.typecheck.preamble_types.types,}
         )
         concat.typecheck.infer(env, tree.children, None, True)
         # If we get here, we passed
@@ -174,7 +176,9 @@ class TestTypeChecker(unittest.TestCase):
         """Test that the type checker properly checks casts."""
         tree = parse('"str" cast (int)')
         _, type, _ = concat.typecheck.infer(
-            Environment(concat.typecheck.preamble_types.types),
+            Environment(
+                {**default_env, **concat.typecheck.preamble_types.types}
+            ),
             tree.children,
             is_top_level=True,
         )
@@ -199,8 +203,8 @@ class TestStackEffectParser(unittest.TestCase):
             TypeSequence([_a_bar, _b]), TypeSequence([_a_bar])
         ),
         'a:object b:object -- b a': StackEffect(
-            TypeSequence([_a_bar, object_type, object_type,]),
-            TypeSequence([_a_bar, *[object_type] * 2]),
+            TypeSequence([_a_bar, get_object_type(), get_object_type(),]),
+            TypeSequence([_a_bar, *[get_object_type()] * 2]),
         ),
         'a:`t -- a a': StackEffect(
             TypeSequence([_a_bar, _b]), TypeSequence([_a_bar, _b, _b])
@@ -232,9 +236,13 @@ class TestStackEffectParser(unittest.TestCase):
                     effect = build_parsers()['stack-effect-type'].parse(tokens)
                 except concat.parser_combinators.ParseError as e:
                     self.fail(f'could not parse {effect_string}\n{e}')
-                env = Environment(concat.typecheck.preamble_types.types)
+                env = Environment(
+                    {**default_env, **concat.typecheck.preamble_types.types}
+                )
                 actual = effect.to_type(env)[0].generalized_wrt(env)
                 expected = self.examples[example].generalized_wrt(env)
+                print(str(actual))
+                print(str(expected))
                 self.assertEqual(
                     actual, expected,
                 )
@@ -306,19 +314,19 @@ class TestSubtyping(unittest.TestCase):
     def test_stack_effect_subtyping(self, type1, type2) -> None:
         fun1 = StackEffect(TypeSequence([type1]), TypeSequence([type2]))
         fun2 = StackEffect(
-            TypeSequence([no_return_type]), TypeSequence([object_type])
+            TypeSequence([no_return_type]), TypeSequence([get_object_type()])
         )
-        self.assertLessEqual(fun1, fun2)
+        self.assertTrue(fun1.is_subtype_of(fun2))
 
     @given(from_type(IndividualType))
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_no_return_is_bottom_type(self, type) -> None:
-        self.assertLessEqual(no_return_type, type)
+        self.assertTrue(no_return_type.is_subtype_of(type))
 
     @given(from_type(IndividualType))
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_object_is_top_type(self, type) -> None:
-        self.assertLessEqual(type, object_type)
+        self.assertTrue(type.is_subtype_of(get_object_type()))
 
     __attributes_generator = dictionaries(
         text(max_size=25), from_type(IndividualType), max_size=5  # type: ignore
@@ -337,7 +345,7 @@ class TestSubtyping(unittest.TestCase):
         x1, x2 = IndividualVariable(), IndividualVariable()
         object1 = ObjectType(x1, {**other_attributes, **attributes})
         object2 = ObjectType(x2, attributes)
-        self.assertLessEqual(object1, object2)
+        self.assertTrue(object1.is_subtype_of(object2))
 
     @given(__attributes_generator, __attributes_generator)
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
@@ -347,14 +355,14 @@ class TestSubtyping(unittest.TestCase):
         x1, x2 = IndividualVariable(), IndividualVariable()
         object1 = ClassType(x1, {**other_attributes, **attributes})
         object2 = ClassType(x2, attributes)
-        self.assertLessEqual(object1, object2)
+        self.assertTrue(object1.is_subtype_of(object2))
 
     @given(from_type(StackEffect))
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_object_subtype_of_stack_effect(self, effect) -> None:
         x = IndividualVariable()
         object = ObjectType(x, {'__call__': effect})
-        self.assertLessEqual(object, effect)
+        self.assertTrue(object.is_subtype_of(effect))
 
     @given(from_type(IndividualType), from_type(IndividualType))
     @settings(
@@ -367,7 +375,7 @@ class TestSubtyping(unittest.TestCase):
         x = IndividualVariable()
         py_function = py_function_type[TypeSequence([type1]), type2]
         object = ObjectType(x, {'__call__': py_function})
-        self.assertLessEqual(object, py_function)
+        self.assertTrue(object.is_subtype_of(py_function))
 
     @given(from_type(StackEffect))
     def test_class_subtype_of_stack_effect(self, effect) -> None:
@@ -377,7 +385,7 @@ class TestSubtyping(unittest.TestCase):
             TypeSequence([*effect.input, x]), effect.output
         )
         cls = ClassType(x, {'__init__': unbound_effect})
-        self.assertLessEqual(cls, effect)
+        self.assertTrue(cls.is_subtype_of(effect))
 
     @given(from_type(IndividualType), from_type(IndividualType))
     @settings(
@@ -391,4 +399,19 @@ class TestSubtyping(unittest.TestCase):
         py_function = py_function_type[TypeSequence([type1]), type2]
         unbound_py_function = py_function_type[TypeSequence([x, type1]), type2]
         cls = ClassType(x, {'__init__': unbound_py_function})
-        self.assertLessEqual(cls, py_function)
+        self.assertTrue(cls.is_subtype_of(py_function))
+
+    @given(from_type(IndividualType))
+    def test_none_subtype_of_optional(self, ty: IndividualType) -> None:
+        opt_ty = optional_type[
+            ty,
+        ]
+        self.assertTrue(none_type.is_subtype_of(opt_ty))
+
+    @given(from_type(IndividualType))
+    def test_type_subtype_of_optional(self, ty: IndividualType) -> None:
+        opt_ty = optional_type[
+            ty,
+        ]
+        note(str(ty))
+        self.assertTrue(ty.is_subtype_of(opt_ty))

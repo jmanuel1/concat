@@ -1,38 +1,38 @@
-from concat.lex import Token
 from concat.typecheck.types import (
     IndividualType,
     IndividualVariable,
     ObjectType,
+    PythonFunctionType,
     SequenceVariable,
     StackEffect,
     TypeSequence,
+    none_type,
+    optional_type,
+    py_function_type,
 )
-from hypothesis.strategies import (
+from hypothesis.strategies import (  # type: ignore
     SearchStrategy,
     builds,
     dictionaries,
     from_type,
-    just,
     lists,
     none,
     recursive,
     register_type_strategy,
     text,
+    tuples,
 )
-from typing import (
-    Iterable,
-    Sequence,
-    Type,
-)
+from typing import Type
 
 
 def _type_sequence_strategy(
     individual_type_strategy: SearchStrategy[IndividualType],
+    no_rest_var: bool = False,
 ) -> SearchStrategy[TypeSequence]:
     return builds(
         lambda maybe_seq_var, rest: TypeSequence(maybe_seq_var + rest),
-        lists(from_type(SequenceVariable), max_size=1),
-        lists(individual_type_strategy, max_size=10),
+        lists(from_type(SequenceVariable), max_size=0 if no_rest_var else 1),
+        lists(individual_type_strategy, max_size=5),
     )
 
 
@@ -44,27 +44,15 @@ def _object_type_strategy(
             ObjectType,
             attributes=dictionaries(text(), individual_type_strategy),
             nominal_supertypes=lists(individual_type_strategy),
-            _type_arguments=lists(
-                from_type(SequenceVariable)
-                | individual_type_strategy
-                | _type_sequence_strategy(individual_type_strategy)
-            ),
             _head=none(),
-            _other_kwargs=just({}),
         ),
         lambda children: builds(
             ObjectType,
             attributes=dictionaries(text(), individual_type_strategy),
             nominal_supertypes=lists(individual_type_strategy),
-            _type_arguments=lists(
-                from_type(SequenceVariable)
-                | individual_type_strategy
-                | _type_sequence_strategy(individual_type_strategy)
-            ),
             _head=children,
-            _other_kwargs=just({}),
         ),
-        max_leaves=50,
+        max_leaves=10,
     )
 
 
@@ -93,6 +81,19 @@ _individual_type_strategy = recursive(
     )
     | _mark_individual_type_strategy(
         _object_type_strategy(children), ObjectType
+    )
+    | _mark_individual_type_strategy(
+        builds(
+            lambda args: py_function_type[args],
+            tuples(
+                _type_sequence_strategy(children, no_rest_var=True), children
+            ),
+        ),
+        PythonFunctionType,
+    )
+    | _mark_individual_type_strategy(
+        builds(lambda args: optional_type[args], tuples(children),),
+        type(optional_type[none_type,]),
     ),
     max_leaves=50,
 )

@@ -7,7 +7,7 @@ class bool:
   ()
 
 class int:
-  def __add__(--) @cast (py_function[(object), str]):
+  def __add__(--) @cast (py_function[(object), int]):
     ()
 
   def __invert__(--) @cast (py_function[(), int]):

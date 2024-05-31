@@ -1,0 +1,88 @@
+def to_list(*rest_var i:iterable[`a_var] -- *rest_var l:list[`a_var]):
+  ()
+
+def py_call(*rest_var kwargs:iterable[object] args:iterable[object] f:py_function[(*seq_var), `a_var] -- *rest_var res:`a_var):
+  ()
+
+def nip(*rest_var a:object b:`a_var -- *rest_var b:`a_var):
+  ()
+
+def nip_2(*rest_var a:object b:object c:`a_var -- *rest_var c:`a_var):
+  ()
+
+def drop(*rest_var a:object -- *rest_var):
+  ()
+
+def open(*rest_var kwargs:dict[str, object] path:str -- *rest_var f:file):
+  ()
+
+def to_int(*stack_type_var base:Optional[int] x:object -- *stack_type_var i:int):
+  ()
+
+# Addition type rules:
+# Mypy allows specifying a restrictive operand type and leaves the whole
+# NotImplemented thing up to the programmer. See linked_list.py for an example.
+# FIXME: Make the rules safer... somehow
+# ... a b => (... {__add__(t) -> s} t)
+# ---
+# a b + => (... s)
+# ... a b => (... t {__radd__(t) -> s})
+# ---
+# a b + => (... s)
+# FIXME: Implement the second type rule
+def +(*stack_type_var x:addable[`other, `c_var] y:`other -- *stack_type_var res:`c_var):
+  ()
+
+# FIXME: We should check if the other operand supports __rsub__ if the
+# first operand doesn't support __sub__.
+def -(*stack_type_var x:subtractable[`b_var, `c_var] y:`b_var -- *stack_type_var res:`c_var):
+  ()
+
+def is(*stack_type_var a:object b:object -- *stack_type_var res:bool):
+  ()
+
+def and(*stack_type_var a:object b:object -- *stack_type_var res:bool):
+  ()
+
+def or(*stack_type_var a:object b:object -- *stack_type_var res:bool):
+  ()
+
+# TODO: I should be more careful here, since at least __eq__ can be
+# deleted, if I remember correctly.
+def ==(*stack_type_var a:object b:object -- *stack_type_var res:bool):
+  ()
+
+def False(*rest_var -- *rest_var false:bool):
+  ()
+
+def True(*rest_var -- *rest_var true:bool):
+  ()
+
+def loop(*rest_var body:(*rest_var -- *rest_var flag:bool) -- *rest_var):
+  ()
+
+# Rule 1: first operand has __ge__(type(second operand))
+# Rule 2: second operand has __le__(type(first operand))
+# FIXME: Implement the second type rule
+def >=(*stack_type_var a:geq_comparable[`b_var] b:`b_var -- *stack_type_var res:bool):
+  ()
+
+# Rule 1: first operand has __lt__(type(second operand))
+# Rule 2: second operand has __gt__(type(first operand))
+# FIXME: Implement the second type rule
+# Also look at Python's note about when reflected method get's priority.
+def <(*stack_type_var a:lt_comparable[`b_var] b:`b_var -- *stack_type_var res:bool):
+  ()
+
+# FIXME: Implement the second type rule
+def <=(*stack_type_var a:leq_comparable[`b_var] b:`b_var -- *stack_type_var res:bool):
+  ()
+
+def choose(*rest_var b:bool t:(*rest_var -- *seq_var) f:(*rest_var -- *seq_var) -- *seq_var):
+  ()
+
+def if_not(*rest_var b:bool body:(*rest_var -- *rest_var) -- *rest_var):
+  ()
+
+def if_then(*rest_var b:bool body:(*rest_var -- *rest_var) -- *rest_var):
+  ()

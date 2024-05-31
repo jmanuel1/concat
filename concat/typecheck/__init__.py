@@ -7,7 +7,6 @@ The type inference algorithm was originally based on the one described in
 
 import collections.abc
 from typing import (
-    Any,
     Callable,
     Dict,
     Generator,
@@ -23,7 +22,6 @@ from typing import (
     TypeVar,
     Union,
     cast,
-    overload,
 )
 from typing_extensions import Protocol
 
@@ -37,7 +35,12 @@ class _Substitutable(Protocol[_Result]):
 
 
 class Substitutions(collections.abc.Mapping, Mapping['_Variable', 'Type']):
-    def __init__(self, sub: Iterable[Tuple['_Variable', 'Type']] = {}) -> None:
+    def __init__(
+        self,
+        sub: Union[
+            Iterable[Tuple['_Variable', 'Type']], Mapping['_Variable', 'Type']
+        ] = {},
+    ) -> None:
         self._sub = dict(sub)
         for variable, ty in self._sub.items():
             if variable.kind != ty.kind:
@@ -86,8 +89,8 @@ class Substitutions(collections.abc.Mapping, Mapping['_Variable', 'Type']):
 
 
 from concat.typecheck.types import (
-    ForAll,
     ForwardTypeReference,
+    GenericType,
     GenericTypeKind,
     IndividualKind,
     IndividualType,
@@ -107,7 +110,6 @@ from concat.typecheck.types import (
     free_type_variables_of_mapping,
     get_list_type,
     get_object_type,
-    init_primitives,
     int_type,
     invertible_type,
     iterable_type,
@@ -227,25 +229,48 @@ class Environment(Dict[str, Type]):
             self[name] = t.resolve_forward_references()
 
 
+def load_builtins_and_preamble() -> Environment:
+    env = _check_stub(
+        pathlib.Path(__file__).with_name('py_builtins.cati'), is_builtins=True,
+    )
+    env = Environment(
+        {
+            **env,
+            **_check_stub(
+                pathlib.Path(__file__).with_name('preamble.cati'),
+                is_preamble=True,
+            ),
+        }
+    )
+    return env
+
+
 def check(
     environment: Environment,
     program: concat.astutils.WordsOrStatements,
     source_dir: str = '.',
     _should_check_bodies: bool = True,
     _should_load_builtins: bool = True,
+    _should_load_preamble: bool = True,
 ) -> Environment:
     import concat.typecheck.preamble_types
 
+    builtins_stub_env = Environment()
+    preamble_stub_env = Environment()
     if _should_load_builtins:
         builtins_stub_env = _check_stub(
             pathlib.Path(__file__).with_name('py_builtins.cati'),
             is_builtins=True,
         )
-    else:
-        builtins_stub_env = Environment()
+    if _should_load_preamble:
+        preamble_stub_env = _check_stub(
+            pathlib.Path(__file__).with_name('preamble.cati'),
+            is_preamble=True,
+        )
     environment = Environment(
         {
             **builtins_stub_env,
+            **preamble_stub_env,
             **concat.typecheck.preamble_types.types,
             **environment,
         }
@@ -391,7 +416,7 @@ def infer(
             elif isinstance(node, concat.parse.ListWordNode):
                 phi = S
                 collected_type = o
-                element_type: IndividualType = object_type
+                element_type: IndividualType = no_return_type
                 for item in node.list_children:
                     phi1, fun_type, _ = infer(
                         phi(gamma),
@@ -404,7 +429,7 @@ def infer(
                     collected_type = fun_type.output
                     # FIXME: Infer the type of elements in the list based on
                     # ALL the elements.
-                    if element_type == object_type:
+                    if element_type == no_return_type:
                         assert isinstance(collected_type[-1], IndividualType)
                         element_type = collected_type[-1]
                     # drop the top of the stack to use as the item
@@ -507,11 +532,8 @@ def infer(
                 # NOTE: To continue the "bidirectional" bent, we will require a ghg
                 # type annotation.
                 # TODO: Make the return types optional?
-                print('node', repr(node.stack_effect))
                 declared_type, _ = node.stack_effect.to_type(S(gamma))
-                print('type from node', declared_type)
                 declared_type = S(declared_type)
-                print('subbed', declared_type)
                 recursion_env = gamma.copy()
                 if not isinstance(declared_type, StackEffect):
                     raise TypeError(
@@ -531,13 +553,11 @@ def infer(
                     # the declared outputs. Thus, inferred_type.output should be a subtype
                     # declared_type.output.
                     try:
-                        S = inferred_type.output.constrain_and_bind_subtype_variables(
+                        S = inferred_type.output.constrain_and_bind_variables(
                             declared_type.output,
                             S(recursion_env).free_type_variables(),
                             [],
-                        )(
-                            S
-                        )
+                        )(S)
                     except TypeError as e:
                         message = (
                             'declared function type {} is not compatible with '
@@ -596,9 +616,11 @@ def infer(
                             node.value, type_of_name, type_of_name
                         )
                     )
-                constraint_subs = o1.constrain_and_bind_supertype_variables(
+                constraint_subs = o1.constrain_and_bind_variables(
                     type_of_name.input, set(), []
                 )
+                print(repr(o1))
+                print(constraint_subs)
                 current_subs = constraint_subs(current_subs)
                 current_effect = current_subs(
                     StackEffect(i1, type_of_name.output)
@@ -608,9 +630,9 @@ def infer(
                 # make sure any annotation matches the current stack
                 if quotation.input_stack_type is not None:
                     input_stack, _ = quotation.input_stack_type.to_type(gamma)
-                    S = o.constrain_and_bind_supertype_variables(
-                        input_stack, set(), []
-                    )(S)
+                    S = o.constrain_and_bind_variables(input_stack, set(), [])(
+                        S
+                    )
                 else:
                     input_stack = o
                 S1, (i1, o1), _ = infer(
@@ -645,7 +667,7 @@ def infer(
                             node.value, attr_function_type, attr_function_type
                         )
                     )
-                R = out_types.constrain_and_bind_supertype_variables(
+                R = out_types.constrain_and_bind_variables(
                     attr_function_type.input, set(), []
                 )
                 current_subs, current_effect = (
@@ -684,14 +706,25 @@ def infer(
                     initial_stack=TypeSequence([]),
                     check_bodies=check_bodies,
                 )
-                gamma[node.class_name] = ObjectType(
-                    IndividualVariable(),
-                    body_attrs,
-                    type_parameters,
-                    (),
-                    True,
-                    is_variadic=node.is_variadic,
+                # TODO: Introduce scopes into the environment object
+                body_attrs = Environment(
+                    {
+                        name: ty
+                        for name, ty in body_attrs.items()
+                        if name not in temp_gamma
+                    }
                 )
+                ty = ObjectType(
+                    self_type=IndividualVariable(),
+                    attributes=body_attrs,
+                    nominal_supertypes=(),
+                    nominal=True,
+                )
+                if type_parameters:
+                    ty = GenericType(
+                        type_parameters, ty, is_variadic=node.is_variadic
+                    )
+                gamma[node.class_name] = ty
                 gamma[node.class_name].set_internal_name(node.class_name)
             # elif isinstance(node, concat.parse.TypeAliasStatementNode):
             #     gamma[node.name], _ = node.type_node.to_type(gamma)
@@ -707,7 +740,7 @@ def infer(
 
 @functools.lru_cache(maxsize=None)
 def _check_stub_resolved_path(
-    path: pathlib.Path, is_builtins: bool = False
+    path: pathlib.Path, is_builtins: bool = False, is_preamble: bool = False
 ) -> 'Environment':
     try:
         source = path.read_text()
@@ -742,15 +775,16 @@ def _check_stub_resolved_path(
         str(path.parent),
         _should_check_bodies=False,
         _should_load_builtins=not is_builtins,
+        _should_load_preamble=not is_preamble and not is_builtins,
     )
 
 
 def _check_stub(
-    path: pathlib.Path, is_builtins: bool = False
+    path: pathlib.Path, is_builtins: bool = False, is_preamble: bool = False
 ) -> 'Environment':
     path = path.resolve()
     try:
-        return _check_stub_resolved_path(path, is_builtins)
+        return _check_stub_resolved_path(path, is_builtins, is_preamble)
     except StaticAnalysisError as e:
         e.set_path_if_missing(path)
         raise
@@ -829,7 +863,7 @@ class _GenericTypeNode(IndividualTypeNode):
             arg_as_type, env = arg.to_type(env)
             args.append(arg_as_type)
         generic_type, env = self._generic_type.to_type(env)
-        if isinstance(generic_type, ObjectType):
+        if isinstance(generic_type, GenericType):
             if generic_type.is_variadic:
                 args = (TypeSequence(args),)
             return generic_type[args], env
@@ -1073,7 +1107,7 @@ class _ForallTypeNode(TypeNode):
             parameter, temp_env = var.to_type(temp_env)
             variables.append(parameter)
         ty, _ = self._type.to_type(temp_env)
-        forall_type = ForAll(variables, ty)
+        forall_type = GenericType(variables, ty)
         return forall_type, env
 
 
@@ -1114,7 +1148,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
 
     @concat.parser_combinators.generate
     def named_type_parser() -> Generator:
-        name_token = yield concat.parse.token('NAME')
+        name_token = yield non_star_name_parser
         return NamedTypeNode(name_token.start, name_token.value)
 
     @concat.parser_combinators.generate
@@ -1174,6 +1208,8 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
             location = None
 
         return TypeSequenceNode(location, seq_var_parsed, i)
+
+    parsers['stack-effect-type-sequence'] = stack_effect_type_sequence_parser
 
     @concat.parser_combinators.generate
     def type_sequence_parser() -> Generator:
@@ -1268,8 +1304,6 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         individual_type_variable_parser,
     ).desc('individual type')
 
-    # TODO: Parse sequence type variables
-
     parsers['type'] = concat.parser_combinators.alt(
         # NOTE: There's a parsing ambiguity that might come back to bite me...
         forall_type_parser.desc('forall type'),
@@ -1277,6 +1311,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         concat.parse.token('LPAR')
         >> parsers.ref_parser('type-sequence')
         << concat.parse.token('RPAR'),
+        sequence_type_variable_parser,
     )
 
     parsers['type-sequence'] = type_sequence_parser.desc('type sequence')
@@ -1371,6 +1406,3 @@ def _ensure_type(
     if obj_name:
         known_stack_item_names[obj_name] = type
     return type, env
-
-
-init_primitives()
