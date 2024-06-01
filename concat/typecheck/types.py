@@ -73,6 +73,10 @@ class Type(abc.ABC):
 
     def free_type_variables(self) -> InsertionOrderedSet['_Variable']:
         if self._free_type_variables_cached is None:
+            # Break circular references. Recusring into the same type won't add
+            # new FTVs, so we can pretend there are none we finish finding the
+            # others.
+            self._free_type_variables_cached = InsertionOrderedSet([])
             self._free_type_variables_cached = self._free_type_variables()
         return self._free_type_variables_cached
 
@@ -893,7 +897,9 @@ class ObjectType(IndividualType):
     ) -> 'Substitutions':
         from concat.typecheck import Substitutions
 
-        if _contains_assumption(subtyping_assumptions, self, supertype):
+        if self is supertype or _contains_assumption(
+            subtyping_assumptions, self, supertype
+        ):
             return Substitutions()
 
         # obj <: `t, `t is not rigid
@@ -947,7 +953,7 @@ class ObjectType(IndividualType):
         if supertype._nominal:
             if supertype in self._nominal_supertypes:
                 return Substitutions()
-            if supertype != self and self._head != supertype._head:
+            if self._head is not supertype._head:
                 raise concat.typecheck.TypeError(
                     '{} is not a subtype of {}'.format(self, supertype)
                 )
@@ -955,18 +961,6 @@ class ObjectType(IndividualType):
         # BUG
         subtyping_assumptions.append((self, supertype))
 
-        # constraining to an optional type
-        if isinstance(supertype, _OptionalType):
-            try:
-                return self.constrain_and_bind_variables(
-                    none_type, rigid_variables, subtyping_assumptions
-                )
-            except concat.typecheck.TypeError:
-                return self.constrain_and_bind_variables(
-                    supertype.type_arguments[0],
-                    rigid_variables,
-                    subtyping_assumptions,
-                )
         # don't constrain the type arguments, constrain those based on
         # the attributes
         sub = Substitutions()
@@ -1120,7 +1114,7 @@ class PythonFunctionType(IndividualType):
         if self._forward_references_resolved:
             return self
         super().resolve_forward_references()
-        overloads = []
+        overloads: List[Tuple[Sequence[StackItemType], IndividualType]] = []
         for args, ret in overloads:
             overloads.append(
                 (
@@ -1167,7 +1161,7 @@ class PythonFunctionType(IndividualType):
             _iterable_to_str(self.input), self.output
         )
 
-    def get_type_of_attribute(self, attribute: str) -> IndividualType:
+    def get_type_of_attribute(self, attribute: str) -> Type:
         if attribute == '__call__':
             return self
         else:
