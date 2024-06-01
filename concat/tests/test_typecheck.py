@@ -307,7 +307,7 @@ class TestTypeEquality(unittest.TestCase):
 class TestSubtyping(unittest.TestCase):
     def test_int_not_subtype_of_float(self) -> None:
         """Differ from Reticulated Python: !(int <= float)."""
-        self.assertFalse(int_type <= float_type)
+        self.assertFalse(int_type.is_subtype_of(float_type))
 
     @given(from_type(IndividualType), from_type(IndividualType))
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
