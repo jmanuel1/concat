@@ -7,6 +7,7 @@ from concat.typecheck.types import (
     StackEffect,
     TypeSequence,
     none_type,
+    no_return_type,
     optional_type,
     py_function_type,
 )
@@ -15,6 +16,7 @@ from hypothesis.strategies import (  # type: ignore
     builds,
     dictionaries,
     from_type,
+    just,
     lists,
     none,
     recursive,
@@ -70,6 +72,9 @@ def _mark_individual_type_strategy(
 _individual_type_strategy = recursive(
     _mark_individual_type_strategy(
         from_type(IndividualVariable), IndividualVariable
+    )
+    | _mark_individual_type_strategy(
+        just(no_return_type), type(no_return_type)
     ),
     lambda children: _mark_individual_type_strategy(
         builds(

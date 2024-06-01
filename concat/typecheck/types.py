@@ -17,7 +17,7 @@ from typing import (
     cast,
     overload,
 )
-from typing_extensions import Literal, Self
+from typing_extensions import Self
 import abc
 import collections.abc
 
@@ -52,6 +52,10 @@ class Type(abc.ABC):
             return NotImplemented
         # QUESTION: Define == separately from is_subtype_of?
         return self.is_subtype_of(other) and other.is_subtype_of(self)
+
+    @abc.abstractmethod
+    def __hash__(self) -> int:
+        pass
 
     def get_type_of_attribute(self, name: str) -> 'Type':
         raise AttributeError(self, name)
@@ -124,6 +128,188 @@ class Type(abc.ABC):
         if self._internal_name is not None:
             return self._internal_name
         return super().__str__()
+
+
+class IndividualType(Type):
+    def instantiate(self) -> 'IndividualType':
+        return cast(IndividualType, super().instantiate())
+
+    @property
+    def kind(self) -> 'Kind':
+        return IndividualKind()
+
+    @property
+    def attributes(self) -> Mapping[str, Type]:
+        return {}
+
+
+class _Variable(Type, abc.ABC):
+    """Objects that represent type variables.
+
+    Every type variable object is assumed to be unique. Thus, fresh type
+    variables can be made simply by creating new objects. They can also be
+    compared by identity."""
+
+    def apply_substitution(
+        self, sub: 'concat.typecheck.Substitutions'
+    ) -> Union['IndividualType', '_Variable', 'TypeSequence']:
+        if self in sub:
+            result = sub[self]
+            assert self.kind == result.kind, f'{self!r} --> {result!r}'
+            return result  # type: ignore
+        return self
+
+    def _free_type_variables(self) -> InsertionOrderedSet['_Variable']:
+        return InsertionOrderedSet([self])
+
+    def __lt__(self, other) -> bool:
+        """Comparator for storing variables in OrderedSets."""
+        return id(self) < id(other)
+
+    def __gt__(self, other) -> bool:
+        """Comparator for storing variables in OrderedSets."""
+        return id(self) > id(other)
+
+    def __eq__(self, other) -> bool:
+        return id(self) == id(other)
+
+
+class IndividualVariable(_Variable, IndividualType):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def constrain_and_bind_variables(
+        self,
+        supertype: Type,
+        rigid_variables: AbstractSet['_Variable'],
+        subtyping_assumptions: List[Tuple[IndividualType, IndividualType]],
+    ) -> 'Substitutions':
+        from concat.typecheck import Substitutions
+
+        if self is supertype or supertype is get_object_type():
+            return Substitutions()
+        if supertype.kind != IndividualKind():
+            raise concat.typecheck.TypeError(
+                '{} must be an individual type: expected {}'.format(
+                    supertype, self
+                )
+            )
+        mapping: Mapping[_Variable, Type]
+        if (
+            isinstance(supertype, IndividualVariable)
+            and supertype not in rigid_variables
+        ):
+            mapping = {supertype: self}
+            return Substitutions(mapping)
+        if isinstance(supertype, _OptionalType):
+            try:
+                return self.constrain_and_bind_variables(
+                    supertype.type_arguments[0],
+                    rigid_variables,
+                    subtyping_assumptions,
+                )
+            except concat.typecheck.TypeError:
+                return self.constrain_and_bind_variables(
+                    none_type, rigid_variables, subtyping_assumptions
+                )
+        if self in rigid_variables:
+            raise concat.typecheck.TypeError(
+                f'{self} is considered fixed here and cannot become a subtype of {supertype}'
+            )
+        mapping = {self: supertype}
+        return Substitutions(mapping)
+
+    # __hash__ by object identity is used since that's the only way for two
+    # type variables to be ==.
+    def __hash__(self) -> int:
+        return hash(id(self))
+
+    def __str__(self) -> str:
+        return '`t_{}'.format(id(self))
+
+    def __repr__(self) -> str:
+        return '<individual variable {}>'.format(id(self))
+
+    def apply_substitution(
+        self, sub: 'concat.typecheck.Substitutions'
+    ) -> IndividualType:
+        return cast(IndividualType, super().apply_substitution(sub))
+
+    @property
+    def attributes(self) -> NoReturn:
+        raise concat.typecheck.TypeError(
+            '{} is an individual type variable, so its attributes are unknown'.format(
+                self
+            )
+        )
+
+    def resolve_forward_references(self) -> 'IndividualVariable':
+        return self
+
+    @property
+    def kind(self) -> 'Kind':
+        return IndividualKind()
+
+
+class SequenceVariable(_Variable):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def __str__(self) -> str:
+        return '*t_{}'.format(id(self))
+
+    def __hash__(self) -> int:
+        return hash(id(self))
+
+    def constrain_and_bind_variables(
+        self,
+        supertype: Type,
+        rigid_variables: AbstractSet['_Variable'],
+        subtyping_assumptions: List[Tuple['IndividualType', 'IndividualType']],
+    ) -> 'Substitutions':
+        from concat.typecheck import Substitutions
+
+        if not isinstance(supertype, (SequenceVariable, TypeSequence)):
+            raise concat.typecheck.TypeError(
+                '{} must be a sequence type, not {}'.format(self, supertype)
+            )
+        if (
+            isinstance(supertype, SequenceVariable)
+            and supertype not in rigid_variables
+        ):
+            return Substitutions([(supertype, self)])
+        if self in rigid_variables:
+            raise concat.typecheck.TypeError(
+                '{} is fixed here and cannot become a subtype of another type'.format(
+                    self
+                )
+            )
+        # occurs check
+        if self is not supertype and self in supertype.free_type_variables():
+            raise concat.typecheck.TypeError(
+                '{} cannot be a subtype of {} because it appears in {}'.format(
+                    self, supertype, supertype
+                )
+            )
+        return Substitutions([(self, supertype)])
+
+    def get_type_of_attribute(self, name: str) -> NoReturn:
+        raise concat.typecheck.TypeError(
+            'the sequence type {} does not hold attributes'.format(self)
+        )
+
+    @property
+    def attributes(self) -> NoReturn:
+        raise concat.typecheck.TypeError(
+            'the sequence type {} does not hold attributes'.format(self)
+        )
+
+    def resolve_forward_references(self) -> 'SequenceVariable':
+        return self
+
+    @property
+    def kind(self) -> 'Kind':
+        return SequenceKind()
 
 
 class GenericType(Type):
@@ -225,6 +411,20 @@ class GenericType(Type):
             supertype_instance, rigid_variables, subtyping_assumptions
         )
 
+    def __hash__(self) -> int:
+        # QUESTION: Is it better for perf to compute de Bruijn indices instead
+        # of using substitution?
+        vars_for_hash: List[_Variable] = []
+        for p in self._type_parameters:
+            if p.kind == IndividualKind():
+                vars_for_hash.append(self._individual_var_for_hash)
+            else:
+                vars_for_hash.append(self._sequence_var_for_hash)
+        return hash(self[vars_for_hash])
+
+    _individual_var_for_hash = IndividualVariable()
+    _sequence_var_for_hash = SequenceVariable()
+
     def apply_substitution(self, sub: 'Substitutions') -> 'GenericType':
         from concat.typecheck import Substitutions
 
@@ -246,191 +446,6 @@ class GenericType(Type):
 
     def _free_type_variables(self) -> InsertionOrderedSet['_Variable']:
         return self._body.free_type_variables() - set(self._type_parameters)
-
-
-class IndividualType(Type, abc.ABC):
-    def instantiate(self) -> 'IndividualType':
-        return cast(IndividualType, super().instantiate())
-
-    @abc.abstractmethod
-    def apply_substitution(
-        self, sub: 'concat.typecheck.Substitutions',
-    ) -> 'IndividualType':
-        pass
-
-    @property
-    def kind(self) -> 'Kind':
-        return IndividualKind()
-
-    @property
-    def attributes(self) -> Mapping[str, Type]:
-        return {}
-
-
-class _Variable(Type, abc.ABC):
-    """Objects that represent type variables.
-
-    Every type variable object is assumed to be unique. Thus, fresh type
-    variables can be made simply by creating new objects. They can also be
-    compared by identity."""
-
-    def apply_substitution(
-        self, sub: 'concat.typecheck.Substitutions'
-    ) -> Union[IndividualType, '_Variable', 'TypeSequence']:
-        if self in sub:
-            result = sub[self]
-            assert self.kind == result.kind, f'{self!r} --> {result!r}'
-            return result  # type: ignore
-        return self
-
-    def _free_type_variables(self) -> InsertionOrderedSet['_Variable']:
-        return InsertionOrderedSet([self])
-
-    def __lt__(self, other) -> bool:
-        """Comparator for storing variables in OrderedSets."""
-        return id(self) < id(other)
-
-    def __gt__(self, other) -> bool:
-        """Comparator for storing variables in OrderedSets."""
-        return id(self) > id(other)
-
-    def __eq__(self, other) -> bool:
-        return id(self) == id(other)
-
-
-class IndividualVariable(_Variable, IndividualType):
-    def __init__(self) -> None:
-        super().__init__()
-
-    def constrain_and_bind_variables(
-        self,
-        supertype: Type,
-        rigid_variables: AbstractSet['_Variable'],
-        subtyping_assumptions: List[Tuple[IndividualType, IndividualType]],
-    ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
-        if self is supertype:
-            return Substitutions()
-        if supertype.kind != IndividualKind():
-            raise concat.typecheck.TypeError(
-                '{} must be an individual type: expected {}'.format(
-                    supertype, self
-                )
-            )
-        mapping: Mapping[_Variable, Type]
-        if (
-            isinstance(supertype, IndividualVariable)
-            and supertype not in rigid_variables
-        ):
-            mapping = {supertype: self}
-            return Substitutions(mapping)
-        if isinstance(supertype, _OptionalType):
-            try:
-                return self.constrain_and_bind_variables(
-                    supertype.type_arguments[0],
-                    rigid_variables,
-                    subtyping_assumptions,
-                )
-            except concat.typecheck.TypeError:
-                return self.constrain_and_bind_variables(
-                    none_type, rigid_variables, subtyping_assumptions
-                )
-        if self in rigid_variables:
-            raise concat.typecheck.TypeError(
-                f'{self} is considered fixed here and cannot become a subtype of {supertype}'
-            )
-        mapping = {self: supertype}
-        return Substitutions(mapping)
-
-    # __hash__ by object identity is used since that's the only way for two
-    # type variables to be ==.
-    def __hash__(self) -> int:
-        return hash(id(self))
-
-    def __str__(self) -> str:
-        return '`t_{}'.format(id(self))
-
-    def __repr__(self) -> str:
-        return '<individual variable {}>'.format(id(self))
-
-    def apply_substitution(
-        self, sub: 'concat.typecheck.Substitutions'
-    ) -> IndividualType:
-        return cast(IndividualType, super().apply_substitution(sub))
-
-    @property
-    def attributes(self) -> NoReturn:
-        raise concat.typecheck.TypeError(
-            '{} is an individual type variable, so its attributes are unknown'.format(
-                self
-            )
-        )
-
-    def resolve_forward_references(self) -> 'IndividualVariable':
-        return self
-
-    @property
-    def kind(self) -> 'Kind':
-        return IndividualKind()
-
-
-class SequenceVariable(_Variable):
-    def __init__(self) -> None:
-        super().__init__()
-
-    def __str__(self) -> str:
-        return '*t_{}'.format(id(self))
-
-    def __hash__(self) -> int:
-        return hash(id(self))
-
-    def constrain_and_bind_variables(
-        self,
-        supertype: Type,
-        rigid_variables: AbstractSet['_Variable'],
-        subtyping_assumptions: List[Tuple['IndividualType', 'IndividualType']],
-    ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
-        if not isinstance(supertype, (SequenceVariable, TypeSequence)):
-            raise concat.typecheck.TypeError(
-                '{} must be a sequence type, not {}'.format(self, supertype)
-            )
-        if self in rigid_variables:
-            raise concat.typecheck.TypeError(
-                '{} is fixed here and cannot become a subtype of another type'.format(
-                    self
-                )
-            )
-        # occurs check
-        if self is not supertype and self in supertype.free_type_variables():
-            raise concat.typecheck.TypeError(
-                '{} cannot be a subtype of {} because it appears in {}'.format(
-                    self, supertype, supertype
-                )
-            )
-        if isinstance(supertype, SequenceVariable):
-            return Substitutions([(supertype, self)])
-        return Substitutions([(self, supertype)])
-
-    def get_type_of_attribute(self, name: str) -> NoReturn:
-        raise concat.typecheck.TypeError(
-            'the sequence type {} does not hold attributes'.format(self)
-        )
-
-    @property
-    def attributes(self) -> NoReturn:
-        raise concat.typecheck.TypeError(
-            'the sequence type {} does not hold attributes'.format(self)
-        )
-
-    def resolve_forward_references(self) -> 'SequenceVariable':
-        return self
-
-    @property
-    def kind(self) -> 'Kind':
-        return SequenceKind()
 
 
 class TypeSequence(Type, Iterable['StackItemType']):
@@ -819,7 +834,7 @@ class ObjectType(IndividualType):
         self,
         self_type: IndividualVariable,
         attributes: Mapping[str, Type],
-        nominal_supertypes: Sequence[IndividualType] = (),
+        nominal_supertypes: Sequence[Type] = (),
         nominal: bool = False,
         _head: Optional['ObjectType'] = None,
     ) -> None:
@@ -832,7 +847,13 @@ class ObjectType(IndividualType):
 
         self._attributes = attributes
 
+        for t in nominal_supertypes:
+            if t.kind != IndividualKind():
+                raise concat.typecheck.TypeError(
+                    f'{t} must be an individual type, but has kind {t.kind}'
+                )
         self._nominal_supertypes = nominal_supertypes
+
         self._nominal = nominal
 
         self._head = _head or self
@@ -944,6 +965,10 @@ class ObjectType(IndividualType):
                     rigid_variables,
                     subtyping_assumptions + [(self, supertype)],
                 )
+        if isinstance(supertype, _NoReturnType):
+            raise concat.typecheck.TypeError(
+                f'No other type, in this case, {self}, is a subtype of {supertype}'
+            )
         if not isinstance(supertype, ObjectType):
             raise NotImplementedError(supertype)
         # every object type is a subtype of object_type
@@ -1037,11 +1062,11 @@ class ObjectType(IndividualType):
         return self._head
 
     @property
-    def nominal_supertypes(self) -> Sequence[IndividualType]:
+    def nominal_supertypes(self) -> Sequence[Type]:
         return self._nominal_supertypes
 
 
-# QUESTION: Should this exist, or should I use ObjectType
+# QUESTION: Should this exist, or should I use ObjectType?
 class ClassType(ObjectType):
     """The representation of types of classes, like in "Design and Evaluation of Gradual Typing for Python" (Vitousek et al. 2014)."""
 
@@ -1069,9 +1094,7 @@ class ClassType(ObjectType):
 class PythonFunctionType(IndividualType):
     def __init__(
         self,
-        _overloads: Sequence[
-            Tuple[Sequence[StackItemType], IndividualType]
-        ] = (),
+        _overloads: Sequence[Tuple[Type, Type]] = (),
         type_parameters: Sequence[_Variable] = (),
         _type_arguments: Sequence[Type] = (),
     ) -> None:
@@ -1089,16 +1112,30 @@ class PythonFunctionType(IndividualType):
                 f'Ill-formed Python function type with arguments {self._type_arguments}'
             )
         if self._arity == 0:
-            assert isinstance(self.input, collections.abc.Sequence)
-            assert self._type_arguments[1].kind == IndividualKind()
-        self._overloads = _overloads
+            i, o = _type_arguments
+            if i.kind != SequenceKind():
+                raise concat.typecheck.TypeError(
+                    f'{i} must be a sequence type, but has kind {i.kind}'
+                )
+            if o.kind != IndividualKind():
+                raise concat.typecheck.TypeError(
+                    f'{o} must be an individual type, but has kind {o.kind}'
+                )
+            for i, o in _overloads:
+                if i.kind != SequenceKind():
+                    raise concat.typecheck.TypeError(
+                        f'{i} must be a sequence type, but has kind {i.kind}'
+                    )
+                if o.kind != IndividualKind():
+                    raise concat.typecheck.TypeError(
+                        f'{o} must be an individual type, but has kind {o.kind}'
+                    )
+            self._overloads = _overloads
         self._hash: Optional[int] = None
 
     def _free_type_variables(self) -> InsertionOrderedSet[_Variable]:
         if self._arity == 0:
-            ftv = InsertionOrderedSet[_Variable]([])
-            for ty in self.input:
-                ftv |= ty.free_type_variables()
+            ftv = self.input.free_type_variables()
             ftv |= self.output.free_type_variables()
             return ftv
         else:
@@ -1114,11 +1151,11 @@ class PythonFunctionType(IndividualType):
         if self._forward_references_resolved:
             return self
         super().resolve_forward_references()
-        overloads: List[Tuple[Sequence[StackItemType], IndividualType]] = []
+        overloads: List[Tuple[Type, Type]] = []
         for args, ret in overloads:
             overloads.append(
                 (
-                    [arg.resolve_forward_references() for arg in args],
+                    args.resolve_forward_references(),
                     ret.resolve_forward_references(),
                 )
             )
@@ -1135,10 +1172,7 @@ class PythonFunctionType(IndividualType):
             return False
         if isinstance(self.kind, GenericTypeKind):
             return True
-        return (
-            tuple(self.input) == tuple(other.input)
-            and self.output == other.output
-        )
+        return self.input == other.input and self.output == other.output
 
     def __hash__(self) -> int:
         if self._hash is None:
@@ -1172,7 +1206,7 @@ class PythonFunctionType(IndividualType):
         return {**super().attributes, '__call__': self}
 
     def __getitem__(
-        self, arguments: Tuple[TypeSequence, IndividualType]
+        self, arguments: Tuple[Type, Type]
     ) -> 'PythonFunctionType':
         if self._arity != 2:
             raise concat.typecheck.TypeError(f'{self} is not a generic type')
@@ -1200,8 +1234,8 @@ class PythonFunctionType(IndividualType):
         if self._arity == 0:
             inp = sub(TypeSequence(self.input))
             out = sub(self.output)
-            overloads: Sequence[Tuple[TypeSequence, IndividualType]] = [
-                (sub(TypeSequence(i)), sub(o)) for i, o in self._overloads
+            overloads: Sequence[Tuple[Type, Type]] = [
+                (sub(i), sub(o)) for i, o in self._overloads
             ]
             return PythonFunctionType(
                 _type_arguments=(inp, out), _overloads=overloads
@@ -1209,17 +1243,13 @@ class PythonFunctionType(IndividualType):
         return self
 
     @property
-    def input(self) -> Sequence[StackItemType]:
+    def input(self) -> Type:
         assert self._arity == 0
-        if isinstance(self._type_arguments[0], SequenceVariable):
-            return (self._type_arguments[0],)
-        assert not isinstance(self._type_arguments[0], IndividualType)
-        return tuple(self._type_arguments[0])
+        return self._type_arguments[0]
 
     @property
-    def output(self) -> IndividualType:
+    def output(self) -> Type:
         assert self._arity == 0
-        assert self._type_arguments[1].kind == IndividualKind()
         return self._type_arguments[1]
 
     def select_overload(
@@ -1240,9 +1270,7 @@ class PythonFunctionType(IndividualType):
             'no overload of {} matches types {}'.format(self, input_types)
         )
 
-    def with_overload(
-        self, input: Sequence[StackItemType], output: IndividualType
-    ) -> 'PythonFunctionType':
+    def with_overload(self, input: Type, output: Type) -> 'PythonFunctionType':
         return PythonFunctionType(
             _type_arguments=self._type_arguments,
             _overloads=[*self._overloads, (input, output)],
@@ -1275,6 +1303,8 @@ class PythonFunctionType(IndividualType):
                 f'{self} has kind {self.kind} but {supertype} has kind {supertype.kind}'
             )
         if self.kind == IndividualKind():
+            if supertype is get_object_type():
+                return Substitutions()
             if (
                 isinstance(supertype, IndividualVariable)
                 and supertype not in rigid_variables
@@ -1347,13 +1377,16 @@ class _PythonOverloadedType(Type):
             raise concat.typecheck.TypeError(
                 'py_overloaded must be applied to at least one argument'
             )
-        for arg in args:
+        fun_type = args[0]
+        if not isinstance(fun_type, PythonFunctionType):
+            raise concat.typecheck.TypeError(
+                'Arguments to py_overloaded must be Python function types'
+            )
+        for arg in args[1:]:
             if not isinstance(arg, PythonFunctionType):
                 raise concat.typecheck.TypeError(
                     'Arguments to py_overloaded must be Python function types'
                 )
-        fun_type = args[0]
-        for arg in args[1:]:
             fun_type = fun_type.with_overload(arg.input, arg.output)
         return fun_type
 
@@ -1401,13 +1434,13 @@ class _PythonOverloadedType(Type):
 py_overloaded_type = _PythonOverloadedType()
 
 
-class _NoReturnType(ObjectType):
-    def __init__(self) -> None:
-        x = IndividualVariable()
-        super().__init__(x, {})
+class _NoReturnType(IndividualType):
+    def constrain_and_bind_variables(
+        self, supertype, rigid_variables, subtyping_assumptions
+    ) -> 'Substitutions':
+        from concat.typecheck import Substitutions
 
-    def is_subtype_of(self, _: Type) -> Literal[True]:
-        return True
+        return Substitutions()
 
     def apply_substitution(
         self, sub: 'concat.typecheck.Substitutions'
@@ -1416,6 +1449,15 @@ class _NoReturnType(ObjectType):
 
     def __repr__(self) -> str:
         return '{}()'.format(type(self).__qualname__)
+
+    def _free_type_variables(self) -> InsertionOrderedSet['_Variable']:
+        return InsertionOrderedSet([])
+
+    def resolve_forward_references(self) -> Self:
+        return self
+
+    def __hash__(self) -> int:
+        return 0
 
 
 class _OptionalType(IndividualType):
