@@ -4,7 +4,10 @@ import concat.typecheck
 import concat.parse
 from concat.typecheck import Environment
 from concat.typecheck.types import (
+    BoundVariable,
     ClassType,
+    Fix,
+    IndividualKind,
     IndividualType,
     IndividualVariable,
     ObjectType,
@@ -375,12 +378,12 @@ class TestSubtyping(unittest.TestCase):
 
     @given(from_type(StackEffect))
     def test_class_subtype_of_stack_effect(self, effect) -> None:
-        x = IndividualVariable()
+        x = BoundVariable(kind=IndividualKind())
         # NOTE: self-last convention is modelled after Factor.
         unbound_effect = StackEffect(
             TypeSequence([*effect.input, x]), effect.output
         )
-        cls = ClassType(x, {'__init__': unbound_effect})
+        cls = Fix(x, ClassType({'__init__': unbound_effect}))
         self.assertTrue(cls.is_subtype_of(effect))
 
     @given(from_type(IndividualType), from_type(IndividualType))
@@ -394,7 +397,7 @@ class TestSubtyping(unittest.TestCase):
         x = IndividualVariable()
         py_function = py_function_type[TypeSequence([type1]), type2]
         unbound_py_function = py_function_type[TypeSequence([x, type1]), type2]
-        cls = ClassType({'__init__': unbound_py_function})
+        cls = Fix(x, ClassType({'__init__': unbound_py_function}))
         self.assertTrue(cls.is_subtype_of(py_function))
 
     @given(from_type(IndividualType))

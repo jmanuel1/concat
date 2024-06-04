@@ -170,3 +170,16 @@ class TestForwardReferences(unittest.TestCase):
     def test_resolve_equal(self) -> None:
         self.assertEqual(self.ty.resolve_forward_references(), self.ty)
         self.assertEqual(self.ty, self.ty.resolve_forward_references())
+
+
+class TestTypeSequence(unittest.TestCase):
+    def test_constrain_empty(self) -> None:
+        self.assertEqual(
+            Substitutions(),
+            TypeSequence([]).constrain_and_bind_variables(
+                TypeSequence([]), set(), []
+            ),
+        )
+
+    def test_empty_equal(self) -> None:
+        self.assertEqual(TypeSequence([]), TypeSequence([]))

@@ -12,6 +12,7 @@ from concat.typecheck.errors import (
     UnhandledNodeTypeError,
 )
 from typing import (
+    Any,
     Callable,
     Dict,
     Generator,
@@ -77,6 +78,13 @@ class Substitutions(Mapping['_Variable', 'Type']):
                     f'{variable} is being substituted by {ty}, which has the wrong kind ({variable.kind} vs {ty.kind})'
                 )
         self._cache: Dict[int, Type] = {}
+        # innermost first
+        self.subtyping_provenance: List[Any] = []
+
+    def add_subtyping_provenance(
+        self, subtyping_query: Tuple['Type', 'Type']
+    ) -> None:
+        self.subtyping_provenance.append(subtyping_query)
 
     def __getitem__(self, var: '_Variable') -> 'Type':
         return self._sub[var]
@@ -122,12 +130,16 @@ class Substitutions(Mapping['_Variable', 'Type']):
         )
 
     def apply_substitution(self, sub: 'Substitutions') -> 'Substitutions':
-        return Substitutions(
+        new_sub = Substitutions(
             {
                 **sub,
                 **{a: sub(i) for a, i in self.items() if a not in sub._dom()},
             }
         )
+        new_sub.subtyping_provenance = [
+            (self.subtyping_provenance, sub.subtyping_provenance)
+        ]
+        return new_sub
 
     def __hash__(self) -> int:
         return hash(tuple(self.items()))
@@ -893,6 +905,7 @@ class TypeSequenceNode(TypeNode):
         temp_env = env.copy()
         if self._sequence_variable is None:
             # implicit stack polymorphism
+            # FIXME: This should be handled in stack effect construction
             sequence.append(SequenceVariable())
         elif self._sequence_variable.name not in temp_env:
             temp_env = temp_env.copy()

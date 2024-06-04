@@ -49,6 +49,12 @@ class SubtypeExplanation:
                 string += '\n' + str(e)
                 e = e.__cause__ or e.__context__
             return string
+        if isinstance(self._data, concat.typecheck.Substitutions):
+            string = str(self._data)
+            string += '\n' + '\n'.join(
+                (map(str, self._data.subtyping_provenance))
+            )
+            return string
         return str(self._data)
 
 
@@ -288,6 +294,12 @@ class BoundVariable(_Variable):
         assert list(self.kind.parameter_kinds) == [t.kind for t in args]
         return StuckTypeApplication(self, args)
 
+    def __repr__(self) -> str:
+        return f'<bound variable {id(self)}>'
+
+    def __str__(self) -> str:
+        return f't_{id(self)}'
+
     @property
     def attributes(self) -> Mapping[str, Type]:
         raise TypeError('Cannot get attributes of bound variables')
@@ -366,6 +378,9 @@ class SequenceVariable(_Variable):
     def __str__(self) -> str:
         return '*t_{}'.format(id(self))
 
+    def __repr__(self) -> str:
+        return f'<sequence variable {id(self)}>'
+
     def constrain_and_bind_variables(
         self,
         supertype: Type,
@@ -382,7 +397,9 @@ class SequenceVariable(_Variable):
             isinstance(supertype, SequenceVariable)
             and supertype not in rigid_variables
         ):
-            return Substitutions([(supertype, self)])
+            sub = Substitutions([(supertype, self)])
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
         if self in rigid_variables:
             raise ConcatTypeError(
                 '{} is fixed here and cannot become a subtype of another type'.format(
@@ -396,7 +413,8 @@ class SequenceVariable(_Variable):
                     self, supertype, supertype
                 )
             )
-        return Substitutions([(self, supertype)])
+        sub = Substitutions([(self, supertype)])
+        sub.add_subtyping_provenance((self, supertype))
 
     def get_type_of_attribute(self, name: str) -> NoReturn:
         raise ConcatTypeError(
@@ -579,8 +597,12 @@ class TypeSequence(Type, Iterable[Type]):
         """
         from concat.typecheck import Substitutions
 
-        if _contains_assumption(subtyping_assumptions, self, supertype):
-            return Substitutions()
+        if self is supertype or _contains_assumption(
+            subtyping_assumptions, self, supertype
+        ):
+            sub = Substitutions()
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
 
         if isinstance(supertype, SequenceVariable):
             supertype = TypeSequence([supertype])
@@ -589,7 +611,9 @@ class TypeSequence(Type, Iterable[Type]):
             if self._is_empty():
                 # [] <: []
                 if supertype._is_empty():
-                    return Substitutions()
+                    sub = Substitutions()
+                    sub.add_subtyping_provenance((self, supertype))
+                    return sub
                 # [] <: *a, *a is not rigid
                 # --> *a = []
                 elif (
@@ -598,7 +622,9 @@ class TypeSequence(Type, Iterable[Type]):
                     and not supertype._individual_types
                     and supertype._rest not in rigid_variables
                 ):
-                    return Substitutions([(supertype._rest, self)])
+                    sub = Substitutions([(supertype._rest, self)])
+                    sub.add_subtyping_provenance((self, supertype))
+                    return sub
                 # [] <: *a? `t0 `t...
                 # error
                 else:
@@ -608,13 +634,17 @@ class TypeSequence(Type, Iterable[Type]):
                 # --> *a = []
                 if supertype._is_empty() and self._rest not in rigid_variables:
                     assert self._rest is not None
-                    return Substitutions([(self._rest, supertype)])
+                    sub = Substitutions([(self._rest, supertype)])
+                    sub.add_subtyping_provenance((self, supertype))
+                    return sub
                 # *a <: *a
                 if (
                     self._rest is supertype._rest
                     and not supertype._individual_types
                 ):
-                    return Substitutions()
+                    sub = Substitutions()
+                    sub.add_subtyping_provenance((self, supertype))
+                    return sub
                 # *a <: *b? `t..., *a is not rigid, *a is not free in RHS
                 # --> *a = RHS
                 if (
@@ -622,7 +652,9 @@ class TypeSequence(Type, Iterable[Type]):
                     and self._rest not in rigid_variables
                     and self._rest not in supertype.free_type_variables()
                 ):
-                    return Substitutions([(self._rest, supertype)])
+                    sub = Substitutions([(self._rest, supertype)])
+                    sub.add_subtyping_provenance((self, supertype))
+                    return sub
                 else:
                     raise StackMismatchError(self, supertype)
             else:
@@ -638,7 +670,9 @@ class TypeSequence(Type, Iterable[Type]):
                     and supertype._rest not in self.free_type_variables()
                     and supertype._rest not in rigid_variables
                 ):
-                    return Substitutions([(supertype._rest, self)])
+                    sub = Substitutions([(supertype._rest, self)])
+                    sub.add_subtyping_provenance((self, supertype))
+                    return sub
                 # `t_n <: `s_m  *a? `t... <: *b? `s...
                 #   ---
                 # *a? `t... `t_n <: *b? `s... `s_m
@@ -656,6 +690,7 @@ class TypeSequence(Type, Iterable[Type]):
                             rigid_variables,
                             subtyping_assumptions,
                         )(sub)
+                        # sub.add_subtyping_provenance((self, supertype))
                         return sub
                     except StackMismatchError:
                         # TODO: Add info about occurs check and rigid
@@ -992,7 +1027,9 @@ class ObjectType(IndividualType):
         if self is supertype or _contains_assumption(
             subtyping_assumptions, self, supertype
         ):
-            return Substitutions()
+            sub = Substitutions()
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
 
         # obj <: `t, `t is not rigid
         # --> `t = obj
@@ -1000,7 +1037,9 @@ class ObjectType(IndividualType):
             isinstance(supertype, IndividualVariable)
             and supertype not in rigid_variables
         ):
-            return Substitutions([(supertype, self)])
+            sub = Substitutions([(supertype, self)])
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
         # obj <: *s? `t...
         # error
         elif isinstance(supertype, (SequenceVariable, TypeSequence)):
@@ -1016,60 +1055,73 @@ class ObjectType(IndividualType):
             )
 
         if isinstance(supertype, (StackEffect, PythonFunctionType)):
-            return self.get_type_of_attribute(
+            sub = self.get_type_of_attribute(
                 '__call__'
             ).constrain_and_bind_variables(
                 supertype,
                 rigid_variables,
                 subtyping_assumptions + [(self, supertype)],
             )
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
         if isinstance(supertype, _OptionalType):
             try:
-                return self.constrain_and_bind_variables(
+                sub = self.constrain_and_bind_variables(
                     none_type,
                     rigid_variables,
                     subtyping_assumptions + [(self, supertype)],
                 )
+                sub.add_subtyping_provenance((self, supertype))
+                return sub
             except ConcatTypeError:
-                return self.constrain_and_bind_variables(
+                sub = self.constrain_and_bind_variables(
                     supertype.type_arguments[0],
                     rigid_variables,
                     subtyping_assumptions + [(self, supertype)],
                 )
+                sub.add_subtyping_provenance((self, supertype))
+                return sub
         if isinstance(supertype, _NoReturnType):
             raise ConcatTypeError(
                 f'No other type, in this case, {self}, is a subtype of {supertype}'
             )
         if isinstance(supertype, Fix):
             unrolled = supertype.unroll()
-            return self.constrain_and_bind_variables(
+            sub = self.constrain_and_bind_variables(
                 unrolled,
                 rigid_variables,
                 subtyping_assumptions + [(self, supertype)],
             )
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
         if isinstance(supertype, ForwardTypeReference):
             resolved = supertype.resolve_forward_references()
-            return self.constrain_and_bind_variables(
+            sub = self.constrain_and_bind_variables(
                 resolved,
                 rigid_variables,
                 subtyping_assumptions + [(self, supertype)],
             )
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
         if not isinstance(supertype, ObjectType):
             raise NotImplementedError(supertype)
         # every object type is a subtype of object_type
         if supertype is get_object_type():
-            return Substitutions()
+            sub = Substitutions()
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
         # Don't forget that there's nominal subtyping too.
         if supertype._nominal:
             if supertype in self._nominal_supertypes:
-                return Substitutions()
+                sub = Substitutions()
+                sub.add_subtyping_provenance((self, supertype))
+                return sub
             if self._head is not supertype._head:
                 raise ConcatTypeError(
                     '{} is not a subtype of {}'.format(self, supertype)
                 )
 
-        # BUG
-        subtyping_assumptions.append((self, supertype))
+        subtyping_assumptions = subtyping_assumptions + [(self, supertype)]
 
         # don't constrain the type arguments, constrain those based on
         # the attributes
@@ -1081,6 +1133,7 @@ class ObjectType(IndividualType):
                 rigid_variables,
                 subtyping_assumptions,
             )(sub)
+        sub.add_subtyping_provenance((self, supertype))
         return sub
 
     def get_type_of_attribute(self, attribute: str) -> Type:
@@ -1127,18 +1180,22 @@ class ClassType(ObjectType):
             not supertype.has_attribute('__call__')
             or '__init__' not in self._attributes
         ):
-            return super().constrain_and_bind_variables(
+            sub = super().constrain_and_bind_variables(
                 supertype, rigid_variables, subtyping_assumptions
             )
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
         init = self.get_type_of_attribute('__init__')
         while not isinstance(init, (StackEffect, PythonFunctionType)):
             init = init.get_type_of_attribute('__call__')
         bound_init = init.bind()
-        return bound_init.constrain_and_bind_variables(
+        sub = bound_init.constrain_and_bind_variables(
             supertype.get_type_of_attribute('__call__'),
             rigid_variables,
             subtyping_assumptions + [(self, supertype)],
         )
+        sub.add_subtyping_provenance((self, supertype))
+        return sub
 
 
 class PythonFunctionType(IndividualType):
@@ -1151,16 +1208,16 @@ class PythonFunctionType(IndividualType):
         super().__init__()
         self._arity = len(type_parameters)
         self._type_parameters = type_parameters
-        self._type_arguments = _type_arguments
+        self._type_arguments: Sequence[Type] = []
         self._overloads: Sequence[Tuple[Type, Type]] = []
         if not (
             self._arity == 0
-            and len(self._type_arguments) == 2
+            and len(_type_arguments) == 2
             or self._arity == 2
-            and len(self._type_arguments) == 0
+            and len(_type_arguments) == 0
         ):
             raise ConcatTypeError(
-                f'Ill-formed Python function type with arguments {self._type_arguments}'
+                f'Ill-formed Python function type with arguments {_type_arguments}'
             )
         if self._arity == 0:
             i, o = _type_arguments
@@ -1168,21 +1225,37 @@ class PythonFunctionType(IndividualType):
                 raise ConcatTypeError(
                     f'{i} must be a sequence type, but has kind {i.kind}'
                 )
+            # HACK: Sequence variables are introduced by the type sequence AST nodes
+            if (
+                isinstance(i, TypeSequence)
+                and i
+                and i[0].kind == SequenceKind()
+            ):
+                i = TypeSequence(i.as_sequence()[1:])
+            _type_arguments = i, o
             if o.kind != IndividualKind():
                 raise ConcatTypeError(
                     f'{o} must be an individual type, but has kind {o.kind}'
                 )
+            _fixed_overloads: List[Tuple[Type, Type]] = []
             for i, o in _overloads:
                 if i.kind != SequenceKind():
                     raise ConcatTypeError(
                         f'{i} must be a sequence type, but has kind {i.kind}'
                     )
+                if (
+                    isinstance(i, TypeSequence)
+                    and i
+                    and i[0].kind == SequenceKind()
+                ):
+                    i = TypeSequence(i.as_sequence()[1:])
                 if o.kind != IndividualKind():
                     raise ConcatTypeError(
                         f'{o} must be an individual type, but has kind {o.kind}'
                     )
-            self._overloads = _overloads
-        self._hash: Optional[int] = None
+                _fixed_overloads.append((i, o))
+            self._overloads = _fixed_overloads
+            self._type_arguments = _type_arguments
 
     def _free_type_variables(self) -> InsertionOrderedSet[_Variable]:
         if self._arity == 0:
@@ -1338,25 +1411,33 @@ class PythonFunctionType(IndividualType):
         if self is supertype or _contains_assumption(
             subtyping_assumptions, self, supertype
         ):
-            return Substitutions()
+            sub = Substitutions()
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
         if self.kind != supertype.kind:
             raise ConcatTypeError(
                 f'{self} has kind {self.kind} but {supertype} has kind {supertype.kind}'
             )
         if self.kind == IndividualKind():
             if supertype is get_object_type():
-                return Substitutions()
+                sub = Substitutions()
+                sub.add_subtyping_provenance((self, supertype))
+                return sub
             if (
                 isinstance(supertype, IndividualVariable)
                 and supertype not in rigid_variables
             ):
-                return Substitutions([(supertype, self)])
+                sub = Substitutions([(supertype, self)])
+                sub.add_subtyping_provenance((self, supertype))
+                return sub
             if isinstance(supertype, _OptionalType):
-                return self.constrain_and_bind_variables(
+                sub = self.constrain_and_bind_variables(
                     supertype.type_arguments[0],
                     rigid_variables,
                     subtyping_assumptions,
                 )
+                sub.add_subtyping_provenance((self, supertype))
+                return sub
             if isinstance(supertype, ObjectType) and not supertype.nominal:
                 sub = Substitutions()
                 for attr in supertype.attributes:
@@ -1369,10 +1450,13 @@ class PythonFunctionType(IndividualType):
                         rigid_variables,
                         subtyping_assumptions,
                     )
+                sub.add_subtyping_provenance((self, supertype))
                 return sub
         if isinstance(supertype, PythonFunctionType):
             if isinstance(self.kind, GenericTypeKind):
-                return Substitutions()
+                sub = Substitutions()
+                sub.add_subtyping_provenance((self, supertype))
+                return sub
 
             # No need to extend the rigid variables, we know both types have no
             # parameters at this point.
@@ -1396,6 +1480,7 @@ class PythonFunctionType(IndividualType):
                         rigid_variables,
                         subtyping_assumptions_copy,
                     )(sub)
+                    sub.add_subtyping_provenance((self, supertype))
                     return sub
                 except ConcatTypeError:
                     continue
@@ -1594,8 +1679,6 @@ class GenericTypeKind(Kind):
 
 class Fix(Type):
     def __init__(self, var: _Variable, body: Type) -> None:
-        from concat.typecheck import Substitutions
-
         super().__init__()
         assert var.kind == body.kind
         self._var = var
@@ -1605,6 +1688,11 @@ class Fix(Type):
 
     def __repr__(self) -> str:
         return f'Fix({self._var!r}, {self._body!r})'
+
+    def __str__(self) -> str:
+        if self._internal_name is not None:
+            return self._internal_name
+        return f'Fix({self._var}, {self._body})'
 
     def _apply(self, t: Type) -> Type:
         from concat.typecheck import Substitutions
@@ -1651,21 +1739,27 @@ class Fix(Type):
         if supertype is get_object_type() or _contains_assumption(
             subtyping_assumptions, self, supertype
         ):
-            return Substitutions()
+            sub = Substitutions()
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
 
         if isinstance(supertype, Fix):
             unrolled = supertype.unroll()
-            return self.unroll().constrain_and_bind_variables(
+            sub = self.unroll().constrain_and_bind_variables(
                 unrolled,
                 rigid_variables,
                 subtyping_assumptions + [(self, supertype)],
             )
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
 
-        return self.unroll().constrain_and_bind_variables(
+        sub = self.unroll().constrain_and_bind_variables(
             supertype,
             rigid_variables,
             subtyping_assumptions + [(self, supertype)],
         )
+        sub.add_subtyping_provenance((self, supertype))
+        return sub
 
     @property
     def kind(self) -> Kind:
