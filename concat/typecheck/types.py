@@ -94,20 +94,22 @@ class Type(abc.ABC):
     # hash consing, but that would only reflect syntactic eequality, and I've
     # been using hashing for type equality.
 
-    # TODO: Define in terms of .attributes
     def get_type_of_attribute(self, name: str) -> 'Type':
-        raise ConcatAttributeError(self, name)
+        attributes = self.attributes
+        if name not in attributes:
+            raise ConcatAttributeError(self, name)
+        return attributes[name]
 
     def has_attribute(self, name: str) -> bool:
         try:
             self.get_type_of_attribute(name)
             return True
-        except AttributeError:
+        except ConcatAttributeError:
             return False
 
     @abc.abstractproperty
     def attributes(self) -> Mapping[str, 'Type']:
-        pass
+        return {}
 
     @abc.abstractmethod
     def _free_type_variables(self) -> InsertionOrderedSet['_Variable']:
@@ -415,11 +417,7 @@ class SequenceVariable(_Variable):
             )
         sub = Substitutions([(self, supertype)])
         sub.add_subtyping_provenance((self, supertype))
-
-    def get_type_of_attribute(self, name: str) -> NoReturn:
-        raise ConcatTypeError(
-            'the sequence type {} does not hold attributes'.format(self)
-        )
+        return sub
 
     @property
     def attributes(self) -> NoReturn:
@@ -855,11 +853,6 @@ class _Function(IndividualType):
         out_types = ' '.join(map(str, self.output))
         return '({} -- {})'.format(in_types, out_types)
 
-    def get_type_of_attribute(self, name: str) -> '_Function':
-        if name == '__call__':
-            return self
-        raise ConcatAttributeError(self, name)
-
     @property
     def attributes(self) -> Mapping[str, 'StackEffect']:
         return {'__call__': self}
@@ -1136,12 +1129,6 @@ class ObjectType(IndividualType):
         sub.add_subtyping_provenance((self, supertype))
         return sub
 
-    def get_type_of_attribute(self, attribute: str) -> Type:
-        if attribute not in self._attributes:
-            raise ConcatAttributeError(self, attribute)
-
-        return self._attributes[attribute]
-
     def __repr__(self) -> str:
         head = None if self._head is self else self._head
         return f'{type(self).__qualname__}(attributes={self._attributes!r}, nominal_supertypes={self._nominal_supertypes!r}, nominal={self._nominal!r}, _head={head!r})'
@@ -1308,12 +1295,6 @@ class PythonFunctionType(IndividualType):
         if not self._type_arguments:
             return 'py_function_type'
         return f'py_function_type[{self.input}, {self.output}]'
-
-    def get_type_of_attribute(self, attribute: str) -> Type:
-        if attribute == '__call__':
-            return self
-        else:
-            return super().get_type_of_attribute(attribute)
 
     @property
     def attributes(self) -> Mapping[str, Type]:
@@ -1727,9 +1708,6 @@ class Fix(Type):
     @property
     def attributes(self) -> Mapping[str, Type]:
         return self.unroll().attributes
-
-    def get_type_of_attribute(self, name: str) -> Type:
-        return self.attributes[name]
 
     def constrain_and_bind_variables(
         self, supertype, rigid_variables, subtyping_assumptions
