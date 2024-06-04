@@ -7,7 +7,6 @@ from concat.typecheck.types import (
     addable_type,
     context_manager_type,
     ellipsis_type,
-    file_type,
     geq_comparable_type,
     iterable_type,
     iterator_type,
@@ -115,7 +114,6 @@ types = {
     'py_function': py_function_type,
     'py_overloaded': py_overloaded_type,
     'Optional': optional_type,
-    'file': file_type,
     'none': none_type,
     'None': GenericType(
         [_stack_type_var],

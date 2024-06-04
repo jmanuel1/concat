@@ -1,3 +1,18 @@
+# FIXME: Exists only at compile time. Should probably be io.FileIO or something
+# in typing
+class file:
+  def seek(--) @cast (py_function[(int), int]):
+    ()
+
+  def read(--) @cast (py_function[*any, `any2]):
+    ()
+
+  def __enter__(--) @cast (py_function[*any, `any2]):
+    ()
+
+  def __exit__(--) @cast (py_function[*any, `any2]):
+    ()
+
 def to_list(*rest_var i:iterable[`a_var] -- *rest_var l:list[`a_var]):
   ()
 

@@ -1,16 +1,25 @@
 from concat.typecheck import (
+    Environment,
+    Substitutions,
     TypeError as ConcatTypeError,
     load_builtins_and_preamble,
 )
 from concat.typecheck.types import (
+    BoundVariable,
+    Fix,
+    ForwardTypeReference,
+    IndividualKind,
     IndividualVariable,
     ObjectType,
     SequenceVariable,
     StackEffect,
     TypeSequence,
     addable_type,
-    int_type,
+    get_int_type,
+    get_object_type,
+    optional_type,
     py_function_type,
+    tuple_type,
 )
 import unittest
 
@@ -21,75 +30,75 @@ load_builtins_and_preamble()
 class TestIndividualVariableConstrain(unittest.TestCase):
     def test_individual_variable_subtype(self) -> None:
         v = IndividualVariable()
-        ty = int_type
+        ty = get_int_type()
         sub = v.constrain_and_bind_variables(ty, set(), [])
         self.assertEqual(ty, sub(v))
 
     def test_individual_variable_supertype(self) -> None:
         v = IndividualVariable()
-        ty = int_type
+        ty = get_int_type()
         sub = ty.constrain_and_bind_variables(v, set(), [])
         self.assertEqual(ty, sub(v))
 
     def test_attribute_subtype(self) -> None:
         v = IndividualVariable()
-        attr_ty = ObjectType(IndividualVariable(), {'__add__': v})
-        ty = int_type
+        attr_ty = ObjectType({'__add__': v})
+        ty = get_int_type()
         with self.assertRaises(ConcatTypeError):
             attr_ty.constrain_and_bind_variables(ty, set(), [])
 
     def test_attribute_supertype(self) -> None:
         v = IndividualVariable()
-        attr_ty = ObjectType(IndividualVariable(), {'__add__': v})
-        ty = int_type
+        attr_ty = ObjectType({'__add__': v})
+        ty = get_int_type()
         sub = ty.constrain_and_bind_variables(attr_ty, set(), [])
         self.assertEqual(ty.get_type_of_attribute('__add__'), sub(v))
 
     def test_py_function_return_subtype(self) -> None:
         v = IndividualVariable()
-        py_fun_ty = py_function_type[TypeSequence([int_type]), v]
-        ty = int_type.get_type_of_attribute('__add__')
+        py_fun_ty = py_function_type[TypeSequence([get_int_type()]), v]
+        ty = get_int_type().get_type_of_attribute('__add__')
         sub = py_fun_ty.constrain_and_bind_variables(ty, set(), [])
-        self.assertEqual(int_type, sub(v))
+        self.assertEqual(get_int_type(), sub(v))
 
     def test_py_function_return_supertype(self) -> None:
         v = IndividualVariable()
-        py_fun_ty = py_function_type[TypeSequence([int_type]), v]
-        ty = int_type.get_type_of_attribute('__add__')
+        py_fun_ty = py_function_type[TypeSequence([get_int_type()]), v]
+        ty = get_int_type().get_type_of_attribute('__add__')
         sub = ty.constrain_and_bind_variables(py_fun_ty, set(), [])
-        self.assertEqual(int_type, sub(v))
+        self.assertEqual(get_int_type(), sub(v))
 
     def test_type_sequence_subtype(self) -> None:
         v = IndividualVariable()
         seq_ty = TypeSequence([v])
-        ty = TypeSequence([int_type])
+        ty = TypeSequence([get_int_type()])
         sub = seq_ty.constrain_and_bind_variables(ty, set(), [])
-        self.assertEqual(int_type, sub(v))
+        self.assertEqual(get_int_type(), sub(v))
 
     def test_type_sequence_supertype(self) -> None:
         v = IndividualVariable()
         seq_ty = TypeSequence([v])
-        ty = TypeSequence([int_type])
+        ty = TypeSequence([get_int_type()])
         sub = ty.constrain_and_bind_variables(seq_ty, set(), [])
-        self.assertEqual(int_type, sub(v))
+        self.assertEqual(get_int_type(), sub(v))
 
     def test_int_addable(self) -> None:
         v = IndividualVariable()
-        sub = int_type.constrain_and_bind_variables(
+        sub = get_int_type().constrain_and_bind_variables(
             addable_type[v, v], set(), []
         )
-        self.assertEqual(int_type, sub(v))
+        self.assertEqual(get_int_type(), sub(v))
 
     def test_int__add__addable__add__(self) -> None:
         v = IndividualVariable()
-        int_add = int_type.get_type_of_attribute('__add__')
+        int_add = get_int_type().get_type_of_attribute('__add__')
         addable_add = addable_type[v, v].get_type_of_attribute('__add__')
         sub = int_add.constrain_and_bind_variables(addable_add, set(), [])
         print(v)
         print(int_add)
         print(addable_add)
         print(sub)
-        self.assertEqual(int_type, sub(v))
+        self.assertEqual(get_int_type(), sub(v))
 
 
 class TestSequenceVariableConstrain(unittest.TestCase):
@@ -106,3 +115,58 @@ class TestSequenceVariableConstrain(unittest.TestCase):
         ty = StackEffect(TypeSequence([]), TypeSequence([]))
         sub = ty.constrain_and_bind_variables(effect_ty, set(), [])
         self.assertEqual(TypeSequence([]), sub(v))
+
+
+class TestFix(unittest.TestCase):
+    fix_var = BoundVariable(IndividualKind())
+    linked_list = Fix(
+        fix_var,
+        optional_type[
+            tuple_type[TypeSequence([get_object_type(), fix_var]),],
+        ],
+    )
+
+    def test_unroll_supertype(self) -> None:
+        self.assertEqual(
+            Substitutions(),
+            self.linked_list.constrain_and_bind_variables(
+                self.linked_list.unroll(), set(), []
+            ),
+        )
+
+    def test_unroll_subtype(self) -> None:
+        self.assertEqual(
+            Substitutions(),
+            self.linked_list.unroll().constrain_and_bind_variables(
+                self.linked_list, set(), []
+            ),
+        )
+
+    def test_unroll_equal(self) -> None:
+        self.assertEqual(self.linked_list.unroll(), self.linked_list)
+        self.assertEqual(self.linked_list, self.linked_list.unroll())
+
+
+class TestForwardReferences(unittest.TestCase):
+    env = Environment({'ty': get_object_type()})
+    ty = ForwardTypeReference(IndividualKind(), 'ty', env)
+
+    def test_resolve_supertype(self) -> None:
+        self.assertEqual(
+            Substitutions(),
+            self.ty.constrain_and_bind_variables(
+                self.ty.resolve_forward_references(), set(), []
+            ),
+        )
+
+    def test_resolve_subtype(self) -> None:
+        self.assertEqual(
+            Substitutions(),
+            self.ty.resolve_forward_references().constrain_and_bind_variables(
+                self.ty, set(), []
+            ),
+        )
+
+    def test_resolve_equal(self) -> None:
+        self.assertEqual(self.ty.resolve_forward_references(), self.ty)
+        self.assertEqual(self.ty, self.ty.resolve_forward_references())

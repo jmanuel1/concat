@@ -7,13 +7,13 @@ class bool:
   ()
 
 class int:
-  def __add__(--) @cast (py_function[(object), int]):
+  def __add__(--) @cast (py_function[(int), int]):
     ()
 
   def __invert__(--) @cast (py_function[(), int]):
     ()
 
-  def __sub__(--) @cast (py_function[(object), str]):
+  def __sub__(--) @cast (py_function[(int), str]):
     ()
 
   def __le__(--) @cast (py_function[(int), bool]):
@@ -24,6 +24,8 @@ class int:
 
   def __ge__(--) @cast (py_function[(int), bool]):
     ()
+
+!@@concat.typecheck.builtin_int int
 
 class float:
   ()

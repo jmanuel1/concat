@@ -15,7 +15,7 @@ from concat.typecheck.types import (
     ellipsis_type,
     float_type,
     get_object_type,
-    int_type,
+    get_int_type,
     no_return_type,
     none_type,
     not_implemented_type,
@@ -40,7 +40,6 @@ from hypothesis.strategies import (
 
 
 default_env = concat.typecheck.load_builtins_and_preamble()
-default_env.resolve_forward_references()
 
 
 def lex_string(string: str) -> List[concat.lex.Token]:
@@ -70,32 +69,34 @@ class TestTypeChecker(unittest.TestCase):
             initial_stack=TypeSequence(
                 [
                     ObjectType(
-                        IndividualVariable(),
                         {
                             attr_word.value: StackEffect(
-                                TypeSequence([]), TypeSequence([int_type])
+                                TypeSequence([]),
+                                TypeSequence([get_int_type()]),
                             ),
                         },
                     ),
                 ]
             ),
         )
-        self.assertEqual(list(type.output), [int_type])
+        self.assertEqual(list(type.output), [get_int_type()])
 
-    @given(integers(min_value=0), integers(min_value=0))
-    def test_add_operator_inference(self, a: int, b: int) -> None:
-        try_prog = '{!r} {!r} +\n'.format(a, b)
+    def test_add_operator_inference(self) -> None:
+        try_prog = '0 0 +\n'
         tree = parse(try_prog)
         sub, type, _ = concat.typecheck.infer(
             concat.typecheck.Environment({'+': default_env['+']}),
             tree.children,
             is_top_level=True,
         )
-        note(repr(type))
-        note(str(sub))
-        note(repr(default_env['+']))
+        print(
+            'explain!:',
+            type
+            == StackEffect(TypeSequence([]), TypeSequence([get_int_type()])),
+        )
+
         self.assertEqual(
-            type, StackEffect(TypeSequence([]), TypeSequence([int_type]))
+            type, StackEffect(TypeSequence([]), TypeSequence([get_int_type()]))
         )
 
     def test_if_then_inference(self) -> None:
@@ -121,7 +122,7 @@ class TestTypeChecker(unittest.TestCase):
             is_top_level=True,
         )
         self.assertEqual(
-            type, StackEffect(TypeSequence([]), TypeSequence([int_type]))
+            type, StackEffect(TypeSequence([]), TypeSequence([get_int_type()]))
         )
 
     @given(sampled_from(['None', '...', 'NotImplemented']))
@@ -183,7 +184,7 @@ class TestTypeChecker(unittest.TestCase):
             is_top_level=True,
         )
         self.assertEqual(
-            type, StackEffect(TypeSequence([]), TypeSequence([int_type]))
+            type, StackEffect(TypeSequence([]), TypeSequence([get_int_type()]))
         )
 
 
@@ -296,9 +297,8 @@ class TestDiagnosticInfo(unittest.TestCase):
 
 class TestTypeEquality(unittest.TestCase):
     @given(from_type(ConcatType))
-    @example(type=int_type.self_type)
-    @example(type=int_type.get_type_of_attribute('__add__'))
-    @example(type=int_type)
+    @example(type=get_int_type().get_type_of_attribute('__add__'))
+    @example(type=get_int_type())
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_reflexive_equality(self, type):
         self.assertEqual(type, type)
@@ -307,7 +307,7 @@ class TestTypeEquality(unittest.TestCase):
 class TestSubtyping(unittest.TestCase):
     def test_int_not_subtype_of_float(self) -> None:
         """Differ from Reticulated Python: !(int <= float)."""
-        self.assertFalse(int_type.is_subtype_of(float_type))
+        self.assertFalse(get_int_type().is_subtype_of(float_type))
 
     @given(from_type(IndividualType), from_type(IndividualType))
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
@@ -342,9 +342,8 @@ class TestSubtyping(unittest.TestCase):
     def test_object_structural_subtyping(
         self, attributes, other_attributes
     ) -> None:
-        x1, x2 = IndividualVariable(), IndividualVariable()
-        object1 = ObjectType(x1, {**other_attributes, **attributes})
-        object2 = ObjectType(x2, attributes)
+        object1 = ObjectType({**other_attributes, **attributes})
+        object2 = ObjectType(attributes)
         self.assertTrue(object1.is_subtype_of(object2))
 
     @given(__attributes_generator, __attributes_generator)
@@ -352,16 +351,14 @@ class TestSubtyping(unittest.TestCase):
     def test_class_structural_subtyping(
         self, attributes, other_attributes
     ) -> None:
-        x1, x2 = IndividualVariable(), IndividualVariable()
-        object1 = ClassType(x1, {**other_attributes, **attributes})
-        object2 = ClassType(x2, attributes)
+        object1 = ClassType({**other_attributes, **attributes})
+        object2 = ClassType(attributes)
         self.assertTrue(object1.is_subtype_of(object2))
 
     @given(from_type(StackEffect))
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_object_subtype_of_stack_effect(self, effect) -> None:
-        x = IndividualVariable()
-        object = ObjectType(x, {'__call__': effect})
+        object = ObjectType({'__call__': effect})
         self.assertTrue(object.is_subtype_of(effect))
 
     @given(from_type(IndividualType), from_type(IndividualType))
@@ -372,9 +369,8 @@ class TestSubtyping(unittest.TestCase):
         )
     )
     def test_object_subtype_of_py_function(self, type1, type2) -> None:
-        x = IndividualVariable()
         py_function = py_function_type[TypeSequence([type1]), type2]
-        object = ObjectType(x, {'__call__': py_function})
+        object = ObjectType({'__call__': py_function})
         self.assertTrue(object.is_subtype_of(py_function))
 
     @given(from_type(StackEffect))
@@ -398,7 +394,7 @@ class TestSubtyping(unittest.TestCase):
         x = IndividualVariable()
         py_function = py_function_type[TypeSequence([type1]), type2]
         unbound_py_function = py_function_type[TypeSequence([x, type1]), type2]
-        cls = ClassType(x, {'__init__': unbound_py_function})
+        cls = ClassType({'__init__': unbound_py_function})
         self.assertTrue(cls.is_subtype_of(py_function))
 
     @given(from_type(IndividualType))

@@ -50,24 +50,21 @@ globals()['@@types'] = {
             TypeSequence([_stack_type_var, _y]),
         ),
     ),
-    'map': ObjectType(
-        _x,
-        {
-            '__call__': StackEffect(
-                TypeSequence(
-                    [
-                        _rest_var,
-                        StackEffect(
-                            TypeSequence([_rest_var, _y]),
-                            TypeSequence([_rest_var, _z]),
-                        ),
-                        iterable_type[_y,],
-                    ]
-                ),
-                TypeSequence([_rest_var, iterable_type[_z,]]),
-            )
-        },
+    'map': GenericType(
         [_rest_var, _y, _z],
+        StackEffect(
+            TypeSequence(
+                [
+                    _rest_var,
+                    StackEffect(
+                        TypeSequence([_rest_var, _y]),
+                        TypeSequence([_rest_var, _z]),
+                    ),
+                    iterable_type[_y,],
+                ]
+            ),
+            TypeSequence([_rest_var, iterable_type[_z,]]),
+        ),
     ),
     'to_dict': GenericType(
         [_stack_type_var, _x, _y],
