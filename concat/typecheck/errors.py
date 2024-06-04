@@ -1,11 +1,11 @@
 import builtins
+import concat.parse
 import pathlib
 from typing import Optional, Union, TYPE_CHECKING
 
 
 if TYPE_CHECKING:
     import concat.astutils
-    import concat.parse
     from concat.typecheck.types import Type, TypeSequence
 
 
