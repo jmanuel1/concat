@@ -83,9 +83,10 @@ class Type(abc.ABC):
         # QUESTION: Define == separately from is_subtype_of?
         return self.is_subtype_of(other) and other.is_subtype_of(self)
 
-    @abc.abstractmethod
-    def __hash__(self) -> int:
-        pass
+    # NOTE: Avoid hashing types. I might I'm having correctness issues related
+    # to hashing that I'd rather avoid entirely. Maybe one day I'll introduce
+    # hash consing, but that would only reflect syntactic eequality, and I've
+    # been using hashing for type equality.
 
     # TODO: Define in terms of .attributes
     def get_type_of_attribute(self, name: str) -> 'Type':
@@ -212,9 +213,6 @@ class StuckTypeApplication(IndividualType):
     def __repr__(self) -> str:
         return f'StuckTypeApplication({self._head!r}, {self._args!r})'
 
-    def __hash__(self) -> int:
-        return hash((self._head, tuple(self._args)))
-
     def _free_type_variables(self) -> InsertionOrderedSet['_Variable']:
         ftv = self._head.free_type_variables()
         for arg in self._args:
@@ -260,9 +258,14 @@ class _Variable(Type, abc.ABC):
     def resolve_forward_references(self) -> '_Variable':
         return self
 
-    # __hash__ by object identity is used since that's the only way for two
-    # type variables to be ==.
+    # NOTE: This hash impl is kept because sets of variables are fine and
+    # variables are simple.
     def __hash__(self) -> int:
+        """Hash a variable by its identity.
+
+        __hash__ by object identity is used since that's the only way for two
+        type variables to be ==."""
+
         return hash(id(self))
 
 
@@ -426,7 +429,7 @@ class GenericType(Type):
                 f'Cannot be polymorphic over non-individual type {body}'
             )
         self._body = body
-        self._instantiations: Dict[Tuple[Type, ...], Type] = {}
+        self._instantiations: Dict[Tuple[int, ...], Type] = {}
         self.is_variadic = is_variadic
 
     def __str__(self) -> str:
@@ -445,9 +448,9 @@ class GenericType(Type):
     def __getitem__(self, type_arguments: 'TypeArguments') -> 'Type':
         from concat.typecheck import Substitutions
 
-        type_arguments = tuple(type_arguments)
-        if type_arguments in self._instantiations:
-            return self._instantiations[type_arguments]
+        type_argument_ids = tuple(t._type_id for t in type_arguments)
+        if type_argument_ids in self._instantiations:
+            return self._instantiations[type_argument_ids]
         expected_kinds = [var.kind for var in self._type_parameters]
         actual_kinds = [ty.kind for ty in type_arguments]
         if expected_kinds != actual_kinds:
@@ -456,7 +459,7 @@ class GenericType(Type):
             )
         sub = Substitutions(zip(self._type_parameters, type_arguments))
         instance = sub(self._body)
-        self._instantiations[type_arguments] = instance
+        self._instantiations[type_argument_ids] = instance
         if self._internal_name is not None:
             instance_internal_name = self._internal_name
             instance_internal_name += (
@@ -509,20 +512,6 @@ class GenericType(Type):
         return self_instance.constrain_and_bind_variables(
             supertype_instance, rigid_variables, subtyping_assumptions
         )
-
-    def __hash__(self) -> int:
-        # QUESTION: Is it better for perf to compute de Bruijn indices instead
-        # of using substitution?
-        vars_for_hash: List[_Variable] = []
-        for p in self._type_parameters:
-            if p.kind == IndividualKind():
-                vars_for_hash.append(self._individual_var_for_hash)
-            else:
-                vars_for_hash.append(self._sequence_var_for_hash)
-        return hash(self[vars_for_hash])
-
-    _individual_var_for_hash = IndividualVariable()
-    _sequence_var_for_hash = SequenceVariable()
 
     def apply_substitution(self, sub: 'Substitutions') -> 'GenericType':
         from concat.typecheck import Substitutions
@@ -719,9 +708,6 @@ class TypeSequence(Type, Iterable[Type]):
     def __iter__(self) -> Iterator[Type]:
         return iter(self.as_sequence())
 
-    def __hash__(self) -> int:
-        return hash(tuple(self.as_sequence()))
-
     def resolve_forward_references(self) -> 'TypeSequence':
         individual_types = [
             t.resolve_forward_references() for t in self._individual_types
@@ -757,10 +743,6 @@ class _Function(IndividualType):
             self.free_type_variables() - gamma.free_type_variables()
         )
         return GenericType(parameters, self)
-
-    def __hash__(self) -> int:
-        # FIXME: Alpha equivalence
-        return hash((self.input, self.output))
 
     def constrain_and_bind_variables(
         self,
@@ -1121,21 +1103,6 @@ class ObjectType(IndividualType):
             return self._internal_name
         return f'ObjectType({_mapping_to_str(self._attributes)}, {_iterable_to_str(self._nominal_supertypes)}, {self._nominal}, {None if self._head is self else self._head})'
 
-    _hash_variable = None
-
-    def __hash__(self) -> int:
-        if ObjectType._hash_variable is None:
-            ObjectType._hash_variable = IndividualVariable()
-        type_to_hash = self
-        return hash(
-            (
-                tuple(type_to_hash._attributes.items()),
-                tuple(type_to_hash._nominal_supertypes),
-                type_to_hash._nominal,
-                None if type_to_hash._head is self else type_to_hash._head,
-            )
-        )
-
     @property
     def attributes(self) -> Mapping[str, Type]:
         return self._attributes
@@ -1259,16 +1226,6 @@ class PythonFunctionType(IndividualType):
         if isinstance(self.kind, GenericTypeKind):
             return True
         return self.input == other.input and self.output == other.output
-
-    def __hash__(self) -> int:
-        if self._hash is None:
-            self._hash = self._compute_hash()
-        return self._hash
-
-    def _compute_hash(self) -> int:
-        if isinstance(self.kind, GenericTypeKind):
-            return 1
-        return hash((self.input, self.output))
 
     def __repr__(self) -> str:
         # QUESTION: Is it worth using type(self)?
@@ -1504,9 +1461,6 @@ class _PythonOverloadedType(Type):
     def kind(self) -> 'Kind':
         return GenericTypeKind([SequenceKind()])
 
-    def __hash__(self) -> int:
-        return hash(type(self).__qualname__)
-
     def __eq__(self, other: object) -> bool:
         return isinstance(other, type(self))
 
@@ -1536,9 +1490,6 @@ class _NoReturnType(IndividualType):
     def resolve_forward_references(self) -> Self:
         return self
 
-    def __hash__(self) -> int:
-        return 0
-
 
 class _OptionalType(IndividualType):
     def __init__(self, type_argument: Type) -> None:
@@ -1564,9 +1515,6 @@ class _OptionalType(IndividualType):
         if isinstance(other, _OptionalType):
             return self._type_argument == other._type_argument
         return super().__eq__(other)
-
-    def __hash__(self) -> int:
-        return hash(self._type_argument)
 
     def constrain_and_bind_variables(
         self, supertype, rigid_variables, subtyping_assumptions
@@ -1621,25 +1569,15 @@ class Kind(abc.ABC):
     def __eq__(self, other: object) -> bool:
         pass
 
-    @abc.abstractmethod
-    def __hash__(self) -> int:
-        pass
-
 
 class IndividualKind(Kind):
     def __eq__(self, other: object) -> bool:
         return isinstance(other, IndividualKind)
 
-    def __hash__(self) -> int:
-        return hash(type(self).__qualname__)
-
 
 class SequenceKind(Kind):
     def __eq__(self, other: object) -> bool:
         return isinstance(other, SequenceKind)
-
-    def __hash__(self) -> int:
-        return hash(type(self).__qualname__)
 
 
 class GenericTypeKind(Kind):
@@ -1652,9 +1590,6 @@ class GenericTypeKind(Kind):
             isinstance(other, GenericTypeKind)
             and self.parameter_kinds == other.parameter_kinds
         )
-
-    def __hash__(self) -> int:
-        return hash(tuple(self.parameter_kinds))
 
 
 class Fix(Type):
@@ -1686,11 +1621,6 @@ class Fix(Type):
         if self._unrolled_ty is None:
             self._unrolled_ty = self._apply(self)
         return self._unrolled_ty
-
-    def __hash__(self) -> int:
-        return hash(
-            (self._var, self._body)
-        )  # FIXME: Probably broken, alpha equivalence
 
     def _free_type_variables(self) -> InsertionOrderedSet[_Variable]:
         return self._body.free_type_variables() - {self._var}
@@ -1777,11 +1707,6 @@ class ForwardTypeReference(Type):
             self._name_to_resolve,
             tuple(self._type_arguments),
         )
-
-    def __hash__(self) -> int:
-        if self._resolved_type is not None:
-            return hash(self._resolved_type)
-        return hash(self._as_hashable_tuple())
 
     def __getitem__(self, args: TypeArguments) -> Type:
         if self._resolved_type is not None:
