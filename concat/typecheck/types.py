@@ -1099,7 +1099,7 @@ class ObjectType(IndividualType):
         if not isinstance(supertype, ObjectType):
             raise NotImplementedError(supertype)
         # every object type is a subtype of object_type
-        if supertype is get_object_type():
+        if supertype._type_id == get_object_type()._type_id:
             sub = Substitutions()
             sub.add_subtyping_provenance((self, supertype))
             return sub
@@ -1443,6 +1443,7 @@ class PythonFunctionType(IndividualType):
             # parameters at this point.
 
             # Support overloading the subtype.
+            exceptions = []
             for overload in [
                 (self.input, self.output),
                 *self._overloads,
@@ -1463,14 +1464,14 @@ class PythonFunctionType(IndividualType):
                     )(sub)
                     sub.add_subtyping_provenance((self, supertype))
                     return sub
-                except ConcatTypeError:
-                    continue
+                except ConcatTypeError as e:
+                    exceptions.append(e)
                 finally:
                     subtyping_assumptions[:] = subtyping_assumptions_copy
 
         raise ConcatTypeError(
             'no overload of {} is a subtype of {}'.format(self, supertype)
-        )
+        ) from exceptions[0]
 
 
 class _PythonOverloadedType(Type):
@@ -1689,6 +1690,9 @@ class Fix(Type):
     def unroll(self) -> Type:
         if self._unrolled_ty is None:
             self._unrolled_ty = self._apply(self)
+            if self._internal_name is not None:
+                self._unrolled_ty.set_internal_name(self._internal_name)
+            self._unrolled_ty._type_id = self._type_id
         return self._unrolled_ty
 
     def _free_type_variables(self) -> InsertionOrderedSet[_Variable]:

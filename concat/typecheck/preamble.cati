@@ -16,7 +16,7 @@ class file:
 def to_list(*rest_var i:iterable[`a_var] -- *rest_var l:list[`a_var]):
   ()
 
-def py_call(*rest_var kwargs:iterable[object] args:iterable[object] f:py_function[(*seq_var), `a_var] -- *rest_var res:`a_var):
+def py_call(*rest_var kwargs:iterable[object] args:iterable[object] f:py_function[*seq_var, `a_var] -- *rest_var res:`a_var):
   ()
 
 def nip(*rest_var a:object b:`a_var -- *rest_var b:`a_var):

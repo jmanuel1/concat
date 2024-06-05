@@ -14,7 +14,6 @@ from concat.typecheck.types import (
     StackEffect,
     Type as ConcatType,
     TypeSequence,
-    addable_type,
     ellipsis_type,
     float_type,
     get_object_type,
@@ -36,7 +35,6 @@ from hypothesis import HealthCheck, given, example, note, settings
 from hypothesis.strategies import (
     dictionaries,
     from_type,
-    integers,
     sampled_from,
     text,
 )
