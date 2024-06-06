@@ -440,10 +440,7 @@ def infer(
                         StackEffect(
                             i,
                             TypeSequence(
-                                [
-                                    *collected_type,
-                                    tuple_type[TypeSequence(element_types),],
-                                ]
+                                [*collected_type, tuple_type[element_types],]
                             ),
                         )
                     ),

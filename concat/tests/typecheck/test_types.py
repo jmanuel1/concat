@@ -120,10 +120,7 @@ class TestSequenceVariableConstrain(unittest.TestCase):
 class TestFix(unittest.TestCase):
     fix_var = BoundVariable(IndividualKind())
     linked_list = Fix(
-        fix_var,
-        optional_type[
-            tuple_type[TypeSequence([get_object_type(), fix_var]),],
-        ],
+        fix_var, optional_type[tuple_type[get_object_type(), fix_var],],
     )
 
     def test_unroll_supertype(self) -> None:

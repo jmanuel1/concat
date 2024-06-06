@@ -72,9 +72,7 @@ globals()['@@types'] = {
             TypeSequence(
                 [
                     _stack_type_var,
-                    optional_type[
-                        iterable_type[tuple_type[TypeSequence([_x, _y]),],],
-                    ],
+                    optional_type[iterable_type[tuple_type[_x, _y],],],
                 ]
             ),
             TypeSequence([_stack_type_var, dict_type[_x, _y]]),

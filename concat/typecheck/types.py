@@ -510,18 +510,29 @@ class GenericType(Type):
         if self is supertype or _contains_assumption(
             subtyping_assumptions, self, supertype
         ):
-            return Substitutions([])
+            return Substitutions()
+        # HACK: KIND_POLY I should use kind polymorphism instead to get the
+        # continuation example to typecheck.
+        if supertype._type_id == get_object_type()._type_id:
+            return Substitutions()
+        if isinstance(supertype, IndividualVariable) and supertype not in rigid_variables:
+            return Substitutions([(supertype, self)])
+        if supertype.kind == IndividualKind():
+            return self.instantiate().constrain_and_bind_variables(supertype, rigid_variables, subtyping_assumptions)
         if self.kind != supertype.kind:
+            # HACK: KIND_POLY
+            if isinstance(supertype.kind, GenericTypeKind):
+                return self.instantiate().constrain_and_bind_variables(supertype.instantiate(), rigid_variables, subtyping_assumptions)
             raise ConcatTypeError(
                 f'{self} has kind {self.kind} but {supertype} has kind {supertype.kind}'
             )
-        if not isinstance(supertype, GenericType):
-            raise NotImplementedError(supertype)
         shared_vars = [type(var)() for var in self._type_parameters]
         self_instance = self[shared_vars]
         supertype_instance = supertype[shared_vars]
         rigid_variables = (
             rigid_variables
+            # QUESTION: The parameters have been substituted already. Does this
+            # make sense? Maybe the shared_vars should be rigid.
             | set(self._type_parameters)
             | set(supertype._type_parameters)
         )
@@ -539,7 +550,11 @@ class GenericType(Type):
                 if var not in self._type_parameters
             }
         )
-        ty = GenericType(self._type_parameters, sub(self._body))
+        ty = GenericType(
+            self._type_parameters,
+            sub(self._body),
+            is_variadic=self.is_variadic,
+        )
         return ty
 
     @property
@@ -562,6 +577,9 @@ class TypeSequence(Type, Iterable[Type]):
         else:
             self._rest = None
             self._individual_types = sequence
+        for ty in self._individual_types:
+            if ty.kind == SequenceKind():
+                raise ConcatTypeError(f'{ty} cannot be a sequence type')
 
     def as_sequence(self) -> Sequence[Type]:
         if self._rest is not None:
@@ -758,12 +776,6 @@ class _Function(IndividualType):
     def __init__(
         self, input_types: TypeSequence, output_types: TypeSequence,
     ) -> None:
-        for ty in input_types[1:]:
-            if ty.kind != IndividualKind():
-                raise ConcatTypeError(f'{ty} must be an individual type')
-        for ty in output_types[1:]:
-            if ty.kind != IndividualKind():
-                raise ConcatTypeError(f'{ty} must be an individual type')
         super().__init__()
         self.input = input_types
         self.output = output_types
