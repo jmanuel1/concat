@@ -47,6 +47,12 @@ arg_parser.add_argument(
     help='turn stack debugging on',
 )
 arg_parser.add_argument(
+    '--verbose',
+    action='store_true',
+    default=False,
+    help='print internal logs and errors',
+)
+arg_parser.add_argument(
     '--tokenize',
     action='store_true',
     default=False,
@@ -94,6 +100,8 @@ else:
             else:
                 print(get_line_at(args.file, e.location), end='')
             print(' ' * e.location[1] + '^')
+        if args.verbose:
+            raise
     except concat.parser_combinators.ParseError as e:
         print('Parse Error:')
         print(
