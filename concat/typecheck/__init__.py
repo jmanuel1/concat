@@ -398,7 +398,7 @@ def infer(
                     # FIXME: Infer the type of elements in the list based on
                     # ALL the elements.
                     if element_type == no_return_type:
-                        assert isinstance(collected_type[-1], IndividualType)
+                        assert collected_type[-1] != SequenceKind()
                         element_type = collected_type[-1]
                     # drop the top of the stack to use as the item
                     collected_type = collected_type[:-1]
@@ -455,20 +455,28 @@ def infer(
                 module_parts = node.value.split('.')
                 module_spec = None
                 path = None
-                for module_prefix in itertools.accumulate(
-                    module_parts, lambda a, b: f'{a}.{b}'
-                ):
-                    for finder in sys.meta_path:
-                        module_spec = finder.find_spec(module_prefix, path)
-                        if module_spec is not None:
-                            path = module_spec.submodule_search_locations
-                            break
-                assert module_spec is not None
-                module_path = module_spec.origin
-                if module_path is None:
-                    raise TypeError(f'Cannot find path of module {node.value}')
-                # For now, assume the module's written in Python.
-                stub_path = pathlib.Path(module_path).with_suffix('.cati')
+                if module_parts[0] in sys.builtin_module_names:
+                    stub_path = pathlib.Path(__file__) / '../builtin_stubs'
+                    for part in module_parts:
+                        stub_path = stub_path / part
+                else:
+                    for module_prefix in itertools.accumulate(
+                        module_parts, lambda a, b: f'{a}.{b}'
+                    ):
+                        for finder in sys.meta_path:
+                            module_spec = finder.find_spec(module_prefix, path)
+                            if module_spec is not None:
+                                path = module_spec.submodule_search_locations
+                                break
+                    assert module_spec is not None
+                    module_path = module_spec.origin
+                    if module_path is None:
+                        raise TypeError(
+                            f'Cannot find path of module {node.value}'
+                        )
+                    # For now, assume the module's written in Python.
+                    stub_path = pathlib.Path(module_path)
+                stub_path = stub_path.with_suffix('.cati')
                 stub_env = _check_stub(stub_path)
                 imported_type = stub_env.get(node.imported_name)
                 if imported_type is None:
@@ -836,10 +844,6 @@ class _GenericTypeNode(IndividualTypeNode):
             arg_as_type, env = arg.to_type(env)
             args.append(arg_as_type)
         generic_type, env = self._generic_type.to_type(env)
-        if isinstance(generic_type, GenericType):
-            if generic_type.is_variadic:
-                args = (TypeSequence(args),)
-            return generic_type[args], env
         if isinstance(generic_type.kind, GenericTypeKind):
             return generic_type[args], env
         raise TypeError('{} is not a generic type'.format(generic_type))
