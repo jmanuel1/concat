@@ -72,11 +72,12 @@ class Substitutions(Mapping['_Variable', 'Type']):
         ] = {},
     ) -> None:
         self._sub = dict(sub)
-        for variable, ty in self._sub.items():
-            if variable.kind != ty.kind:
-                raise TypeError(
-                    f'{variable} is being substituted by {ty}, which has the wrong kind ({variable.kind} vs {ty.kind})'
-                )
+        # See HACK KIND_POLY
+        # for variable, ty in self._sub.items():
+        #     if variable.kind != ty.kind:
+        #         raise TypeError(
+        #             f'{variable} is being substituted by {ty}, which has the wrong kind ({variable.kind} vs {ty.kind})'
+        #         )
         self._cache: Dict[int, Type] = {}
         # innermost first
         self.subtyping_provenance: List[Any] = []
@@ -319,10 +320,6 @@ def infer(
                 if isinstance(child, concat.parse.AttributeWordNode):
                     top = o1[-1]
                     attr_type = top.get_type_of_attribute(child.value)
-                    if not isinstance(attr_type, IndividualType):
-                        raise TypeError(
-                            f'{attr_type} must be an individual type'
-                        )
                     if should_instantiate:
                         attr_type = attr_type.instantiate()
                     rest_types = o1[:-1]
@@ -339,10 +336,6 @@ def infer(
                     name_type = gamma[child.value]
                     if isinstance(name_type, ForwardTypeReference):
                         raise NameError(child)
-                    if not isinstance(name_type, IndividualType):
-                        raise TypeError(
-                            f'{name_type} must be an individual type'
-                        )
                     if should_instantiate:
                         name_type = name_type.instantiate()
                     current_effect = StackEffect(

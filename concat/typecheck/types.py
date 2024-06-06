@@ -242,10 +242,9 @@ class _Variable(Type, abc.ABC):
 
     def apply_substitution(
         self, sub: 'concat.typecheck.Substitutions'
-    ) -> Union['IndividualType', '_Variable', 'TypeSequence']:
+    ) -> Type:
         if self in sub:
             result = sub[self]
-            assert self.kind == result.kind, f'{self!r} --> {result!r}'
             return result  # type: ignore
         return self
 
@@ -468,6 +467,8 @@ class GenericType(Type):
         if type_argument_ids in self._instantiations:
             return self._instantiations[type_argument_ids]
         expected_kinds = [var.kind for var in self._type_parameters]
+        if self.is_variadic:
+            type_arguments = [TypeSequence(type_arguments)]
         actual_kinds = [ty.kind for ty in type_arguments]
         if expected_kinds != actual_kinds:
             raise ConcatTypeError(
@@ -515,14 +516,23 @@ class GenericType(Type):
         # continuation example to typecheck.
         if supertype._type_id == get_object_type()._type_id:
             return Substitutions()
-        if isinstance(supertype, IndividualVariable) and supertype not in rigid_variables:
+        if (
+            isinstance(supertype, IndividualVariable)
+            and supertype not in rigid_variables
+        ):
             return Substitutions([(supertype, self)])
         if supertype.kind == IndividualKind():
-            return self.instantiate().constrain_and_bind_variables(supertype, rigid_variables, subtyping_assumptions)
+            return self.instantiate().constrain_and_bind_variables(
+                supertype, rigid_variables, subtyping_assumptions
+            )
         if self.kind != supertype.kind:
             # HACK: KIND_POLY
             if isinstance(supertype.kind, GenericTypeKind):
-                return self.instantiate().constrain_and_bind_variables(supertype.instantiate(), rigid_variables, subtyping_assumptions)
+                return self.instantiate().constrain_and_bind_variables(
+                    supertype.instantiate(),
+                    rigid_variables,
+                    subtyping_assumptions,
+                )
             raise ConcatTypeError(
                 f'{self} has kind {self.kind} but {supertype} has kind {supertype.kind}'
             )
