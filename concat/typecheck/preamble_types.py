@@ -1,6 +1,7 @@
 from concat.typecheck.types import (
     GenericType,
     IndividualVariable,
+    ObjectType,
     SequenceVariable,
     StackEffect,
     TypeSequence,
@@ -142,5 +143,9 @@ types = {
             TypeSequence([_stack_type_var]),
             TypeSequence([_stack_type_var, not_implemented_type]),
         ),
+    ),
+    'SupportsAbs': GenericType(
+        [_a_var],
+        ObjectType({'__abs__': py_function_type[TypeSequence([]), _a_var],},),
     ),
 }

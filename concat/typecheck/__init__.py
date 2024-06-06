@@ -188,10 +188,11 @@ import concat.parser_combinators
 import concat.parse
 
 
+_builtins_stub_path = pathlib.Path(__file__) / '../builtin_stubs/builtins.cati'
+
+
 def load_builtins_and_preamble() -> Environment:
-    env = _check_stub(
-        pathlib.Path(__file__).with_name('py_builtins.cati'), is_builtins=True,
-    )
+    env = _check_stub(_builtins_stub_path, is_builtins=True,)
     env = Environment(
         {
             **env,
@@ -217,10 +218,7 @@ def check(
     builtins_stub_env = Environment()
     preamble_stub_env = Environment()
     if _should_load_builtins:
-        builtins_stub_env = _check_stub(
-            pathlib.Path(__file__).with_name('py_builtins.cati'),
-            is_builtins=True,
-        )
+        builtins_stub_env = _check_stub(_builtins_stub_path, is_builtins=True,)
     if _should_load_preamble:
         preamble_stub_env = _check_stub(
             pathlib.Path(__file__).with_name('preamble.cati'),

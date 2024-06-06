@@ -80,20 +80,6 @@ globals()['@@types'] = {
             TypeSequence([_stack_type_var, dict_type[_x, _y]]),
         ),
     ),
-    'to_slice': GenericType(
-        [_stack_type_var, _x, _y, _z],
-        StackEffect(
-            TypeSequence(
-                [
-                    _stack_type_var,
-                    optional_type[_x,],
-                    optional_type[_y,],
-                    optional_type[_z,],
-                ]
-            ),
-            TypeSequence([_stack_type_var, slice_type[_z, _y, _x]]),
-        ),
-    ),
 }
 
 

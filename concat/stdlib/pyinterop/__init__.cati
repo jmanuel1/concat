@@ -9,3 +9,6 @@ def to_str(*stack_type_var errors:object encoding:object obj:object -- *stack_ty
 
 def to_py_function(*rest_var f:(*rest_var_2 -- *rest_var_3) -- *rest_var py_f:py_function[*any_args, `any_ret]):
   ()
+
+def to_slice(*stack_type_var step:Optional[`x] stop:Optional[`y] start:Optional[`z] -- *stack_type_var slice_:slice[`z, `y, `x]):
+  ()

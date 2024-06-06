@@ -98,3 +98,7 @@ class list[`element]:
     ()
 
 !@@concat.typecheck.builtin_list list
+
+# SupportAbs is the name of the protocol in Python
+def abs(--) @cast (py_function[(SupportsAbs[`t]), `t]):
+  ()
