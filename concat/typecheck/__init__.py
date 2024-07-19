@@ -35,7 +35,7 @@ from typing_extensions import Protocol
 if TYPE_CHECKING:
     import concat.astutils
     from concat.orderedset import InsertionOrderedSet
-    from concat.typecheck.types import Type, _Variable
+    from concat.typecheck.types import Type, Variable
 
 
 class Environment(Dict[str, 'Type']):
@@ -52,7 +52,7 @@ class Environment(Dict[str, 'Type']):
     def apply_substitution(self, sub: 'Substitutions') -> 'Environment':
         return Environment({name: sub(t) for name, t in self.items()})
 
-    def free_type_variables(self) -> 'InsertionOrderedSet[_Variable]':
+    def free_type_variables(self) -> 'InsertionOrderedSet[Variable]':
         return free_type_variables_of_mapping(self)
 
 
@@ -64,11 +64,11 @@ class _Substitutable(Protocol[_Result]):
         pass
 
 
-class Substitutions(Mapping['_Variable', 'Type']):
+class Substitutions(Mapping['Variable', 'Type']):
     def __init__(
         self,
         sub: Union[
-            Iterable[Tuple['_Variable', 'Type']], Mapping['_Variable', 'Type']
+            Iterable[Tuple['Variable', 'Type']], Mapping['Variable', 'Type']
         ] = {},
     ) -> None:
         self._sub = dict(sub)
@@ -78,7 +78,7 @@ class Substitutions(Mapping['_Variable', 'Type']):
         #         raise TypeError(
         #             f'{variable} is being substituted by {ty}, which has the wrong kind ({variable.kind} vs {ty.kind})'
         #         )
-        self._cache: Dict[int, Type] = {}
+        self._cache: Dict[int, 'Type'] = {}
         # innermost first
         self.subtyping_provenance: List[Any] = []
 
@@ -87,10 +87,10 @@ class Substitutions(Mapping['_Variable', 'Type']):
     ) -> None:
         self.subtyping_provenance.append(subtyping_query)
 
-    def __getitem__(self, var: '_Variable') -> 'Type':
+    def __getitem__(self, var: 'Variable') -> 'Type':
         return self._sub[var]
 
-    def __iter__(self) -> Iterator['_Variable']:
+    def __iter__(self) -> Iterator['Variable']:
         return iter(self._sub)
 
     def __len__(self) -> int:
@@ -118,7 +118,7 @@ class Substitutions(Mapping['_Variable', 'Type']):
         result = arg.apply_substitution(self)
         return result
 
-    def _dom(self) -> Set['_Variable']:
+    def _dom(self) -> Set['Variable']:
         return {*self}
 
     def __str__(self) -> str:
@@ -154,7 +154,7 @@ from concat.typecheck.types import (
     GenericTypeKind,
     IndividualKind,
     IndividualType,
-    IndividualVariable,
+    ItemVariable,
     Kind,
     ObjectType,
     QuotationType,
@@ -162,18 +162,16 @@ from concat.typecheck.types import (
     SequenceVariable,
     StackEffect,
     StackItemType,
-    Type,
     TypeSequence,
     free_type_variables_of_mapping,
     get_int_type,
     get_list_type,
     get_object_type,
     get_str_type,
+    ItemKind,
     module_type,
     no_return_type,
     py_function_type,
-    subscriptable_type,
-    subtractable_type,
     tuple_type,
 )
 import abc
@@ -270,11 +268,11 @@ def infer(
     for node in e:
         if isinstance(node, concat.parse.ClassdefStatementNode):
             type_name = node.class_name
-            kind: Kind = IndividualKind()
+            kind: Kind = IndividualKind
             type_parameters = []
             parameter_kinds: Sequence[Kind]
             if node.is_variadic:
-                parameter_kinds = [SequenceKind()]
+                parameter_kinds = [SequenceKind]
             else:
                 for param in node.type_parameters:
                     if isinstance(param, TypeNode):
@@ -375,7 +373,7 @@ def infer(
             elif isinstance(node, concat.parse.ListWordNode):
                 phi = S
                 collected_type = o
-                element_type: IndividualType = no_return_type
+                element_type: 'Type' = no_return_type
                 for item in node.list_children:
                     phi1, fun_type, _ = infer(
                         phi(gamma),
@@ -389,7 +387,7 @@ def infer(
                     # FIXME: Infer the type of elements in the list based on
                     # ALL the elements.
                     if element_type == no_return_type:
-                        assert collected_type[-1] != SequenceKind()
+                        assert collected_type[-1] != SequenceKind
                         element_type = collected_type[-1]
                     # drop the top of the stack to use as the item
                     collected_type = collected_type[:-1]
@@ -494,7 +492,6 @@ def infer(
                     )
             elif isinstance(node, concat.parse.FuncdefStatementNode):
                 S = current_subs
-                f = current_effect
                 name = node.name
                 # NOTE: To continue the "bidirectional" bent, we will require a ghg
                 # type annotation.
@@ -654,7 +651,7 @@ def infer(
             elif not check_bodies and isinstance(
                 node, concat.parse.ClassdefStatementNode
             ):
-                type_parameters: List[_Variable] = []
+                type_parameters: List[Variable] = []
                 temp_gamma = gamma.copy()
                 if node.is_variadic:
                     type_parameters.append(SequenceVariable())
@@ -665,7 +662,7 @@ def infer(
                         param, temp_gamma = param_node.to_type(temp_gamma)
                         type_parameters.append(param)
 
-                kind: Kind = IndividualKind()
+                kind: Kind = IndividualKind
                 if type_parameters:
                     kind = GenericTypeKind([v.kind for v in type_parameters])
                 self_type = BoundVariable(kind)
@@ -765,9 +762,10 @@ def _check_stub(
 class TypeNode(concat.parse.Node, abc.ABC):
     def __init__(self, location: concat.astutils.Location) -> None:
         self.location = location
+        self.children: Sequence[concat.parse.Node]
 
     @abc.abstractmethod
-    def to_type(self, env: Environment) -> Tuple[Type, Environment]:
+    def to_type(self, env: Environment) -> Tuple['Type', Environment]:
         pass
 
 
@@ -777,23 +775,24 @@ class IndividualTypeNode(TypeNode, abc.ABC):
         super().__init__(location)
 
     @abc.abstractmethod
-    def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
+    def to_type(self, env: Environment) -> Tuple['Type', Environment]:
         pass
 
 
 # A dataclass is not used here because making this a subclass of an abstract
 # class does not work without overriding __init__ even when it's a dataclass.
 class NamedTypeNode(TypeNode):
-    def __init__(self, location: tuple, name: str) -> None:
+    def __init__(self, location: concat.astutils.Location, name: str) -> None:
         super().__init__(location)
         self.name = name
+        self.children = []
 
     def __repr__(self) -> str:
         return '{}({!r}, {!r})'.format(
             type(self).__qualname__, self.location, self.name
         )
 
-    def to_type(self, env: Environment) -> Tuple[Type, Environment]:
+    def to_type(self, env: Environment) -> Tuple['Type', Environment]:
         type = env.get(self.name, None)
         if type is None:
             raise NameError(self.name, self.location)
@@ -819,12 +818,15 @@ class _GenericTypeNode(IndividualTypeNode):
     def __init__(
         self,
         location: concat.astutils.Location,
+        end_location: concat.astutils.Location,
         generic_type: IndividualTypeNode,
         type_arguments: Sequence[IndividualTypeNode],
     ) -> None:
         super().__init__(location)
         self._generic_type = generic_type
         self._type_arguments = type_arguments
+        self.end_location = end_location
+        self.children = [generic_type] + list(type_arguments)
 
     def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
         args = []
@@ -848,6 +850,7 @@ class _TypeSequenceIndividualTypeNode(IndividualTypeNode):
         super().__init__(location)
         self._name = None if args[0] is None else args[0].value
         self._type = args[1]
+        self.children = [n for n in args if isinstance(n, TypeNode)]
 
     # QUESTION: Should I have a separate space for the temporary associated names?
     def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
@@ -891,6 +894,8 @@ class TypeSequenceNode(TypeNode):
         super().__init__(location or (-1, -1))
         self._sequence_variable = seq_var
         self._individual_type_items = tuple(individual_type_items)
+        self.children = [] if seq_var is None else [seq_var]
+        self.children.extend(self._individual_type_items)
 
     def to_type(self, env: Environment) -> Tuple[TypeSequence, Environment]:
         sequence: List[StackItemType] = []
@@ -932,6 +937,7 @@ class StackEffectTypeNode(IndividualTypeNode):
         self.input = [(i.name, i.type) for i in input.individual_type_items]
         self.output_sequence_variable = output.sequence_variable
         self.output = [(o.name, o.type) for o in output.individual_type_items]
+        self.children = [input, output]
 
     def __repr__(self) -> str:
         return '{}({!r}, {!r}, {!r}, {!r}, location={!r})'.format(
@@ -987,30 +993,29 @@ class StackEffectTypeNode(IndividualTypeNode):
         )
 
 
-class _IndividualVariableNode(IndividualTypeNode):
-    """The AST type for individual type variables."""
+class _ItemVariableNode(TypeNode):
+    """The AST type for item type variables."""
 
     def __init__(self, name: Token) -> None:
         super().__init__(name.start)
         self._name = name.value
+        self.children = []
 
-    def to_type(
-        self, env: Environment
-    ) -> Tuple[IndividualVariable, Environment]:
+    def to_type(self, env: Environment) -> Tuple['Variable', Environment]:
         # QUESTION: Should callers be expected to have already introduced the
         # name into the context?
         if self._name in env:
             ty = env[self._name]
-            if not isinstance(ty, IndividualVariable):
+            if not (ty.kind <= ItemKind):
                 error = TypeError(
-                    f'{self._name} is not an individual type variable'
+                    f'{self._name} is not an item type variable (has kind {ty.kind})'
                 )
                 error.location = self.location
                 raise error
             return ty, env
 
         env = env.copy()
-        var = IndividualVariable()
+        var = BoundVariable(ItemKind)
         env[self._name] = var
         return var, env
 
@@ -1025,6 +1030,7 @@ class _SequenceVariableNode(TypeNode):
     def __init__(self, name: Token) -> None:
         super().__init__(name.start)
         self._name = name.value
+        self.children = []
 
     def to_type(
         self, env: Environment
@@ -1058,15 +1064,16 @@ class _ForallTypeNode(TypeNode):
         self,
         location: 'concat.astutils.Location',
         type_variables: Sequence[
-            Union[_IndividualVariableNode, _SequenceVariableNode]
+            Union[_ItemVariableNode, _SequenceVariableNode]
         ],
         ty: TypeNode,
     ) -> None:
         super().__init__(location)
         self._type_variables = type_variables
         self._type = ty
+        self.children = list(type_variables) + [ty]
 
-    def to_type(self, env: Environment) -> Tuple[Type, Environment]:
+    def to_type(self, env: Environment) -> Tuple['Type', Environment]:
         temp_env = env.copy()
         variables = []
         for var in self._type_variables:
@@ -1127,7 +1134,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
             end_location = (yield concat.parse.token('RSQB')).end
             return _GenericTypeNode(
                 type_constructor_name.location,
-                # end_location,
+                end_location,
                 type_constructor_name,
                 type_arguments,
             )
@@ -1138,7 +1145,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         yield concat.parse.token('BACKTICK')
         name = yield non_star_name_parser
 
-        return _IndividualVariableNode(name)
+        return _ItemVariableNode(name)
 
     @concat.parser_combinators.generate
     def sequence_type_variable_parser() -> Generator:
@@ -1347,10 +1354,10 @@ def _ensure_type(
     if obj_name and obj_name in known_stack_item_names:
         type = cast(StackItemType, known_stack_item_names[obj_name])
     elif typename is None:
-        # NOTE: This could lead type varibles in the output of a function that
-        # are unconstrained. In other words, it would basically become an Any
-        # type.
-        type = IndividualVariable()
+        # NOTE: This could lead type to variables in the output of a function
+        # that are unconstrained. In other words, it would basically become an
+        # Any type.
+        type = ItemVariable(IndividualKind)
     elif isinstance(typename, TypeNode):
         type, env = cast(
             Tuple[StackItemType, Environment], typename.to_type(env),

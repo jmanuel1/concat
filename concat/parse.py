@@ -30,8 +30,6 @@ import abc
 import operator
 from typing import (
     Any,
-    Callable,
-    Dict,
     Generator,
     Iterable,
     Iterator,
@@ -307,6 +305,7 @@ class FuncdefStatementNode(StatementNode):
     def __init__(
         self,
         name: 'Token',
+        type_parameters: Sequence[Tuple['Token', Node]],
         decorators: Iterable[WordNode],
         annotation: Optional[Iterable[WordNode]],
         body: 'WordsOrStatements',
@@ -316,25 +315,21 @@ class FuncdefStatementNode(StatementNode):
         super().__init__()
         self.location = location
         self.name = name.value
+        self.type_parameters = type_parameters
         self.decorators = decorators
         self.annotation = annotation
         self.body = body
+        self.stack_effect = stack_effect
         self.children = [
+            *self.type_parameters,
             *self.decorators,
             *(self.annotation or []),
+            self.stack_effect,
             *self.body,
         ]
-        self.stack_effect = stack_effect
 
     def __repr__(self) -> str:
-        return 'FuncdefStatementNode(decorators={!r}, name={!r}, annotation={!r}, body={!r}, stack_effect={!r}, location={!r})'.format(
-            self.decorators,
-            self.name,
-            self.annotation,
-            self.body,
-            self.stack_effect,
-            self.location,
-        )
+        return f'FuncdefStatementNode(decorators={self.decorators!r}, name={self.name!r}, type_parameters={self.type_parameters!r}, annotation={self.annotation!r}, body={self.body!r}, stack_effect={self.stack_effect!r}, location={self.location!r})'
 
 
 class FromImportStatementNode(ImportStatementNode):
@@ -428,10 +423,6 @@ def extension(parsers: ParserDict) -> None:
     # The specific statement node is returned.
     # statement = import statement ;
     parsers['statement'] = parsers.ref_parser('import-statement')
-
-    ImportStatementParserGenerator = Generator[
-        concat.parser_combinators.Parser, Any, ImportStatementNode
-    ]
 
     # This parses one of many types of word.
     # The specific word node is returned.
@@ -577,25 +568,48 @@ def extension(parsers: ParserDict) -> None:
     )
 
     # This parses a function definition.
-    # funcdef statement = DEF, NAME, stack effect, decorator*,
+    # funcdef statement = DEF, NAME, [ type parameters ], stack effect, decorator*,
     #   [ annotation ], COLON, suite ;
     # decorator = AT, word ;
     # annotation = RARROW, word* ;
     # suite = NEWLINE, INDENT, (word | statement, NEWLINE)+, DEDENT | statement
     #    | word+ ;
+    # type parameters = "[", [ type parameter ],
+    #   (",", type parameter)*, [ "," ], "]" ;
+    # type parameter = NAME, COLON, type ;
     # The stack effect syntax is defined within the typecheck module.
     @concat.parser_combinators.generate
     def funcdef_statement_parser() -> Generator:
         location = (yield token('DEF')).start
         name = yield token('NAME')
+        type_params = (yield type_parameters.optional()) or []
         effect_ast = yield parsers['stack-effect-type']
         decorators = yield decorator.many()
         annotation = yield annotation_parser.optional()
         yield token('COLON')
         body = yield suite
         return FuncdefStatementNode(
-            name, decorators, annotation, body, location, effect_ast
+            name,
+            type_params,
+            decorators,
+            annotation,
+            body,
+            location,
+            effect_ast,
         )
+
+    @concat.parser_combinators.generate
+    def type_parameter() -> Generator:
+        name = yield token('NAME')
+        yield token('COLON')
+        ty = yield parsers['type']
+        return (name, ty)
+
+    type_parameters = bracketed(
+        token('LSQB'),
+        type_parameter.sep_by(token('COMMA')) << token('COMMA').optional(),
+        token('RQSB'),
+    ).map(handle_recovery)
 
     parsers['funcdef-statement'] = funcdef_statement_parser.desc(
         'funcdef statement'
@@ -701,20 +715,6 @@ def extension(parsers: ParserDict) -> None:
                 return concat.parser_combinators.success(None)
             return concat.parser_combinators.fail('a literal ellispis (...)')
 
-        def handle_recovery(
-            x: Union[
-                Sequence[Node],
-                Tuple[Any, concat.parser_combinators.Result[Any]],
-            ]
-        ) -> Sequence[Node]:
-            if (
-                isinstance(x, tuple)
-                and len(x) > 1
-                and isinstance(x[1], concat.parser_combinators.Result)
-            ):
-                return [ParseError(x[1])]
-            return x
-
         ellispis_parser = token('NAME').bind(ellispis_verify)
         type_parameters = (
             yield bracketed(
@@ -818,3 +818,17 @@ def extension(parsers: ParserDict) -> None:
     # parsers['word'] |= parsers['freeze-word'].should_fail(
     #     'not a freeze word, which has polymorphic type'
     # )
+
+
+def handle_recovery(
+    x: Union[
+        Sequence[Node], Tuple[Any, concat.parser_combinators.Result[Any]],
+    ]
+) -> Sequence[Node]:
+    if (
+        isinstance(x, tuple)
+        and len(x) > 1
+        and isinstance(x[1], concat.parser_combinators.Result)
+    ):
+        return [ParseError(x[1])]
+    return x

@@ -1,6 +1,7 @@
 from concat.typecheck.types import (
+    BoundVariable,
     GenericType,
-    IndividualVariable,
+    ItemKind,
     ObjectType,
     SequenceVariable,
     StackEffect,
@@ -29,10 +30,9 @@ _rest_var = SequenceVariable()
 _seq_var = SequenceVariable()
 _stack_var = SequenceVariable()
 _stack_type_var = SequenceVariable()
-_a_var = IndividualVariable()
-_b_var = IndividualVariable()
-_c_var = IndividualVariable()
-_x = IndividualVariable()
+_a_var = BoundVariable(ItemKind)
+_b_var = BoundVariable(ItemKind)
+_c_var = BoundVariable(ItemKind)
 
 types = {
     'addable': addable_type,

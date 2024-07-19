@@ -19,13 +19,13 @@ def to_list(*rest_var i:iterable[`a_var] -- *rest_var l:list[`a_var]):
 def py_call(*rest_var kwargs:iterable[object] args:iterable[object] f:py_function[*seq_var, `a_var] -- *rest_var res:`a_var):
   ()
 
-def nip(*rest_var a:object b:`a_var -- *rest_var b:`a_var):
+def nip(*rest_var a:`_ b:`a_var -- *rest_var b:`a_var):
   ()
 
-def nip_2(*rest_var a:object b:object c:`a_var -- *rest_var c:`a_var):
+def nip_2(*rest_var a:`_1 b:`_2 c:`a_var -- *rest_var c:`a_var):
   ()
 
-def drop(*rest_var a:object -- *rest_var):
+def drop(*rest_var a:`_ -- *rest_var):
   ()
 
 def open(*rest_var kwargs:dict[str, object] path:str -- *rest_var f:file):

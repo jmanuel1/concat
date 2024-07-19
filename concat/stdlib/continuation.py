@@ -1,8 +1,4 @@
 from concat.common_types import ConcatFunction
-from concat.typecheck.types import (
-    IndividualVariable,
-    SequenceVariable,
-)
 from typing import Any, Callable, Generic, List, NoReturn, Type, TypeVar, cast
 
 
@@ -84,10 +80,6 @@ def compose(
 
 
 # Concat API
-
-
-_s, _t, _u = SequenceVariable(), SequenceVariable(), SequenceVariable()
-_a, _b, _r = IndividualVariable(), IndividualVariable(), IndividualVariable()
 
 
 def call_with_current_continuation(

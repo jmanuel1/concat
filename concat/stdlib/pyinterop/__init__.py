@@ -3,15 +3,14 @@ from concat.common_types import ConcatFunction
 import concat.stdlib.ski
 from concat.typecheck.types import (
     GenericType,
-    IndividualVariable,
-    ObjectType,
+    IndividualKind,
+    ItemVariable,
     SequenceVariable,
     StackEffect,
     TypeSequence,
     dict_type,
     iterable_type,
     optional_type,
-    slice_type,
     subscriptable_type,
     tuple_type,
 )
@@ -39,9 +38,9 @@ _stack_type_var = SequenceVariable()
 _rest_var = SequenceVariable()
 _rest_var_2 = SequenceVariable()
 _rest_var_3 = SequenceVariable()
-_x = IndividualVariable()
-_y = IndividualVariable()
-_z = IndividualVariable()
+_x = ItemVariable(IndividualKind)
+_y = ItemVariable(IndividualKind)
+_z = ItemVariable(IndividualKind)
 globals()['@@types'] = {
     'getitem': GenericType(
         [_stack_type_var, _x, _y],
@@ -337,7 +336,7 @@ def map(stack: List[object], stash: List[object]) -> None:
         f(stack, stash)
         return stack.pop()
 
-    stack.append(map(python_f, iterable))
+    stack.append(builtins.map(python_f, iterable))
 
 
 def open(stack: List[object], stash: List[object]) -> None:

@@ -1,6 +1,7 @@
 from concat.typecheck.types import (
+    IndividualKind,
     IndividualType,
-    IndividualVariable,
+    ItemVariable,
     ObjectType,
     PythonFunctionType,
     SequenceVariable,
@@ -72,7 +73,7 @@ def _mark_individual_type_strategy(
 
 _individual_type_strategy = recursive(
     _mark_individual_type_strategy(
-        from_type(IndividualVariable), IndividualVariable
+        builds(ItemVariable, just(IndividualKind)), ItemVariable
     )
     | _mark_individual_type_strategy(
         just(no_return_type), type(no_return_type)

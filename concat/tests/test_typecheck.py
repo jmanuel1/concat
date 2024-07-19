@@ -9,7 +9,8 @@ from concat.typecheck.types import (
     Fix,
     IndividualKind,
     IndividualType,
-    IndividualVariable,
+    IndividualKind,
+    ItemVariable,
     ObjectType,
     StackEffect,
     Type as ConcatType,
@@ -192,8 +193,8 @@ class TestTypeChecker(unittest.TestCase):
 class TestStackEffectParser(unittest.TestCase):
     _a_bar = concat.typecheck.SequenceVariable()
     _d_bar = concat.typecheck.SequenceVariable()
-    _b = concat.typecheck.IndividualVariable()
-    _c = concat.typecheck.IndividualVariable()
+    _b = concat.typecheck.ItemVariable(IndividualKind)
+    _c = concat.typecheck.ItemVariable(IndividualKind)
     examples: Dict[str, StackEffect] = {
         'a b -- b a': StackEffect(
             TypeSequence([_a_bar, _b, _c]), TypeSequence([_a_bar, _c, _b])
@@ -273,7 +274,7 @@ class TestNamedTypeNode(unittest.TestCase):
     )
     @example(
         named_type_node=concat.typecheck.NamedTypeNode((0, 0), ''),
-        type=IndividualVariable(),
+        type=ItemVariable(IndividualKind),
     )
     def test_name_does_exist(self, named_type_node, type) -> None:
         env = concat.typecheck.Environment({named_type_node.name: type})
@@ -392,7 +393,7 @@ class TestSubtyping(unittest.TestCase):
         )
     )
     def test_class_subtype_of_py_function(self, type1, type2) -> None:
-        x = IndividualVariable()
+        x = ItemVariable(IndividualKind)
         py_function = py_function_type[TypeSequence([type1]), type2]
         unbound_py_function = py_function_type[TypeSequence([x, type1]), type2]
         cls = Fix(x, ClassType({'__init__': unbound_py_function}))
