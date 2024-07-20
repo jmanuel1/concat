@@ -283,7 +283,7 @@ def infer(
                 parameter_kinds = [
                     variable.kind for variable in type_parameters
                 ]
-                kind = GenericTypeKind(parameter_kinds)
+                kind = GenericTypeKind(parameter_kinds, IndividualKind)
             gamma[type_name] = ForwardTypeReference(kind, type_name, gamma)
 
     for node in e:
@@ -664,7 +664,9 @@ def infer(
 
                 kind: Kind = IndividualKind
                 if type_parameters:
-                    kind = GenericTypeKind([v.kind for v in type_parameters])
+                    kind = GenericTypeKind(
+                        [v.kind for v in type_parameters], IndividualKind
+                    )
                 self_type = BoundVariable(kind)
                 temp_gamma[node.class_name] = self_type
                 _, _, body_attrs = infer(

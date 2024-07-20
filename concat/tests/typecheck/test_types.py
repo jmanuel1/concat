@@ -8,7 +8,9 @@ from concat.typecheck.types import (
     BoundVariable,
     Fix,
     ForwardTypeReference,
+    GenericType,
     IndividualKind,
+    ItemKind,
     ItemVariable,
     ObjectType,
     SequenceVariable,
@@ -180,3 +182,19 @@ class TestTypeSequence(unittest.TestCase):
 
     def test_empty_equal(self) -> None:
         self.assertEqual(TypeSequence([]), TypeSequence([]))
+
+
+class TestGeneric(unittest.TestCase):
+    def test_generalize(self) -> None:
+        a, b = BoundVariable(ItemKind), BoundVariable(ItemKind)
+        subtype = GenericType([a], get_int_type())
+        supertype = GenericType([a, b], get_int_type())
+        subtype.constrain_and_bind_variables(supertype, set(), [])
+
+    def test_parameter_kinds(self) -> None:
+        ind = BoundVariable(IndividualKind)
+        item = BoundVariable(ItemKind)
+        subtype = GenericType([ind], ind)
+        supertype = GenericType([item], item)
+        with self.assertRaises(ConcatTypeError):
+            subtype.constrain_and_bind_variables(supertype, set(), [])

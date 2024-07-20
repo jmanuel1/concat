@@ -452,10 +452,6 @@ class GenericType(Type):
         super().__init__()
         assert type_parameters
         self._type_parameters = type_parameters
-        if body.kind != IndividualKind:
-            raise ConcatTypeError(
-                f'Cannot be polymorphic over non-individual type {body}'
-            )
         self._body = body
         self._instantiations: Dict[Tuple[int, ...], Type] = {}
         self.is_variadic = is_variadic
@@ -501,9 +497,9 @@ class GenericType(Type):
         return instance
 
     @property
-    def kind(self) -> 'Kind':
+    def kind(self) -> 'GenericTypeKind':
         kinds = [var.kind for var in self._type_parameters]
-        return GenericTypeKind(kinds)
+        return GenericTypeKind(kinds, self._body.kind)
 
     def instantiate(self) -> Type:
         fresh_vars: Sequence[Variable] = [
@@ -523,33 +519,67 @@ class GenericType(Type):
             subtyping_assumptions, self, supertype
         ):
             return Substitutions()
-        # EXCEPTION: I should be able to instantiate a generic type when
-        # required.
-        if supertype.kind is IndividualKind:
-            return self.instantiate().constrain_and_bind_variables(
-                supertype, rigid_variables, subtyping_assumptions
-            )
+        # NOTE: Here, we implement subsumption of polytypes, so the kinds don't
+        # need to be the same. See concat/poly-subsumption.md for more
+        # information.
         if (
-            isinstance(supertype, ItemVariable)
-            and supertype.kind >= self.kind
+            isinstance(supertype, Variable)
             and supertype not in rigid_variables
+            and self.kind <= supertype.kind
         ):
             return Substitutions([(supertype, self)])
-        if not (self.kind <= supertype.kind):
-            raise ConcatTypeError(
-                f'{self} has kind {self.kind} but {supertype} has kind {supertype.kind}'
+        if not isinstance(supertype, GenericType):
+            supertype_parameter_kinds: Sequence[Kind]
+            if isinstance(supertype.kind, GenericTypeKind):
+                supertype_parameter_kinds = supertype.kind.parameter_kinds
+            elif self.kind.result_kind <= supertype.kind:
+                supertype_parameter_kinds = []
+            else:
+                raise ConcatTypeError(
+                    f'{self} has kind {self.kind} but {supertype} has kind {supertype.kind}'
+                )
+            params_to_inst = len(self.kind.parameter_kinds) - len(
+                supertype_parameter_kinds
             )
-        shared_vars = [var.freshen() for var in self._type_parameters]
-        self_instance = self[shared_vars]
-        supertype_instance = supertype[shared_vars]
-        rigid_variables = (
-            rigid_variables
-            # The parameters have been substituted already. The shared_vars
-            # should be rigid.
-            | set(shared_vars)
-        )
-        return self_instance.constrain_and_bind_variables(
-            supertype_instance, rigid_variables, subtyping_assumptions
+            param_kinds_left = self.kind.parameter_kinds[
+                -len(supertype_parameter_kinds) :
+            ]
+            if params_to_inst < 0 or not (
+                param_kinds_left >= supertype_parameter_kinds
+            ):
+                raise ConcatTypeError(
+                    f'{self} has kind {self.kind} but {supertype} has kind {supertype.kind}'
+                )
+            sub = Substitutions(
+                [
+                    (t, t.freshen())
+                    for t in self._type_parameters[:params_to_inst]
+                ]
+            )
+            parameters_left = self._type_parameters[params_to_inst:]
+            inst: Type
+            if parameters_left:
+                inst = GenericType(parameters_left, sub(self._body))
+            else:
+                inst = sub(self._body)
+            return inst.constrain_and_bind_variables(
+                supertype, rigid_variables, subtyping_assumptions
+            )
+        # supertype is a GenericType
+        # QUESTION: Should I care about is_variadic?
+        if any(
+            map(
+                lambda t: t in self.free_type_variables(),
+                supertype._type_parameters,
+            )
+        ):
+            raise ConcatTypeError(
+                f'Type parameters {supertype._type_parameters} cannot appear free in {self}'
+            )
+        return self.instantiate().constrain_and_bind_variables(
+            supertype._body,
+            rigid_variables | set(supertype._type_parameters),
+            subtyping_assumptions,
         )
 
     def apply_substitution(self, sub: 'Substitutions') -> 'GenericType':
@@ -657,7 +687,7 @@ class TypeSequence(Type, Iterable[Type]):
                 # error
                 else:
                     raise StackMismatchError(self, supertype)
-            elif not self._individual_types:
+            if not self._individual_types:
                 # *a <: [], *a is not rigid
                 # --> *a = []
                 if supertype._is_empty() and self._rest not in rigid_variables:
@@ -683,49 +713,47 @@ class TypeSequence(Type, Iterable[Type]):
                     sub = Substitutions([(self._rest, supertype)])
                     sub.add_subtyping_provenance((self, supertype))
                     return sub
-                else:
-                    raise StackMismatchError(self, supertype)
-            else:
-                # *a? `t... `t_n <: []
-                # error
-                if supertype._is_empty():
-                    raise StackMismatchError(self, supertype)
-                # *a? `t... `t_n <: *b, *b is not rigid, *b is not free in LHS
-                # --> *b = LHS
-                elif (
-                    not supertype._individual_types
-                    and supertype._rest
-                    and supertype._rest not in self.free_type_variables()
-                    and supertype._rest not in rigid_variables
-                ):
-                    sub = Substitutions([(supertype._rest, self)])
-                    sub.add_subtyping_provenance((self, supertype))
-                    return sub
-                # `t_n <: `s_m  *a? `t... <: *b? `s...
-                #   ---
-                # *a? `t... `t_n <: *b? `s... `s_m
-                elif supertype._individual_types:
-                    sub = self._individual_types[
-                        -1
-                    ].constrain_and_bind_variables(
-                        supertype._individual_types[-1],
+                # else:
+                #     print(rigid_variables)
+                #     raise StackMismatchError(self, supertype)
+            # *a? `t... `t_n <: []
+            # error
+            if supertype._is_empty():
+                raise StackMismatchError(self, supertype)
+            # *a? `t... `t_n <: *b, *b is not rigid, *b is not free in LHS
+            # --> *b = LHS
+            elif (
+                not supertype._individual_types
+                and supertype._rest
+                and supertype._rest not in self.free_type_variables()
+                and supertype._rest not in rigid_variables
+            ):
+                sub = Substitutions([(supertype._rest, self)])
+                sub.add_subtyping_provenance((self, supertype))
+                return sub
+            # `t_n <: `s_m  *a? `t... <: *b? `s...
+            #   ---
+            # *a? `t... `t_n <: *b? `s... `s_m
+            elif supertype._individual_types:
+                sub = self._individual_types[-1].constrain_and_bind_variables(
+                    supertype._individual_types[-1],
+                    rigid_variables,
+                    subtyping_assumptions,
+                )
+                try:
+                    sub = sub(self[:-1]).constrain_and_bind_variables(
+                        sub(supertype[:-1]),
                         rigid_variables,
                         subtyping_assumptions,
-                    )
-                    try:
-                        sub = sub(self[:-1]).constrain_and_bind_variables(
-                            sub(supertype[:-1]),
-                            rigid_variables,
-                            subtyping_assumptions,
-                        )(sub)
-                        # sub.add_subtyping_provenance((self, supertype))
-                        return sub
-                    except StackMismatchError:
-                        # TODO: Add info about occurs check and rigid
-                        # variables.
-                        raise StackMismatchError(self, supertype)
-                else:
+                    )(sub)
+                    return sub
+                except StackMismatchError:
+                    # TODO: Add info about occurs check and rigid
+                    # variables.
                     raise StackMismatchError(self, supertype)
+            else:
+                raise StackMismatchError(self, supertype)
+            raise StackMismatchError(self, supertype)
         else:
             raise ConcatTypeError(
                 f'{self} is a sequence type, not {supertype}'
@@ -1255,7 +1283,7 @@ class PythonFunctionType(IndividualType):
     def kind(self) -> 'Kind':
         if self._arity == 0:
             return IndividualKind
-        return GenericTypeKind([SequenceKind, IndividualKind])
+        return GenericTypeKind([SequenceKind, IndividualKind], IndividualKind)
 
     def __repr__(self) -> str:
         # QUESTION: Is it worth using type(self)?
@@ -1494,7 +1522,7 @@ class _PythonOverloadedType(Type):
 
     @property
     def kind(self) -> 'Kind':
-        return GenericTypeKind([SequenceKind])
+        return GenericTypeKind([SequenceKind], IndividualKind)
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, type(self))
@@ -1671,17 +1699,22 @@ SequenceKind = _SequenceKind()
 
 
 class GenericTypeKind(Kind):
-    def __init__(self, parameter_kinds: Sequence[Kind]) -> None:
+    def __init__(
+        self, parameter_kinds: Sequence[Kind], result_kind: Kind
+    ) -> None:
         if not parameter_kinds:
             raise ConcatTypeError(
                 'Generic type kinds cannot have empty parameters'
             )
         self.parameter_kinds = parameter_kinds
+        self.result_kind = result_kind
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, GenericTypeKind) and list(
-            self.parameter_kinds
-        ) == list(other.parameter_kinds)
+        return (
+            isinstance(other, GenericTypeKind)
+            and list(self.parameter_kinds) == list(other.parameter_kinds)
+            and self.result_kind == other.result_kind
+        )
 
     def __lt__(self, other: Kind) -> bool:
         if not isinstance(other, Kind):
@@ -1692,10 +1725,13 @@ class GenericTypeKind(Kind):
             return False
         if len(self.parameter_kinds) != len(other.parameter_kinds):
             return False
-        return list(self.parameter_kinds) > list(other.parameter_kinds)
+        return (
+            list(self.parameter_kinds) > list(other.parameter_kinds)
+            and self.result_kind < other.result_kind
+        )
 
     def __str__(self) -> str:
-        return f'Generic[{", ".join(map(str, self.parameter_kinds))}]'
+        return f'Generic[{", ".join(map(str, self.parameter_kinds))}, {self.result_kind}]'
 
 
 class Fix(Type):
