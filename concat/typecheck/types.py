@@ -1602,6 +1602,10 @@ class Kind(abc.ABC):
     def __lt__(self, other: 'Kind') -> bool:
         pass
 
+    @abc.abstractmethod
+    def __str__(self) -> str:
+        pass
+
 
 class _ItemKind(Kind):
     __instance: Optional['_ItemKind'] = None
@@ -1616,6 +1620,9 @@ class _ItemKind(Kind):
 
     def __lt__(self, other: Kind) -> bool:
         return False
+
+    def __str__(self) -> str:
+        return 'Item'
 
 
 ItemKind = _ItemKind()
@@ -1635,6 +1642,9 @@ class _IndividualKind(Kind):
     def __lt__(self, other: Kind) -> bool:
         return other is ItemKind
 
+    def __str__(self) -> str:
+        return 'Individual'
+
 
 IndividualKind = _IndividualKind()
 
@@ -1652,6 +1662,9 @@ class _SequenceKind(Kind):
 
     def __lt__(self, other: Kind) -> bool:
         return other is ItemKind
+
+    def __str__(self) -> str:
+        return 'Sequence'
 
 
 SequenceKind = _SequenceKind()
@@ -1680,6 +1693,9 @@ class GenericTypeKind(Kind):
         if len(self.parameter_kinds) != len(other.parameter_kinds):
             return False
         return list(self.parameter_kinds) > list(other.parameter_kinds)
+
+    def __str__(self) -> str:
+        return f'Generic[{", ".join(map(str, self.parameter_kinds))}]'
 
 
 class Fix(Type):
