@@ -340,14 +340,15 @@ class ItemVariable(Variable):
 
         if (
             self is supertype
-            or self.kind == IndividualKind
-            and supertype is get_object_type()
+            # QUESTION: subsumption of polytypes?
+            or self.kind is IndividualKind
+            and supertype._type_id is get_object_type()._type_id
         ):
             return Substitutions()
         if (
-            self.kind <= supertype.kind
+            isinstance(supertype, Variable)
+            and self.kind <= supertype.kind
             and supertype not in rigid_variables
-            and isinstance(supertype, Variable)
         ):
             return Substitutions([(supertype, self)])
         mapping: Mapping[Variable, Type]
@@ -726,9 +727,6 @@ class TypeSequence(Type, Iterable[Type]):
                     sub = Substitutions([(self._rest, supertype)])
                     sub.add_subtyping_provenance((self, supertype))
                     return sub
-                # else:
-                #     print(rigid_variables)
-                #     raise StackMismatchError(self, supertype)
             # *a? `t... `t_n <: []
             # error
             if supertype._is_empty():
@@ -1406,11 +1404,11 @@ class PythonFunctionType(IndividualType):
             sub = Substitutions()
             sub.add_subtyping_provenance((self, supertype))
             return sub
-        if self.kind != supertype.kind:
+        if not (self.kind <= supertype.kind):
             raise ConcatTypeError(
                 f'{self} has kind {self.kind} but {supertype} has kind {supertype.kind}'
             )
-        if self.kind == IndividualKind:
+        if self.kind is IndividualKind:
             if supertype is get_object_type():
                 sub = Substitutions()
                 sub.add_subtyping_provenance((self, supertype))
@@ -1445,45 +1443,49 @@ class PythonFunctionType(IndividualType):
                     )
                 sub.add_subtyping_provenance((self, supertype))
                 return sub
-        if isinstance(supertype, PythonFunctionType):
-            if isinstance(self.kind, GenericTypeKind):
-                sub = Substitutions()
-                sub.add_subtyping_provenance((self, supertype))
-                return sub
+            if isinstance(supertype, PythonFunctionType):
+                # No need to extend the rigid variables, we know both types have no
+                # parameters at this point.
 
-            # No need to extend the rigid variables, we know both types have no
-            # parameters at this point.
-
-            # Support overloading the subtype.
-            exceptions = []
-            for overload in [
-                (self.input, self.output),
-                *self._overloads,
-            ]:
-                try:
-                    subtyping_assumptions_copy = subtyping_assumptions[:]
-                    self_input_types = overload[0]
-                    supertype_input_types = supertype.input
-                    sub = supertype_input_types.constrain_and_bind_variables(
-                        self_input_types,
-                        rigid_variables,
-                        subtyping_assumptions_copy,
+                # Support overloading the subtype.
+                exceptions = []
+                for overload in [
+                    (self.input, self.output),
+                    *self._overloads,
+                ]:
+                    try:
+                        subtyping_assumptions_copy = subtyping_assumptions[:]
+                        self_input_types = overload[0]
+                        supertype_input_types = supertype.input
+                        sub = supertype_input_types.constrain_and_bind_variables(
+                            self_input_types,
+                            rigid_variables,
+                            subtyping_assumptions_copy,
+                        )
+                        sub = sub(self.output).constrain_and_bind_variables(
+                            sub(supertype.output),
+                            rigid_variables,
+                            subtyping_assumptions_copy,
+                        )(sub)
+                        sub.add_subtyping_provenance((self, supertype))
+                        return sub
+                    except ConcatTypeError as e:
+                        exceptions.append(e)
+                    finally:
+                        subtyping_assumptions[:] = subtyping_assumptions_copy
+                raise ConcatTypeError(
+                    'no overload of {} is a subtype of {}'.format(
+                        self, supertype
                     )
-                    sub = sub(self.output).constrain_and_bind_variables(
-                        sub(supertype.output),
-                        rigid_variables,
-                        subtyping_assumptions_copy,
-                    )(sub)
-                    sub.add_subtyping_provenance((self, supertype))
-                    return sub
-                except ConcatTypeError as e:
-                    exceptions.append(e)
-                finally:
-                    subtyping_assumptions[:] = subtyping_assumptions_copy
-
-        raise ConcatTypeError(
-            'no overload of {} is a subtype of {}'.format(self, supertype)
-        ) from exceptions[0]
+                ) from exceptions[0]
+            raise ConcatTypeError(f'{self} is not a subtype of {supertype}')
+        # TODO: Remove generic type responsibility from this class
+        if isinstance(supertype, PythonFunctionType) and isinstance(
+            supertype.kind, GenericTypeKind
+        ):
+            sub = Substitutions()
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
 
 
 class _PythonOverloadedType(Type):
@@ -1780,7 +1782,7 @@ class Fix(Type):
             self._unrolled_ty = self._apply(self)
             if self._internal_name is not None:
                 self._unrolled_ty.set_internal_name(self._internal_name)
-            self._unrolled_ty._type_id = self._type_id
+            # self._unrolled_ty._type_id = self._type_id
         return self._unrolled_ty
 
     def _free_type_variables(self) -> InsertionOrderedSet[Variable]:

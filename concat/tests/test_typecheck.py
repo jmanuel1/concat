@@ -9,7 +9,6 @@ from concat.typecheck.types import (
     Fix,
     IndividualKind,
     IndividualType,
-    IndividualKind,
     ItemVariable,
     ObjectType,
     StackEffect,
@@ -279,7 +278,7 @@ class TestNamedTypeNode(unittest.TestCase):
     def test_name_does_exist(self, named_type_node, type) -> None:
         env = concat.typecheck.Environment({named_type_node.name: type})
         expected_type = named_type_node.to_type(env)[0]
-        note((expected_type, type))
+        note(str((expected_type, type)))
         self.assertEqual(named_type_node.to_type(env)[0], type)
 
 
@@ -309,7 +308,9 @@ class TestTypeEquality(unittest.TestCase):
 class TestSubtyping(unittest.TestCase):
     def test_int_not_subtype_of_float(self) -> None:
         """Differ from Reticulated Python: !(int <= float)."""
-        self.assertFalse(get_int_type().is_subtype_of(float_type))
+        ex = get_int_type().is_subtype_of(float_type)
+        print(ex)
+        self.assertFalse(ex)
 
     @given(from_type(IndividualType), from_type(IndividualType))
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
@@ -328,7 +329,10 @@ class TestSubtyping(unittest.TestCase):
     @given(from_type(IndividualType))
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_object_is_top_type(self, type) -> None:
-        self.assertTrue(type.is_subtype_of(get_object_type()))
+        ex = type.is_subtype_of(get_object_type())
+        note(repr(type))
+        note(str(ex))
+        self.assertTrue(ex)
 
     __attributes_generator = dictionaries(
         text(max_size=25), from_type(IndividualType), max_size=5  # type: ignore
@@ -355,7 +359,11 @@ class TestSubtyping(unittest.TestCase):
     ) -> None:
         object1 = ClassType({**other_attributes, **attributes})
         object2 = ClassType(attributes)
-        self.assertTrue(object1.is_subtype_of(object2))
+        note(repr(object1))
+        note(repr(object2))
+        ex = object1.is_subtype_of(object2)
+        note(str(ex))
+        self.assertTrue(ex)
 
     @given(from_type(StackEffect))
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
@@ -377,7 +385,7 @@ class TestSubtyping(unittest.TestCase):
 
     @given(from_type(StackEffect))
     def test_class_subtype_of_stack_effect(self, effect) -> None:
-        x = BoundVariable(kind=IndividualKind())
+        x = BoundVariable(kind=IndividualKind)
         # NOTE: self-last convention is modelled after Factor.
         unbound_effect = StackEffect(
             TypeSequence([*effect.input, x]), effect.output
