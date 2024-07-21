@@ -278,6 +278,19 @@ class BoundVariable(Variable):
     def constrain_and_bind_variables(
         self, supertype, rigid_variables, subtyping_assumptions
     ) -> 'Substitutions':
+        from concat.typecheck import Substitutions
+
+        if (
+            supertype._type_id == get_object_type()._type_id
+            or (self, supertype) in subtyping_assumptions
+        ):
+            return Substitutions()
+        if (
+            isinstance(supertype, Variable)
+            and self.kind <= supertype.kind
+            and supertype not in rigid_variables
+        ):
+            return Substitutions([(supertype, self)])
         raise ConcatTypeError(
             f'Cannot constrain bound variable {self} to {supertype}'
         )
