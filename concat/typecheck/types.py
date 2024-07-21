@@ -71,11 +71,16 @@ class Type(abc.ABC):
 
     # QUESTION: Do I need this?
     def is_subtype_of(self, supertype: 'Type') -> SubtypeExplanation:
+        from concat.typecheck import Substitutions
+
         try:
             sub = self.constrain_and_bind_variables(supertype, set(), [])
         except ConcatTypeError as e:
             return SubtypeExplanation(e)
-        return SubtypeExplanation(sub)
+        ftv = self.free_type_variables() | supertype.free_type_variables()
+        sub1 = Substitutions({v: t for v, t in sub.items() if v in ftv})
+        sub1.subtyping_provenance = sub.subtyping_provenance
+        return SubtypeExplanation(sub1)
 
     # No <= implementation using subtyping, because variables overload that for
     # sort by identity.
@@ -281,7 +286,8 @@ class BoundVariable(Variable):
         from concat.typecheck import Substitutions
 
         if (
-            supertype._type_id == get_object_type()._type_id
+            self._type_id == supertype._type_id
+            or supertype._type_id == get_object_type()._type_id
             or (self, supertype) in subtyping_assumptions
         ):
             return Substitutions()
@@ -844,13 +850,13 @@ class _Function(IndividualType):
         if (
             self is supertype
             or _contains_assumption(subtyping_assumptions, self, supertype)
-            or supertype is get_object_type()
+            or supertype._type_id == get_object_type()._type_id
         ):
             return Substitutions()
 
         if (
             isinstance(supertype, ItemVariable)
-            and supertype.kind is IndividualKind
+            and supertype.kind <= ItemKind
             and supertype not in rigid_variables
         ):
             return Substitutions([(supertype, self)])
@@ -1058,13 +1064,15 @@ class ObjectType(IndividualType):
     ) -> 'Substitutions':
         from concat.typecheck import Substitutions
 
-        if self is supertype or _contains_assumption(
-            subtyping_assumptions, self, supertype
+        # every object type is a subtype of object_type
+        if (
+            self is supertype
+            or supertype._type_id == get_object_type()._type_id
+            or _contains_assumption(subtyping_assumptions, self, supertype)
         ):
             sub = Substitutions()
             sub.add_subtyping_provenance((self, supertype))
             return sub
-
         # obj <: `t, `t is not rigid
         # --> `t = obj
         if (
@@ -1140,11 +1148,6 @@ class ObjectType(IndividualType):
             return sub
         if not isinstance(supertype, ObjectType):
             raise NotImplementedError(repr(supertype))
-        # every object type is a subtype of object_type
-        if supertype._type_id == get_object_type()._type_id:
-            sub = Substitutions()
-            sub.add_subtyping_provenance((self, supertype))
-            return sub
         # Don't forget that there's nominal subtyping too.
         if supertype._nominal:
             if supertype in self._nominal_supertypes:

@@ -1351,19 +1351,14 @@ def _ensure_type(
     env: Environment,
     obj_name: Optional[str],
     known_stack_item_names: Environment,
-) -> Tuple[StackItemType, Environment]:
-    type: StackItemType
+) -> Tuple['Type', Environment]:
+    type: Type
     if obj_name and obj_name in known_stack_item_names:
-        type = cast(StackItemType, known_stack_item_names[obj_name])
+        type = known_stack_item_names[obj_name]
     elif typename is None:
-        # NOTE: This could lead type to variables in the output of a function
-        # that are unconstrained. In other words, it would basically become an
-        # Any type.
-        type = ItemVariable(IndividualKind)
+        type = ItemVariable(ItemKind)
     elif isinstance(typename, TypeNode):
-        type, env = cast(
-            Tuple[StackItemType, Environment], typename.to_type(env),
-        )
+        type, env = typename.to_type(env)
     else:
         raise NotImplementedError(
             'Cannot turn {!r} into a type'.format(typename)

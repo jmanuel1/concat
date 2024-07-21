@@ -9,6 +9,7 @@ from concat.typecheck.types import (
     Fix,
     IndividualKind,
     IndividualType,
+    ItemKind,
     ItemVariable,
     ObjectType,
     StackEffect,
@@ -192,8 +193,8 @@ class TestTypeChecker(unittest.TestCase):
 class TestStackEffectParser(unittest.TestCase):
     _a_bar = concat.typecheck.SequenceVariable()
     _d_bar = concat.typecheck.SequenceVariable()
-    _b = concat.typecheck.ItemVariable(IndividualKind)
-    _c = concat.typecheck.ItemVariable(IndividualKind)
+    _b = concat.typecheck.ItemVariable(ItemKind)
+    _c = concat.typecheck.ItemVariable(ItemKind)
     examples: Dict[str, StackEffect] = {
         'a b -- b a': StackEffect(
             TypeSequence([_a_bar, _b, _c]), TypeSequence([_a_bar, _c, _b])
