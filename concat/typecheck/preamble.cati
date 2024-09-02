@@ -79,18 +79,18 @@ def loop(*rest_var body:(*rest_var -- *rest_var flag:bool) -- *rest_var):
 # Rule 1: first operand has __ge__(type(second operand))
 # Rule 2: second operand has __le__(type(first operand))
 # FIXME: Implement the second type rule
-def >=(*stack_type_var a:geq_comparable[`b_var] b:`b_var -- *stack_type_var res:bool):
+def >=(*stack_type_var a:geq_comparable[`b_var, `ret] b:`b_var -- *stack_type_var res:`ret):
   ()
 
 # Rule 1: first operand has __lt__(type(second operand))
 # Rule 2: second operand has __gt__(type(first operand))
 # FIXME: Implement the second type rule
 # Also look at Python's note about when reflected method get's priority.
-def <(*stack_type_var a:lt_comparable[`b_var] b:`b_var -- *stack_type_var res:bool):
+def <(*stack_type_var a:lt_comparable[`b_var, `ret] b:`b_var -- *stack_type_var res:`ret):
   ()
 
 # FIXME: Implement the second type rule
-def <=(*stack_type_var a:leq_comparable[`b_var] b:`b_var -- *stack_type_var res:bool):
+def <=(*stack_type_var a:leq_comparable[`b_var, `ret] b:`b_var -- *stack_type_var res:`ret):
   ()
 
 def choose(*rest_var b:bool t:(*rest_var -- *seq_var) f:(*rest_var -- *seq_var) -- *seq_var):

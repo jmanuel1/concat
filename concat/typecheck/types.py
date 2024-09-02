@@ -2019,6 +2019,19 @@ def set_int_type(ty: Type) -> None:
     _int_type = ty
 
 
+_bool_type: Optional[Type] = None
+
+
+def get_bool_type() -> Type:
+    assert _bool_type is not None
+    return _bool_type
+
+
+def set_bool_type(ty: Type) -> None:
+    global _bool_type
+    _bool_type = ty
+
+
 _arg_type_var = SequenceVariable()
 _return_type_var = ItemVariable(IndividualKind)
 py_function_type = PythonFunctionType(
@@ -2066,35 +2079,48 @@ addable_type = GenericType(
 )
 addable_type.set_internal_name('addable_type')
 
-bool_type = ObjectType({}, nominal=True)
-bool_type.set_internal_name('bool_type')
-
-# QUESTION: Allow comparison methods to return any object?
+# NOTE: Allow comparison methods to return any object. I don't think Python
+# stops it. Plus, these definitions don't have to depend on bool, which is
+# defined in builtins.cati.
 
 _other_type = BoundVariable(ItemKind)
+_return_type = BoundVariable(ItemKind)
 geq_comparable_type = GenericType(
-    [_other_type],
+    [_other_type, _return_type],
     ObjectType(
-        {'__ge__': py_function_type[TypeSequence([_other_type]), bool_type]},
+        {
+            '__ge__': py_function_type[
+                TypeSequence([_other_type]), _return_type
+            ]
+        },
     ),
 )
 geq_comparable_type.set_internal_name('geq_comparable_type')
 
 leq_comparable_type = GenericType(
-    [_other_type],
+    [_other_type, _return_type],
     ObjectType(
-        {'__le__': py_function_type[TypeSequence([_other_type]), bool_type]},
+        {
+            '__le__': py_function_type[
+                TypeSequence([_other_type]), _return_type
+            ]
+        },
     ),
 )
 leq_comparable_type.set_internal_name('leq_comparable_type')
 
 lt_comparable_type = GenericType(
-    [_other_type],
+    [_other_type, _return_type],
     ObjectType(
-        {'__lt__': py_function_type[TypeSequence([_other_type]), bool_type]},
+        {
+            '__lt__': py_function_type[
+                TypeSequence([_other_type]), _return_type
+            ]
+        },
     ),
 )
 lt_comparable_type.set_internal_name('lt_comparable_type')
+
 
 none_type = ObjectType({}, nominal=True)
 none_type.set_internal_name('none_type')

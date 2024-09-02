@@ -306,6 +306,9 @@ def infer(
                 if pragma == 'builtin_int':
                     name = node.args[0]
                     concat.typecheck.types.set_int_type(gamma[name])
+                if pragma == 'builtin_bool':
+                    name = node.args[0]
+                    concat.typecheck.types.set_bool_type(gamma[name])
             elif isinstance(node, concat.parse.PushWordNode):
                 S1, (i1, o1) = S, (i, o)
                 child = node.children[0]

@@ -6,6 +6,8 @@ class object:
 class bool:
   ()
 
+!@@concat.typecheck.builtin_bool bool
+
 class int:
   def __add__(--) @cast (py_function[(int), int]):
     ()
