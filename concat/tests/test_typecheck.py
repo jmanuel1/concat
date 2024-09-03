@@ -15,13 +15,11 @@ from concat.typecheck.types import (
     StackEffect,
     Type as ConcatType,
     TypeSequence,
-    ellipsis_type,
     float_type,
     get_object_type,
     get_int_type,
     no_return_type,
-    none_type,
-    not_implemented_type,
+    get_none_type,
     optional_type,
     py_function_type,
 )
@@ -117,9 +115,7 @@ class TestTypeChecker(unittest.TestCase):
         try_prog = '$(42) call\n'
         tree = parse(try_prog)
         _, type, _ = concat.typecheck.infer(
-            concat.typecheck.Environment(
-                concat.typecheck.preamble_types.types
-            ),
+            concat.typecheck.load_builtins_and_preamble(),
             tree.children,
             is_top_level=True,
         )
@@ -129,17 +125,16 @@ class TestTypeChecker(unittest.TestCase):
 
     @given(sampled_from(['None', '...', 'NotImplemented']))
     def test_constants(self, constant_name) -> None:
+        env = concat.typecheck.load_builtins_and_preamble()
         _, effect, _ = concat.typecheck.infer(
-            concat.typecheck.Environment(
-                concat.typecheck.preamble_types.types
-            ),
+            env,
             [concat.parse.NameWordNode(lex.Token(value=constant_name))],
             initial_stack=TypeSequence([]),
         )
         expected_types = {
-            'None': none_type,
-            'NotImplemented': not_implemented_type,
-            '...': ellipsis_type,
+            'None': get_none_type(),
+            'NotImplemented': env['not_implemented'],
+            '...': env['ellipsis'],
         }
         expected_type = expected_types[constant_name]
         self.assertEqual(list(effect.output), [expected_type])
@@ -413,7 +408,7 @@ class TestSubtyping(unittest.TestCase):
         opt_ty = optional_type[
             ty,
         ]
-        self.assertTrue(none_type.is_subtype_of(opt_ty))
+        self.assertTrue(get_none_type().is_subtype_of(opt_ty))
 
     @given(from_type(IndividualType))
     def test_type_subtype_of_optional(self, ty: IndividualType) -> None:

@@ -148,14 +148,17 @@ class Substitutions(Mapping['Variable', 'Type']):
 
 from concat.typecheck.types import (
     BoundVariable,
+    Brand,
     Fix,
     ForwardTypeReference,
     GenericType,
     GenericTypeKind,
     IndividualKind,
     IndividualType,
+    ItemKind,
     ItemVariable,
     Kind,
+    NominalType,
     ObjectType,
     QuotationType,
     SequenceKind,
@@ -168,16 +171,14 @@ from concat.typecheck.types import (
     get_list_type,
     get_object_type,
     get_str_type,
-    ItemKind,
-    module_type,
+    get_tuple_type,
+    get_module_type,
     no_return_type,
     py_function_type,
-    tuple_type,
 )
 import abc
 from concat.error_reporting import create_parsing_failure_message
 from concat.lex import Token
-import functools
 import importlib
 import importlib.util
 import itertools
@@ -191,15 +192,18 @@ _builtins_stub_path = pathlib.Path(__file__) / '../builtin_stubs/builtins.cati'
 
 
 def load_builtins_and_preamble() -> Environment:
-    env = _check_stub(_builtins_stub_path, is_builtins=True,)
-    env = Environment(
-        {
-            **env,
-            **_check_stub(
-                pathlib.Path(__file__).with_name('preamble.cati'),
-                is_preamble=True,
-            ),
-        }
+    env = _check_stub(
+        pathlib.Path(__file__).with_name('preamble0.cati'), is_preamble=True,
+    )
+    env = _check_stub(_builtins_stub_path, is_builtins=True, initial_env=env)
+    env = _check_stub(
+        pathlib.Path(__file__).with_name('preamble.cati'),
+        is_preamble=True,
+        initial_env=env,
+    )
+    # pick up ModuleType
+    _check_stub(
+        _builtins_stub_path.with_name('types.cati'), initial_env=env.copy(),
     )
     return env
 
@@ -209,27 +213,11 @@ def check(
     program: concat.astutils.WordsOrStatements,
     source_dir: str = '.',
     _should_check_bodies: bool = True,
-    _should_load_builtins: bool = True,
-    _should_load_preamble: bool = True,
 ) -> Environment:
     import concat.typecheck.preamble_types
 
-    builtins_stub_env = Environment()
-    preamble_stub_env = Environment()
-    if _should_load_builtins:
-        builtins_stub_env = _check_stub(_builtins_stub_path, is_builtins=True,)
-    if _should_load_preamble:
-        preamble_stub_env = _check_stub(
-            pathlib.Path(__file__).with_name('preamble.cati'),
-            is_preamble=True,
-        )
     environment = Environment(
-        {
-            **builtins_stub_env,
-            **preamble_stub_env,
-            **concat.typecheck.preamble_types.types,
-            **environment,
-        }
+        {**concat.typecheck.preamble_types.types, **environment,}
     )
     res = infer(
         environment,
@@ -239,6 +227,7 @@ def check(
         source_dir,
         check_bodies=_should_check_bodies,
     )
+
     return res[2]
 
 
@@ -309,6 +298,15 @@ def infer(
                 if pragma == 'builtin_bool':
                     name = node.args[0]
                     concat.typecheck.types.set_bool_type(gamma[name])
+                if pragma == 'builtin_tuple':
+                    name = node.args[0]
+                    concat.typecheck.types.set_tuple_type(gamma[name])
+                if pragma == 'builtin_none':
+                    name = node.args[0]
+                    concat.typecheck.types.set_none_type(gamma[name])
+                if pragma == 'builtin_module':
+                    name = node.args[0]
+                    concat.typecheck.types.set_module_type(gamma[name])
             elif isinstance(node, concat.parse.PushWordNode):
                 S1, (i1, o1) = S, (i, o)
                 child = node.children[0]
@@ -434,7 +432,10 @@ def infer(
                         StackEffect(
                             i,
                             TypeSequence(
-                                [*collected_type, tuple_type[element_types],]
+                                [
+                                    *collected_type,
+                                    get_tuple_type()[element_types],
+                                ]
                             ),
                         )
                     ),
@@ -466,7 +467,9 @@ def infer(
                     # For now, assume the module's written in Python.
                     stub_path = pathlib.Path(module_path)
                 stub_path = stub_path.with_suffix('.cati')
-                stub_env = _check_stub(stub_path)
+                stub_env = _check_stub(
+                    stub_path, initial_env=load_builtins_and_preamble()
+                )
                 imported_type = stub_env.get(node.imported_name)
                 if imported_type is None:
                     raise TypeError(
@@ -688,15 +691,15 @@ def infer(
                         if name not in temp_gamma
                     }
                 )
-                ty: Type = ObjectType(
-                    attributes=body_attrs, nominal_supertypes=(), nominal=True,
+                ty: Type = NominalType(
+                    Brand(node.class_name, IndividualKind, []),
+                    ObjectType(attributes=body_attrs,),
                 )
                 if type_parameters:
                     ty = GenericType(
                         type_parameters, ty, is_variadic=node.is_variadic
                     )
                 ty = Fix(self_type, ty)
-                ty.set_internal_name(node.class_name)
                 gamma[node.class_name] = ty
             # elif isinstance(node, concat.parse.TypeAliasStatementNode):
             #     gamma[node.name], _ = node.type_node.to_type(gamma)
@@ -710,10 +713,17 @@ def infer(
     return current_subs, current_effect, gamma
 
 
-@functools.lru_cache(maxsize=None)
+_module_namespaces: Dict[pathlib.Path, 'Environment'] = {}
+
+
 def _check_stub_resolved_path(
-    path: pathlib.Path, is_builtins: bool = False, is_preamble: bool = False
+    path: pathlib.Path,
+    is_builtins: bool = False,
+    is_preamble: bool = False,
+    initial_env: Optional['Environment'] = None,
 ) -> 'Environment':
+    if path in _module_namespaces:
+        return _module_namespaces[path]
     try:
         source = path.read_text()
     except FileNotFoundError as e:
@@ -721,7 +731,7 @@ def _check_stub_resolved_path(
     except IOError as e:
         raise TypeError(f'Failed to read type stubs at {path}') from e
     tokens = concat.lex.tokenize(source)
-    env = Environment()
+    env = initial_env or Environment()
     from concat.transpile import parse
 
     try:
@@ -734,6 +744,7 @@ def _check_stub_resolved_path(
                     file, tokens, e.args[0].failures
                 )
             )
+        _module_namespaces[path] = env
         return env
     recovered_parsing_failures = concat_ast.parsing_failures
     with path.open() as file:
@@ -746,8 +757,6 @@ def _check_stub_resolved_path(
             concat_ast.children,
             str(path.parent),
             _should_check_bodies=False,
-            _should_load_builtins=not is_builtins,
-            _should_load_preamble=not is_preamble and not is_builtins,
         )
     except StaticAnalysisError as e:
         e.set_path_if_missing(path)
@@ -757,10 +766,15 @@ def _check_stub_resolved_path(
 
 
 def _check_stub(
-    path: pathlib.Path, is_builtins: bool = False, is_preamble: bool = False
+    path: pathlib.Path,
+    is_builtins: bool = False,
+    is_preamble: bool = False,
+    initial_env: Optional['Environment'] = None,
 ) -> 'Environment':
     path = path.resolve()
-    return _check_stub_resolved_path(path, is_builtins, is_preamble)
+    return _check_stub_resolved_path(
+        path, is_builtins, is_preamble, initial_env
+    )
 
 
 # Parsing type annotations
@@ -1320,7 +1334,11 @@ def _generate_type_of_innermost_module(
         elif callable(getattr(module, name)):
             attribute_type = py_function_type
         module_attributes[name] = attribute_type
-    module_t = ObjectType(module_attributes, nominal_supertypes=[module_type],)
+    module_type_brand = get_module_type().unroll().brand  # type: ignore
+    brand = Brand(
+        f'type({qualified_name})', IndividualKind, [module_type_brand]
+    )
+    module_t = NominalType(brand, ObjectType(module_attributes))
     return StackEffect(
         TypeSequence([_seq_var]), TypeSequence([_seq_var, module_t])
     )
@@ -1332,13 +1350,19 @@ def _generate_module_type(
     if _full_name is None:
         _full_name = '.'.join(components)
     if len(components) > 1:
-        module_t = ObjectType(
-            {
-                components[1]: _generate_module_type(
-                    components[1:], _full_name, source_dir
-                )[_seq_var,],
-            },
-            nominal_supertypes=[module_type],
+        module_type_brand = get_module_type().unroll().brand  # type: ignore
+        brand = Brand(
+            f'type({_full_name})', IndividualKind, [module_type_brand]
+        )
+        module_t = NominalType(
+            brand,
+            ObjectType(
+                {
+                    components[1]: _generate_module_type(
+                        components[1:], _full_name, source_dir
+                    )[_seq_var,],
+                }
+            ),
         )
         effect = StackEffect(
             TypeSequence([_seq_var]), TypeSequence([_seq_var, module_t])

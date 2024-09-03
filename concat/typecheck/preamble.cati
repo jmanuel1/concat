@@ -13,6 +13,12 @@ class file:
   def __exit__(--) @cast (py_function[*any, `any2]):
     ()
 
+class ellipsis:
+  ()
+
+class not_implemented:
+  ()
+
 def to_list(*rest_var i:iterable[`a_var] -- *rest_var l:list[`a_var]):
   ()
 
@@ -100,4 +106,34 @@ def if_not(*rest_var b:bool body:(*rest_var -- *rest_var) -- *rest_var):
   ()
 
 def if_then(*rest_var b:bool body:(*rest_var -- *rest_var) -- *rest_var):
+  ()
+
+def swap(*rest_var x:`a_var y:`b_var -- *rest_var y x):
+  ()
+
+def pick(*rest_var x:`a_var y:`b_var z:`c_var -- *rest_var x y z x):
+  ()
+
+def dup(*rest_var x:`a_var -- x x):
+  ()
+
+def over(*rest_var x:`a_var y:`b_var -- *rest_var x y x):
+  ()
+
+def curry(*rest_var x:`a_var f:(*seq_var x:`a_var -- *stack_var) -- *rest_var g:(*seq_var -- *stack_var)):
+  ()
+
+def call(*rest_var f:(*rest_var -- *seq_var) -- *seq_var):
+  ()
+
+def None(*stack_type_var -- *stack_type_var none:none):
+  ()
+
+def ...(*stack_type_var -- *stack_type_var ...:ellipsis):
+  ()
+
+def Ellipsis(*stack_type_var -- *stack_type_var ...:ellipsis):
+  ()
+
+def NotImplemented(*stack_type_var -- *stack_type_var not_impl:not_implemented):
   ()

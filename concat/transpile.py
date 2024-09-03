@@ -51,9 +51,8 @@ def parse(tokens: Sequence[Token]) -> concat.parse.TopLevelNode:
 
 def typecheck(concat_ast: concat.parse.TopLevelNode, source_dir: str) -> None:
     # FIXME: Consider the type of everything entered interactively beforehand.
-    concat.typecheck.check(
-        concat.typecheck.Environment(), concat_ast.children, source_dir
-    )
+    env = concat.typecheck.load_builtins_and_preamble()
+    concat.typecheck.check(env, concat_ast.children, source_dir)
 
 
 def transpile(code: str, source_dir: str = '.') -> ast.Module:

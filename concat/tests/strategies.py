@@ -8,7 +8,6 @@ from concat.typecheck.types import (
     StackEffect,
     StuckTypeApplication,
     TypeSequence,
-    none_type,
     no_return_type,
     optional_type,
     py_function_type,
@@ -47,13 +46,11 @@ def _object_type_strategy(
         builds(
             ObjectType,
             attributes=dictionaries(text(), individual_type_strategy),
-            nominal_supertypes=lists(individual_type_strategy),
             _head=none(),
         ),
         lambda children: builds(
             ObjectType,
             attributes=dictionaries(text(), individual_type_strategy),
-            nominal_supertypes=lists(individual_type_strategy),
             _head=children,
         ),
         max_leaves=10,
@@ -100,7 +97,7 @@ _individual_type_strategy = recursive(
     )
     | _mark_individual_type_strategy(
         builds(lambda args: optional_type[args], tuples(children),),
-        type(optional_type[none_type,]),
+        type(optional_type[ObjectType({}),]),
     ),
     max_leaves=50,
 )

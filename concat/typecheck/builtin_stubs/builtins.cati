@@ -82,6 +82,8 @@ class tuple[`t...]:
   def __getitem__(--) @cast (py_function[(int), object]):
     ()
 
+!@@concat.typecheck.builtin_tuple tuple
+
 class dict[`key, `value]:
   def __iter__(--) @cast (py_function[(), iterator[`key]]):
     ()

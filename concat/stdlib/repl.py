@@ -151,7 +151,7 @@ def _repl_impl(
         'visible_vars': set(),
         'show_var': show_var,
         'concat': concat,
-        '@@extra_env': concat.typecheck.Environment(),
+        '@@extra_env': concat.typecheck.load_builtins_and_preamble(),
         **initial_globals,
     }
     locals: Dict[str, object] = {}

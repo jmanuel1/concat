@@ -369,7 +369,7 @@ class ItemVariable(Variable):
                 )
             except ConcatTypeError:
                 return self.constrain_and_bind_variables(
-                    none_type, rigid_variables, subtyping_assumptions
+                    get_none_type(), rigid_variables, subtyping_assumptions
                 )
         if self in rigid_variables:
             raise ConcatTypeError(
@@ -991,40 +991,143 @@ def _contains_assumption(
     return False
 
 
-class ObjectType(IndividualType):
-    """The representation of types of objects, based on a gradual typing paper.
+# The representation of types of objects.
 
-    That paper is "Design and Evaluation of Gradual Typing for Python"
-    (Vitousek et al. 2014)."""
+# Originally, it was based on a gradual typing paper. That paper is "Design and
+# Evaluation of Gradual Typing for Python" (Vitousek et al. 2014). But now
+# nominal and structural subtyping will be separated internally by using
+# brands, like in "Integrating Nominal and Structural Subtyping" (Malayeri &
+# Aldrich 2008).
+
+# http://reports-archive.adm.cs.cmu.edu/anon/anon/home/ftp/usr0/ftp/2008/CMU-CS-08-120.pdf
+
+# not using functools.total_ordering because == should be only identity.
+class Brand:
+    def __init__(
+        self, user_name: str, kind: 'Kind', superbrands: Sequence['Brand']
+    ) -> None:
+        self._user_name = user_name
+        self.kind = kind
+        # for t in superbrands:
+        #     if t.kind != kind:
+        #         raise ConcatTypeError(
+        #             f'{t} must have kind {kind}, but has kind {t.kind}'
+        #         )
+        self._superbrands = superbrands
+
+    def __str__(self) -> str:
+        return self._user_name
+
+    def __repr__(self) -> str:
+        return f'Brand({self._user_name!r}, {self.kind}, {self._superbrands!r})@{id(self)}'
+
+    def __lt__(self, other: 'Brand') -> bool:
+        object_brand = get_object_type().unroll().brand  # type: ignore
+        return (
+            (self is not other and other is object_brand)
+            or other in self._superbrands
+            or any(brand <= other for brand in self._superbrands)
+        )
+
+    def __le__(self, other: 'Brand') -> bool:
+        return self is other or self < other
+
+
+class NominalType(Type):
+    def __init__(self, brand: Brand, ty: Type) -> None:
+        super().__init__()
+
+        self._brand = brand
+        self._ty = ty
+        # assert brand.kind == ty.kind
+
+    def _free_type_variables(self) -> InsertionOrderedSet[Variable]:
+        return self._ty.free_type_variables()
+
+    def apply_substitution(self, sub: 'Substitutions') -> 'NominalType':
+        return NominalType(self._brand, sub(self._ty))
+
+    @property
+    def attributes(self) -> Mapping[str, Type]:
+        return self._ty.attributes
+
+    def constrain_and_bind_variables(
+        self, supertype, rigid_variables, subtyping_assumptions
+    ) -> 'Substitutions':
+        if isinstance(supertype, NominalType):
+            if self._brand <= supertype._brand:
+                return concat.typecheck.Substitutions()
+            raise ConcatTypeError(f'{self} is not a subtype of {supertype}')
+        # TODO: Find a way to force myself to handle these different cases.
+        # Visitor pattern? singledispatch?
+        if isinstance(supertype, _OptionalType):
+            try:
+                return self.constrain_and_bind_variables(
+                    get_none_type(), rigid_variables, subtyping_assumptions
+                )
+            except ConcatTypeError:
+                return self.constrain_and_bind_variables(
+                    supertype.type_arguments[0],
+                    rigid_variables,
+                    subtyping_assumptions,
+                )
+        if isinstance(supertype, Fix):
+            return self.constrain_and_bind_variables(
+                supertype.unroll(),
+                rigid_variables,
+                subtyping_assumptions + [(self, supertype)],
+            )
+        if isinstance(supertype, ForwardTypeReference):
+            return self.constrain_and_bind_variables(
+                supertype.resolve_forward_references(),
+                rigid_variables,
+                subtyping_assumptions + [(self, supertype)],
+            )
+        if isinstance(supertype, Variable):
+            if supertype in rigid_variables:
+                raise ConcatTypeError(
+                    f'{self} is not a subtype of rigid variable {supertype}'
+                )
+            if not (self.kind <= supertype.kind):
+                raise ConcatTypeError(
+                    f'{self} has kind {self.kind}, but {supertype} has kind {supertype.kind}'
+                )
+            return concat.typecheck.Substitutions([(supertype, self)])
+        return self._ty.constrain_and_bind_variables(
+            supertype, rigid_variables, subtyping_assumptions
+        )
+
+    @property
+    def kind(self) -> 'Kind':
+        return self._ty.kind
+
+    @property
+    def brand(self) -> Brand:
+        return self._brand
+
+    def __str__(self) -> str:
+        return str(self._brand)
+
+    def __repr__(self) -> str:
+        return f'NominalType({self._brand!r}, {self._ty!r})'
+
+
+class ObjectType(IndividualType):
+    """Structural record types."""
 
     def __init__(
         self,
         attributes: Mapping[str, Type],
-        nominal_supertypes: Sequence[Type] = (),
-        nominal: bool = False,
         _head: Optional['ObjectType'] = None,
     ) -> None:
         super().__init__()
 
         self._attributes = attributes
 
-        for t in nominal_supertypes:
-            if t.kind != IndividualKind:
-                raise ConcatTypeError(
-                    f'{t} must be an individual type, but has kind {t.kind}'
-                )
-        self._nominal_supertypes = nominal_supertypes
-
-        self._nominal = nominal
-
         self._head = _head or self
 
         self._internal_name: Optional[str] = None
         self._internal_name = self._head._internal_name
-
-    @property
-    def nominal(self) -> bool:
-        return self._nominal
 
     @property
     def kind(self) -> 'Kind':
@@ -1041,13 +1144,8 @@ class ObjectType(IndividualType):
             Dict[str, IndividualType],
             {attr: sub(t) for attr, t in self._attributes.items()},
         )
-        nominal_supertypes = [
-            sub(supertype) for supertype in self._nominal_supertypes
-        ]
         subbed_type = type(self)(
             attributes,
-            nominal_supertypes=nominal_supertypes,
-            nominal=self._nominal,
             # head is only used to keep track of where a type came from, so
             # there's no need to substitute it
             _head=self._head,
@@ -1110,7 +1208,7 @@ class ObjectType(IndividualType):
         if isinstance(supertype, _OptionalType):
             try:
                 sub = self.constrain_and_bind_variables(
-                    none_type,
+                    get_none_type(),
                     rigid_variables,
                     subtyping_assumptions + [(self, supertype)],
                 )
@@ -1146,18 +1244,13 @@ class ObjectType(IndividualType):
             )
             sub.add_subtyping_provenance((self, supertype))
             return sub
+        # Don't forget that there's nominal subtyping too.
+        if isinstance(supertype, NominalType):
+            raise concat.typecheck.errors.TypeError(
+                f'structural type {self} cannot be a subtype of nominal type {supertype}'
+            )
         if not isinstance(supertype, ObjectType):
             raise NotImplementedError(repr(supertype))
-        # Don't forget that there's nominal subtyping too.
-        if supertype._nominal:
-            if supertype in self._nominal_supertypes:
-                sub = Substitutions()
-                sub.add_subtyping_provenance((self, supertype))
-                return sub
-            if self._head is not supertype._head:
-                raise ConcatTypeError(
-                    '{} is not a subtype of {}'.format(self, supertype)
-                )
 
         subtyping_assumptions = subtyping_assumptions + [(self, supertype)]
 
@@ -1176,7 +1269,7 @@ class ObjectType(IndividualType):
 
     def __repr__(self) -> str:
         head = None if self._head is self else self._head
-        return f'{type(self).__qualname__}(attributes={self._attributes!r}, nominal_supertypes={self._nominal_supertypes!r}, nominal={self._nominal!r}, _head={head!r})'
+        return f'{type(self).__qualname__}(attributes={self._attributes!r}, _head={head!r})'
 
     def _free_type_variables(self) -> InsertionOrderedSet[Variable]:
         ftv = free_type_variables_of_mapping(self.attributes)
@@ -1186,7 +1279,7 @@ class ObjectType(IndividualType):
     def __str__(self) -> str:
         if self._internal_name is not None:
             return self._internal_name
-        return f'ObjectType({_mapping_to_str(self._attributes)}, {_iterable_to_str(self._nominal_supertypes)}, {self._nominal}, {None if self._head is self else self._head})'
+        return f'ObjectType({_mapping_to_str(self._attributes)}, {None if self._head is self else self._head})'
 
     @property
     def attributes(self) -> Mapping[str, Type]:
@@ -1195,10 +1288,6 @@ class ObjectType(IndividualType):
     @property
     def head(self) -> 'ObjectType':
         return self._head
-
-    @property
-    def nominal_supertypes(self) -> Sequence[Type]:
-        return self._nominal_supertypes
 
 
 # QUESTION: Should this exist, or should I use ObjectType?
@@ -1617,10 +1706,13 @@ class _OptionalType(IndividualType):
                 f'{self} is an individual type, but {supertype} has kind {supertype.kind}'
             )
         # FIXME: optional[none] should simplify to none
-        if self._type_argument is none_type and supertype is none_type:
+        if (
+            self._type_argument is get_none_type()
+            and supertype is get_none_type()
+        ):
             return Substitutions()
 
-        sub = none_type.constrain_and_bind_variables(
+        sub = get_none_type().constrain_and_bind_variables(
             supertype, rigid_variables, subtyping_assumptions
         )
         sub = sub(self._type_argument).constrain_and_bind_variables(
@@ -1638,6 +1730,7 @@ class _OptionalType(IndividualType):
         return [self._type_argument]
 
 
+# FIXME: Not a total order, using total_ordering might be very unsound.
 @functools.total_ordering
 class Kind(abc.ABC):
     @abc.abstractmethod
@@ -1963,7 +2056,7 @@ StackEffect = _Function
 
 _x = BoundVariable(kind=IndividualKind)
 
-float_type = ObjectType({}, nominal=True)
+float_type = NominalType(Brand('float', IndividualKind, []), ObjectType({}))
 no_return_type = _NoReturnType()
 
 
@@ -1977,6 +2070,7 @@ def get_object_type() -> Type:
 
 def set_object_type(ty: Type) -> None:
     global _object_type
+    assert _object_type is None
     _object_type = ty
 
 
@@ -2006,6 +2100,19 @@ def set_str_type(ty: Type) -> None:
     _str_type = ty
 
 
+_tuple_type: Optional[Type] = None
+
+
+def get_tuple_type() -> Type:
+    assert _tuple_type is not None
+    return _tuple_type
+
+
+def set_tuple_type(ty: Type) -> None:
+    global _tuple_type
+    _tuple_type = ty
+
+
 _int_type: Optional[Type] = None
 
 
@@ -2030,6 +2137,32 @@ def get_bool_type() -> Type:
 def set_bool_type(ty: Type) -> None:
     global _bool_type
     _bool_type = ty
+
+
+_none_type: Optional[Type] = None
+
+
+def get_none_type() -> Type:
+    assert _none_type is not None
+    return _none_type
+
+
+def set_none_type(ty: Type) -> None:
+    global _none_type
+    _none_type = ty
+
+
+_module_type: Optional[Type] = None
+
+
+def get_module_type() -> Type:
+    assert _module_type is not None
+    return _module_type
+
+
+def set_module_type(ty: Type) -> None:
+    global _module_type
+    _module_type = ty
 
 
 _arg_type_var = SequenceVariable()
@@ -2121,10 +2254,6 @@ lt_comparable_type = GenericType(
 )
 lt_comparable_type.set_internal_name('lt_comparable_type')
 
-
-none_type = ObjectType({}, nominal=True)
-none_type.set_internal_name('none_type')
-
 _result_type = BoundVariable(ItemKind)
 
 iterator_type = GenericType(
@@ -2134,9 +2263,7 @@ iterator_type = GenericType(
         ObjectType(
             {
                 '__iter__': py_function_type[TypeSequence([]), _x],
-                '__next__': py_function_type[
-                    TypeSequence([none_type,]), _result_type
-                ],
+                '__next__': py_function_type[TypeSequence([]), _result_type],
             },
         ),
     ),
@@ -2171,50 +2298,6 @@ optional_type = GenericType(
 )
 optional_type.set_internal_name('optional_type')
 
-_key_type_var = BoundVariable(kind=IndividualKind)
-_value_type_var = BoundVariable(kind=IndividualKind)
-dict_type = GenericType(
-    [_key_type_var, _value_type_var],
-    ObjectType(
-        {
-            '__iter__': py_function_type[
-                TypeSequence([]), iterator_type[_key_type_var,]
-            ]
-        },
-        nominal=True,
-    ),
-)
-dict_type.set_internal_name('dict_type')
-
-_start_type_var, _stop_type_var, _step_type_var = (
-    BoundVariable(ItemKind),
-    BoundVariable(ItemKind),
-    BoundVariable(ItemKind),
-)
-slice_type = GenericType(
-    [_start_type_var, _stop_type_var, _step_type_var],
-    ObjectType({}, nominal=True),
-)
-slice_type.set_internal_name('slice_type')
-
-ellipsis_type = ObjectType({}, nominal=True)
-not_implemented_type = ObjectType({}, nominal=True)
-
-_element_types_var = SequenceVariable()
-tuple_type = GenericType(
-    [_element_types_var],
-    ObjectType(
-        {'__getitem__': py_function_type},
-        nominal=True,
-        # iterable_type is a structural supertype
-    ),
-    is_variadic=True,
-)
-tuple_type.set_internal_name('tuple_type')
-
-base_exception_type = ObjectType({}, nominal=True)
-module_type = ObjectType({}, nominal=True)
-
 _index_type_var = BoundVariable(ItemKind)
 _result_type_var = BoundVariable(ItemKind)
 subscriptable_type = GenericType(
@@ -2227,10 +2310,3 @@ subscriptable_type = GenericType(
         },
     ),
 )
-
-_answer_type_var = BoundVariable(ItemKind)
-continuation_monad_type = GenericType(
-    [_result_type_var, _answer_type_var],
-    ObjectType(attributes={}, nominal=True,),
-)
-continuation_monad_type.set_internal_name('continuation_monad_type')
