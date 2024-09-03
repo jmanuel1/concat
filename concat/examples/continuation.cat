@@ -10,7 +10,6 @@ from concat.stdlib.continuation import map_cont
 from concat.stdlib.continuation import bind_cont
 from concat.stdlib.continuation import cont_from_cps
 from concat.stdlib.pyinterop import to_dict
-# from concat.stdlib.execution import loop  # FIXME: This line should cause an error when there's no @@types in that module
 
 
 def abort(k:forall *s. (*s x:`a -- *s n:none) -- n:none):

@@ -740,25 +740,27 @@ def _check_stub_resolved_path(
         for failure in recovered_parsing_failures:
             print('Parse Error:')
             print(create_parsing_failure_message(file, tokens, failure))
-    return check(
-        env,
-        concat_ast.children,
-        str(path.parent),
-        _should_check_bodies=False,
-        _should_load_builtins=not is_builtins,
-        _should_load_preamble=not is_preamble and not is_builtins,
-    )
+    try:
+        env = check(
+            env,
+            concat_ast.children,
+            str(path.parent),
+            _should_check_bodies=False,
+            _should_load_builtins=not is_builtins,
+            _should_load_preamble=not is_preamble and not is_builtins,
+        )
+    except StaticAnalysisError as e:
+        e.set_path_if_missing(path)
+        raise
+    _module_namespaces[path] = env
+    return env
 
 
 def _check_stub(
     path: pathlib.Path, is_builtins: bool = False, is_preamble: bool = False
 ) -> 'Environment':
     path = path.resolve()
-    try:
-        return _check_stub_resolved_path(path, is_builtins, is_preamble)
-    except StaticAnalysisError as e:
-        e.set_path_if_missing(path)
-        raise
+    return _check_stub_resolved_path(path, is_builtins, is_preamble)
 
 
 # Parsing type annotations
