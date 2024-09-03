@@ -1,19 +1,6 @@
 """Concat-Python interoperation helpers."""
 from concat.common_types import ConcatFunction
 import concat.stdlib.ski
-from concat.typecheck.types import (
-    GenericType,
-    IndividualKind,
-    ItemVariable,
-    SequenceVariable,
-    StackEffect,
-    TypeSequence,
-    dict_type,
-    iterable_type,
-    optional_type,
-    subscriptable_type,
-    tuple_type,
-)
 import builtins
 import importlib
 import os
@@ -32,52 +19,6 @@ from typing import (
     Union,
     cast,
 )
-
-
-_stack_type_var = SequenceVariable()
-_rest_var = SequenceVariable()
-_rest_var_2 = SequenceVariable()
-_rest_var_3 = SequenceVariable()
-_x = ItemVariable(IndividualKind)
-_y = ItemVariable(IndividualKind)
-_z = ItemVariable(IndividualKind)
-globals()['@@types'] = {
-    'getitem': GenericType(
-        [_stack_type_var, _x, _y],
-        StackEffect(
-            TypeSequence([_stack_type_var, subscriptable_type[_x, _y], _x,]),
-            TypeSequence([_stack_type_var, _y]),
-        ),
-    ),
-    'map': GenericType(
-        [_rest_var, _y, _z],
-        StackEffect(
-            TypeSequence(
-                [
-                    _rest_var,
-                    StackEffect(
-                        TypeSequence([_rest_var, _y]),
-                        TypeSequence([_rest_var, _z]),
-                    ),
-                    iterable_type[_y,],
-                ]
-            ),
-            TypeSequence([_rest_var, iterable_type[_z,]]),
-        ),
-    ),
-    'to_dict': GenericType(
-        [_stack_type_var, _x, _y],
-        StackEffect(
-            TypeSequence(
-                [
-                    _stack_type_var,
-                    optional_type[iterable_type[tuple_type[_x, _y],],],
-                ]
-            ),
-            TypeSequence([_stack_type_var, dict_type[_x, _y]]),
-        ),
-    ),
-}
 
 
 def to_py_function(stack: List[object], stash: List[object]) -> None:

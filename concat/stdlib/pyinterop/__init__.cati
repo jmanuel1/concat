@@ -12,3 +12,6 @@ def to_py_function(*rest_var f:(*rest_var_2 -- *rest_var_3) -- *rest_var py_f:py
 
 def to_slice(*stack_type_var step:Optional[`x] stop:Optional[`y] start:Optional[`z] -- *stack_type_var slice_:slice[`z, `y, `x]):
   ()
+
+def map(*rest_var f:(*rest_var x:`y -- *rest_var fx:`z) it:iterable[`y] -- *rest_var fit:iterable[`z]):
+  ()
