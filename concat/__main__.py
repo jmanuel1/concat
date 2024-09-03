@@ -10,12 +10,10 @@ import concat.lex
 import concat.parser_combinators
 import concat.stdlib.repl
 import concat.typecheck
-import io
 import json
 import os.path
 import sys
-import textwrap
-from typing import Callable, IO, AnyStr, Sequence, TextIO
+from typing import Callable, IO, AnyStr
 
 
 filename = '<stdin>'
