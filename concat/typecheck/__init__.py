@@ -713,6 +713,32 @@ def infer(
     return current_subs, current_effect, gamma
 
 
+def _find_stub_path(module_parts: Sequence[str]) -> pathlib.Path:
+    module_spec = None
+    path = None
+    if module_parts[0] in sys.builtin_module_names:
+        stub_path = pathlib.Path(__file__) / '../builtin_stubs'
+        for part in module_parts:
+            stub_path = stub_path / part
+    else:
+        for module_prefix in itertools.accumulate(
+            module_parts, lambda a, b: f'{a}.{b}'
+        ):
+            for finder in sys.meta_path:
+                module_spec = finder.find_spec(module_prefix, path)
+                if module_spec is not None:
+                    path = module_spec.submodule_search_locations
+                    break
+        assert module_spec is not None
+        module_path = module_spec.origin
+        if module_path is None:
+            raise TypeError(f'Cannot find path of module {module_prefix}')
+        # For now, assume the module's written in Python.
+        stub_path = pathlib.Path(module_path)
+    stub_path = stub_path.with_suffix('.cati')
+    return stub_path
+
+
 _module_namespaces: Dict[pathlib.Path, 'Environment'] = {}
 
 
@@ -873,7 +899,8 @@ class _TypeSequenceIndividualTypeNode(IndividualTypeNode):
         self._type = args[1]
         self.children = [n for n in args if isinstance(n, TypeNode)]
 
-    # QUESTION: Should I have a separate space for the temporary associated names?
+    # QUESTION: Should I have a separate space for the temporary associated
+    # names?
     def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
         if self._name is None:
             return self._type.to_type(env)
@@ -1316,24 +1343,9 @@ _seq_var = SequenceVariable()
 def _generate_type_of_innermost_module(
     qualified_name: str, source_dir
 ) -> StackEffect:
-    # We resolve imports as if we are the source file.
-    sys.path, old_path = [source_dir, *sys.path], sys.path
-    try:
-        module = importlib.import_module(qualified_name)
-    except ModuleNotFoundError:
-        raise TypeError(
-            'module {} not found during type checking'.format(qualified_name)
-        )
-    finally:
-        sys.path = old_path
-    module_attributes = {}
-    for name in dir(module):
-        attribute_type = get_object_type()
-        if isinstance(getattr(module, name), int):
-            attribute_type = get_int_type()
-        elif callable(getattr(module, name)):
-            attribute_type = py_function_type
-        module_attributes[name] = attribute_type
+    stub_path = _find_stub_path(str.split('.'))
+    init_env = load_builtins_and_preamble()
+    module_attributes = _check_stub(stub_path, False, False, init_env)
     module_type_brand = get_module_type().unroll().brand  # type: ignore
     brand = Brand(
         f'type({qualified_name})', IndividualKind, [module_type_brand]
@@ -1367,12 +1379,14 @@ def _generate_module_type(
         effect = StackEffect(
             TypeSequence([_seq_var]), TypeSequence([_seq_var, module_t])
         )
-        return ObjectType({'__call__': effect,}, [_seq_var])
+        return GenericType([_seq_var], ObjectType({'__call__': effect,}))
     else:
         innermost_type = _generate_type_of_innermost_module(
             _full_name, source_dir
         )
-        return ObjectType({'__call__': innermost_type,}, [_seq_var])
+        return GenericType(
+            [_seq_var], ObjectType({'__call__': innermost_type,})
+        )
 
 
 def _ensure_type(
