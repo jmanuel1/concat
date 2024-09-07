@@ -25,12 +25,14 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: "3.7"
-    - name: Install development dependencies
+    - name: Install test dependencies
       run: |
-        pip install -e .[dev]
+        pip install -e .[test]
     - name: Test
       run: |
-        tox run
+        nose2 --pretty-assert concat.tests
+    - name: Collect coverage into one file
+      run: coverage combine
     - name: Report test coverage to DeepSource
       uses: deepsourcelabs/test-coverage-action@master
       with:
