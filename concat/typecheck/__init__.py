@@ -479,7 +479,7 @@ def infer(
                 if node.asname is not None:
                     gamma[node.asname] = current_subs(
                         _generate_type_of_innermost_module(
-                            node.value, source_dir
+                            node.value
                         ).generalized_wrt(current_subs(gamma))
                     )
                 else:
@@ -1331,9 +1331,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
 _seq_var = SequenceVariable()
 
 
-def _generate_type_of_innermost_module(
-    qualified_name: str, source_dir
-) -> StackEffect:
+def _generate_type_of_innermost_module(qualified_name: str,) -> StackEffect:
     stub_path = _find_stub_path(str.split('.'))
     init_env = load_builtins_and_preamble()
     module_attributes = _check_stub(stub_path, init_env)
@@ -1372,9 +1370,7 @@ def _generate_module_type(
         )
         return GenericType([_seq_var], ObjectType({'__call__': effect,}))
     else:
-        innermost_type = _generate_type_of_innermost_module(
-            _full_name, source_dir
-        )
+        innermost_type = _generate_type_of_innermost_module(_full_name,)
         return GenericType(
             [_seq_var], ObjectType({'__call__': innermost_type,})
         )
