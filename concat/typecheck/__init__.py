@@ -193,14 +193,10 @@ _builtins_stub_path = pathlib.Path(__file__) / '../builtin_stubs/builtins.cati'
 
 
 def load_builtins_and_preamble() -> Environment:
+    env = _check_stub(pathlib.Path(__file__).with_name('preamble0.cati'),)
+    env = _check_stub(_builtins_stub_path, initial_env=env)
     env = _check_stub(
-        pathlib.Path(__file__).with_name('preamble0.cati'), is_preamble=True,
-    )
-    env = _check_stub(_builtins_stub_path, is_builtins=True, initial_env=env)
-    env = _check_stub(
-        pathlib.Path(__file__).with_name('preamble.cati'),
-        is_preamble=True,
-        initial_env=env,
+        pathlib.Path(__file__).with_name('preamble.cati'), initial_env=env,
     )
     # pick up ModuleType
     _check_stub(
@@ -745,10 +741,7 @@ _module_namespaces: Dict[pathlib.Path, 'Environment'] = {}
 
 
 def _check_stub_resolved_path(
-    path: pathlib.Path,
-    is_builtins: bool = False,
-    is_preamble: bool = False,
-    initial_env: Optional['Environment'] = None,
+    path: pathlib.Path, initial_env: Optional['Environment'] = None,
 ) -> 'Environment':
     if path in _module_namespaces:
         return _module_namespaces[path]
@@ -794,15 +787,10 @@ def _check_stub_resolved_path(
 
 
 def _check_stub(
-    path: pathlib.Path,
-    is_builtins: bool = False,
-    is_preamble: bool = False,
-    initial_env: Optional['Environment'] = None,
+    path: pathlib.Path, initial_env: Optional['Environment'] = None,
 ) -> 'Environment':
     path = path.resolve()
-    return _check_stub_resolved_path(
-        path, is_builtins, is_preamble, initial_env
-    )
+    return _check_stub_resolved_path(path, initial_env)
 
 
 # Parsing type annotations
@@ -1348,7 +1336,7 @@ def _generate_type_of_innermost_module(
 ) -> StackEffect:
     stub_path = _find_stub_path(str.split('.'))
     init_env = load_builtins_and_preamble()
-    module_attributes = _check_stub(stub_path, False, False, init_env)
+    module_attributes = _check_stub(stub_path, init_env)
     module_type_brand = get_module_type().unroll().brand  # type: ignore
     brand = Brand(
         f'type({qualified_name})', IndividualKind, [module_type_brand]
