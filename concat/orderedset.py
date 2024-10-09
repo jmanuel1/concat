@@ -1,15 +1,13 @@
-from concat.linked_list import LinkedList, empty_list
+from concat.linked_list import LinkedList
 from typing import (
     AbstractSet,
     Any,
-    Generic,
     Iterable,
     Iterator,
     Optional,
     Reversible,
     Tuple,
     TypeVar,
-    Union,
 )
 
 _T = TypeVar('_T', covariant=True)
@@ -471,9 +469,8 @@ class _Tree23:
             return self
         if self.is_2_node():
             left, x, right = self._data
-            if self._is_2_node_terminal():
-                if x is self.__hole:
-                    return _Tree23((x, _leaf_23_tree))
+            if self._is_2_node_terminal() and x is self.__hole:
+                return _Tree23((x, _leaf_23_tree))
             if left._is_hole_node():
                 if right.is_2_node():
                     # 2-node parent, 2-node sibling, hole on left

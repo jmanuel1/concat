@@ -3,7 +3,6 @@
 
 import argparse
 from concat.transpile import parse, transpile_ast, typecheck
-import concat.astutils
 from concat.error_reporting import get_line_at, create_parsing_failure_message
 import concat.execute
 import concat.lex

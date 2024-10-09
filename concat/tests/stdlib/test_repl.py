@@ -2,7 +2,6 @@ import unittest
 import io
 import sys
 import contextlib
-import concat.parse
 import concat.parser_combinators
 import concat.typecheck
 from concat.typecheck.types import SequenceVariable, StackEffect, TypeSequence

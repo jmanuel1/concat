@@ -15,9 +15,7 @@ class TestInsertionOrderedSet(unittest.TestCase):
         self, original: Set[int], to_remove: Set[int]
     ) -> None:
         insertion_order_set = InsertionOrderedSet[int](list(original))
-        expected_order = list(
-            x for x in insertion_order_set if x not in to_remove
-        )
+        expected_order = [x for x in insertion_order_set if x not in to_remove]
         insertion_order_set -= to_remove
         actual_order = list(insertion_order_set)
         self.assertListEqual(expected_order, actual_order)

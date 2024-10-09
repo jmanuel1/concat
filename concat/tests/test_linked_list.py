@@ -1,5 +1,5 @@
 from concat.linked_list import LinkedList, empty_list
-from hypothesis import example, given
+from hypothesis import given
 import hypothesis.strategies as st
 from typing import Callable, List
 import unittest

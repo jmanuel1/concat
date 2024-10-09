@@ -61,6 +61,7 @@ _Result = TypeVar('_Result', covariant=True)
 
 class _Substitutable(Protocol[_Result]):
     def apply_substitution(self, sub: 'Substitutions') -> _Result:
+        # empty, abstract protocol method
         pass
 
 
@@ -68,16 +69,17 @@ class Substitutions(Mapping['Variable', 'Type']):
     def __init__(
         self,
         sub: Union[
-            Iterable[Tuple['Variable', 'Type']], Mapping['Variable', 'Type']
-        ] = {},
+            Iterable[Tuple['Variable', 'Type']],
+            Mapping['Variable', 'Type'],
+            None,
+        ] = None,
     ) -> None:
-        self._sub = dict(sub)
-        # See HACK KIND_POLY
-        # for variable, ty in self._sub.items():
-        #     if variable.kind != ty.kind:
-        #         raise TypeError(
-        #             f'{variable} is being substituted by {ty}, which has the wrong kind ({variable.kind} vs {ty.kind})'
-        #         )
+        self._sub = {} if sub is None else dict(sub)
+        for variable, ty in self._sub.items():
+            if not (variable.kind >= ty.kind):
+                raise TypeError(
+                    f'{variable} is being substituted by {ty}, which has the wrong kind ({variable.kind} vs {ty.kind})'
+                )
         self._cache: Dict[int, 'Type'] = {}
         # innermost first
         self.subtyping_provenance: List[Any] = []
@@ -169,18 +171,14 @@ from concat.typecheck.types import (
     free_type_variables_of_mapping,
     get_int_type,
     get_list_type,
-    get_object_type,
     get_str_type,
     get_tuple_type,
     get_module_type,
     no_return_type,
-    py_function_type,
 )
 import abc
 from concat.error_reporting import create_parsing_failure_message
 from concat.lex import Token
-import importlib
-import importlib.util
 import itertools
 import pathlib
 import sys
@@ -210,7 +208,7 @@ def load_builtins_and_preamble() -> Environment:
 
 def check(
     environment: Environment,
-    program: concat.astutils.WordsOrStatements,
+    program: 'concat.astutils.WordsOrStatements',
     source_dir: str = '.',
     _should_check_bodies: bool = True,
 ) -> Environment:
@@ -701,8 +699,7 @@ def infer(
                     )
                 ty = Fix(self_type, ty)
                 gamma[node.class_name] = ty
-            # elif isinstance(node, concat.parse.TypeAliasStatementNode):
-            #     gamma[node.name], _ = node.type_node.to_type(gamma)
+            # TODO: Type aliases
             else:
                 raise UnhandledNodeTypeError(
                     "don't know how to handle '{}'".format(node)
@@ -732,7 +729,9 @@ def _find_stub_path(module_parts: Sequence[str]) -> pathlib.Path:
         assert module_spec is not None
         module_path = module_spec.origin
         if module_path is None:
-            raise TypeError(f'Cannot find path of module {module_prefix}')
+            raise TypeError(
+                f'Cannot find path of module {".".join(module_parts)}'
+            )
         # For now, assume the module's written in Python.
         stub_path = pathlib.Path(module_path)
     stub_path = stub_path.with_suffix('.cati')
@@ -808,6 +807,7 @@ def _check_stub(
 
 class TypeNode(concat.parse.Node, abc.ABC):
     def __init__(self, location: concat.astutils.Location) -> None:
+        super().__init__()
         self.location = location
         self.children: Sequence[concat.parse.Node]
 

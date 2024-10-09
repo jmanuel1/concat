@@ -982,13 +982,10 @@ _T = TypeVar('_T')
 def _contains_assumption(
     assumptions: Sequence[Tuple[Type, Type]], subtype: Type, supertype: Type
 ) -> bool:
-    for sub, sup in assumptions:
-        if (
-            sub._type_id == subtype._type_id
-            and sup._type_id == supertype._type_id
-        ):
-            return True
-    return False
+    any(
+        sub._type_id == subtype._type_id and sup._type_id == supertype._type_id
+        for sub, sup in assumptions
+    )
 
 
 # The representation of types of objects.
@@ -1008,11 +1005,6 @@ class Brand:
     ) -> None:
         self._user_name = user_name
         self.kind = kind
-        # for t in superbrands:
-        #     if t.kind != kind:
-        #         raise ConcatTypeError(
-        #             f'{t} must have kind {kind}, but has kind {t.kind}'
-        #         )
         self._superbrands = superbrands
 
     def __str__(self) -> str:
@@ -1039,7 +1031,7 @@ class NominalType(Type):
 
         self._brand = brand
         self._ty = ty
-        # assert brand.kind == ty.kind
+        # TODO: Make sure brands interact with generics properly
 
     def _free_type_variables(self) -> InsertionOrderedSet[Variable]:
         return self._ty.free_type_variables()
@@ -1878,7 +1870,8 @@ class Fix(Type):
             self._unrolled_ty = self._apply(self)
             if self._internal_name is not None:
                 self._unrolled_ty.set_internal_name(self._internal_name)
-            # self._unrolled_ty._type_id = self._type_id
+            # Do not make the type ids equal so that subtyping assumptions are
+            # useful
         return self._unrolled_ty
 
     def _free_type_variables(self) -> InsertionOrderedSet[Variable]:
@@ -1913,8 +1906,6 @@ class Fix(Type):
 
         if isinstance(supertype, Fix):
             unrolled = supertype.unroll()
-            # BUG: The unrolled types have the same type ids, so the assumption
-            # is used immediately, which is unsound.
             sub = self.unroll().constrain_and_bind_variables(
                 unrolled,
                 rigid_variables,
