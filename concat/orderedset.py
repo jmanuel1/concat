@@ -5,7 +5,6 @@ from typing import (
     Iterable,
     Iterator,
     Optional,
-    Reversible,
     Tuple,
     TypeVar,
 )
@@ -52,14 +51,18 @@ class OrderedSet(AbstractSet[_T]):
 class InsertionOrderedSet(AbstractSet[_T]):
     def __init__(
         self,
-        elements: 'Reversible[_T]',
+        elements: 'Iterable[_T]',
         _order: Optional[LinkedList[_T]] = None,
     ) -> None:
         super().__init__()
-        self._data = OrderedSet(elements)
         self._order = (
             LinkedList.from_iterable(elements) if _order is None else _order
         )
+        if isinstance(elements, OrderedSet):
+            self._data = elements
+        else:
+            # elements might be an iterator that gets exhausted
+            self._data = OrderedSet(self._order)
 
     def __sub__(self, other: object) -> 'InsertionOrderedSet[_T]':
         if not isinstance(other, AbstractSet):

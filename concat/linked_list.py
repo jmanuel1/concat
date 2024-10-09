@@ -1,9 +1,9 @@
 from typing import (
     Callable,
+    Iterable,
     Iterator,
     List,
     Optional,
-    Reversible,
     Sequence,
     Tuple,
     TypeVar,
@@ -21,19 +21,19 @@ class LinkedList(Sequence[_T_co]):
         self, _val: Optional[Tuple[_T_co, 'LinkedList[_T_co]']]
     ) -> None:
         self._val = _val
-        if _val is None:
-            self._length = 0
-        else:
-            self._length = 1 + len(_val[1])
+        self._length: Optional[int] = None
 
     @classmethod
-    def from_iterable(cls, iterable: Reversible[_T_co]) -> 'LinkedList[_T_co]':
+    def from_iterable(cls, iterable: Iterable[_T_co]) -> 'LinkedList[_T_co]':
         if isinstance(iterable, cls):
             return iterable
-        l: LinkedList[_T_co] = empty_list
-        for el in reversed(iterable):
-            l = cls((el, l))
-        return l
+        l: LinkedList[_T_co] = cls(None)
+        head = l
+        for el in iterable:
+            next_node = cls(None)
+            l._val = (el, next_node)
+            l = next_node
+        return head
 
     @overload
     def __getitem__(self, i: int) -> _T_co:
@@ -57,6 +57,13 @@ class LinkedList(Sequence[_T_co]):
         return self._val[0]
 
     def __len__(self) -> int:
+        if self._length is None:
+            node = self
+            length = 0
+            while node._val is not None:
+                node = node._val[1]
+                length += 1
+            self._length = length
         return self._length
 
     def __add__(self, other: 'LinkedList[_T_co]') -> 'LinkedList[_T_co]':
