@@ -111,7 +111,10 @@ class Substitutions(Mapping['Variable', 'Type']):
         # nondeterministic Concat type errors from the type checker.
         if isinstance(arg, Type):
             if arg._type_id not in self._cache:
-                self._cache[arg._type_id] = arg.apply_substitution(self)
+                if not (self._dom() & arg.free_type_variables()):
+                    self._cache[arg._type_id] = arg
+                else:
+                    self._cache[arg._type_id] = arg.apply_substitution(self)
             result = self._cache[arg._type_id]
         if isinstance(arg, Environment):
             if arg.id not in self._cache:
