@@ -2,7 +2,8 @@ import concat.lex as lex
 import concat.parse
 import concat.typecheck
 import concat.parse
-from concat.typecheck import Environment
+from concat.typecheck import Environment, Substitutions
+from concat.typecheck.errors import TypeError as ConcatTypeError
 from concat.typecheck.types import (
     BoundVariable,
     ClassType,
@@ -304,9 +305,8 @@ class TestTypeEquality(unittest.TestCase):
 class TestSubtyping(unittest.TestCase):
     def test_int_not_subtype_of_float(self) -> None:
         """Differ from Reticulated Python: !(int <= float)."""
-        ex = get_int_type().is_subtype_of(float_type)
-        print(ex)
-        self.assertFalse(ex)
+        with self.assertRaises(ConcatTypeError):
+            get_int_type().constrain_and_bind_variables(float_type, set(), [])
 
     @given(from_type(IndividualType), from_type(IndividualType))
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
@@ -315,20 +315,25 @@ class TestSubtyping(unittest.TestCase):
         fun2 = StackEffect(
             TypeSequence([no_return_type]), TypeSequence([get_object_type()])
         )
-        self.assertTrue(fun1.is_subtype_of(fun2))
+        self.assertEqual(
+            fun1.constrain_and_bind_variables(fun2, set(), []), Substitutions()
+        )
 
     @given(from_type(IndividualType))
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_no_return_is_bottom_type(self, type) -> None:
-        self.assertTrue(no_return_type.is_subtype_of(type))
+        self.assertEqual(
+            no_return_type.constrain_and_bind_variables(type, set(), []),
+            Substitutions(),
+        )
 
     @given(from_type(IndividualType))
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_object_is_top_type(self, type) -> None:
-        ex = type.is_subtype_of(get_object_type())
-        note(repr(type))
-        note(str(ex))
-        self.assertTrue(ex)
+        self.assertEqual(
+            type.constrain_and_bind_variables(get_object_type(), set(), []),
+            Substitutions(),
+        )
 
     __attributes_generator = dictionaries(
         text(max_size=25), from_type(IndividualType), max_size=5  # type: ignore
@@ -346,7 +351,10 @@ class TestSubtyping(unittest.TestCase):
     ) -> None:
         object1 = ObjectType({**other_attributes, **attributes})
         object2 = ObjectType(attributes)
-        self.assertTrue(object1.is_subtype_of(object2))
+        self.assertEqual(
+            object1.constrain_and_bind_variables(object2, set(), []),
+            Substitutions(),
+        )
 
     @given(__attributes_generator, __attributes_generator)
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
@@ -357,15 +365,19 @@ class TestSubtyping(unittest.TestCase):
         object2 = ClassType(attributes)
         note(repr(object1))
         note(repr(object2))
-        ex = object1.is_subtype_of(object2)
-        note(str(ex))
-        self.assertTrue(ex)
+        self.assertEqual(
+            object1.constrain_and_bind_variables(object2, set(), []),
+            Substitutions(),
+        )
 
     @given(from_type(StackEffect))
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_object_subtype_of_stack_effect(self, effect) -> None:
         object = ObjectType({'__call__': effect})
-        self.assertTrue(object.is_subtype_of(effect))
+        self.assertEqual(
+            object.constrain_and_bind_variables(effect, set(), []),
+            Substitutions(),
+        )
 
     @given(from_type(IndividualType), from_type(IndividualType))
     @settings(
@@ -377,7 +389,10 @@ class TestSubtyping(unittest.TestCase):
     def test_object_subtype_of_py_function(self, type1, type2) -> None:
         py_function = py_function_type[TypeSequence([type1]), type2]
         object = ObjectType({'__call__': py_function})
-        self.assertTrue(object.is_subtype_of(py_function))
+        self.assertEqual(
+            object.constrain_and_bind_variables(py_function, set(), []),
+            Substitutions(),
+        )
 
     @given(from_type(StackEffect))
     def test_class_subtype_of_stack_effect(self, effect) -> None:
@@ -387,7 +402,10 @@ class TestSubtyping(unittest.TestCase):
             TypeSequence([*effect.input, x]), effect.output
         )
         cls = Fix(x, ClassType({'__init__': unbound_effect}))
-        self.assertTrue(cls.is_subtype_of(effect))
+        self.assertEqual(
+            cls.constrain_and_bind_variables(effect, set(), []),
+            Substitutions(),
+        )
 
     @given(from_type(IndividualType), from_type(IndividualType))
     @settings(
@@ -401,19 +419,26 @@ class TestSubtyping(unittest.TestCase):
         py_function = py_function_type[TypeSequence([type1]), type2]
         unbound_py_function = py_function_type[TypeSequence([x, type1]), type2]
         cls = Fix(x, ClassType({'__init__': unbound_py_function}))
-        self.assertTrue(cls.is_subtype_of(py_function))
+        self.assertEqual(
+            cls.constrain_and_bind_variables(py_function, set(), []),
+            Substitutions(),
+        )
 
     @given(from_type(IndividualType))
     def test_none_subtype_of_optional(self, ty: IndividualType) -> None:
         opt_ty = optional_type[
             ty,
         ]
-        self.assertTrue(get_none_type().is_subtype_of(opt_ty))
+        self.assertEqual(
+            get_none_type().constrain_and_bind_variables(opt_ty, set(), []),
+            Substitutions(),
+        )
 
     @given(from_type(IndividualType))
     def test_type_subtype_of_optional(self, ty: IndividualType) -> None:
         opt_ty = optional_type[
             ty,
         ]
-        note(str(ty))
-        self.assertTrue(ty.is_subtype_of(opt_ty))
+        self.assertEqual(
+            ty.constrain_and_bind_variables(opt_ty, set(), []), Substitutions()
+        )

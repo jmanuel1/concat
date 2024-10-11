@@ -32,32 +32,6 @@ if TYPE_CHECKING:
     from concat.typecheck import Environment, Substitutions
 
 
-class SubtypeExplanation:
-    def __init__(self, data: Any) -> None:
-        self._data = data
-
-    def __bool__(self) -> bool:
-        if isinstance(self._data, concat.typecheck.Substitutions):
-            return not self._data
-        return not isinstance(self._data, StaticAnalysisError)
-
-    def __str__(self) -> str:
-        if isinstance(self._data, StaticAnalysisError):
-            e: Optional[BaseException] = self._data
-            string = ''
-            while e is not None:
-                string += '\n' + str(e)
-                e = e.__cause__ or e.__context__
-            return string
-        if isinstance(self._data, concat.typecheck.Substitutions):
-            string = str(self._data)
-            string += '\n' + '\n'.join(
-                (map(str, self._data.subtyping_provenance))
-            )
-            return string
-        return str(self._data)
-
-
 class Type(abc.ABC):
     _next_type_id = 0
 
@@ -69,29 +43,30 @@ class Type(abc.ABC):
         self._type_id = Type._next_type_id
         Type._next_type_id += 1
 
-    # QUESTION: Do I need this?
-    def is_subtype_of(self, supertype: 'Type') -> SubtypeExplanation:
-        from concat.typecheck import Substitutions
-
-        try:
-            sub = self.constrain_and_bind_variables(supertype, set(), [])
-        except ConcatTypeError as e:
-            return SubtypeExplanation(e)
-        ftv = self.free_type_variables() | supertype.free_type_variables()
-        sub1 = Substitutions({v: t for v, t in sub.items() if v in ftv})
-        sub1.subtyping_provenance = sub.subtyping_provenance
-        return SubtypeExplanation(sub1)
-
     # No <= implementation using subtyping, because variables overload that for
     # sort by identity.
 
     def __eq__(self, other: object) -> bool:
+        from concat.typecheck import Substitutions
+
         if self is other:
             return True
         if not isinstance(other, Type):
             return NotImplemented
-        # QUESTION: Define == separately from is_subtype_of?
-        return self.is_subtype_of(other) and other.is_subtype_of(self)  # type: ignore
+        # QUESTION: Define == separately from subtyping code?
+        ftv = self.free_type_variables() | other.free_type_variables()
+        try:
+            subtype_sub = self.constrain_and_bind_variables(other, set(), [])
+            supertype_sub = other.constrain_and_bind_variables(self, set(), [])
+        except StaticAnalysisError:
+            return False
+        subtype_sub = Substitutions(
+            {v: t for v, t in subtype_sub.items() if v in ftv}
+        )
+        supertype_sub = Substitutions(
+            {v: t for v, t in supertype_sub.items() if v in ftv}
+        )
+        return not subtype_sub and not supertype_sub
 
     # NOTE: Avoid hashing types. I might I'm having correctness issues related
     # to hashing that I'd rather avoid entirely. Maybe one day I'll introduce
@@ -142,16 +117,6 @@ class Type(abc.ABC):
         subtyping_assumptions: List[Tuple['Type', 'Type']],
     ) -> 'Substitutions':
         raise NotImplementedError
-
-    # QUESTION: Should I remove this? Should I not distinguish between subtype
-    # and supertype variables in the other two constraint methods? I should
-    # look bidirectional typing with polymorphism/generics. Maybe 'Complete and
-    # Easy'?
-    def constrain(self, supertype: 'Type') -> None:
-        if not self.is_subtype_of(supertype):
-            raise ConcatTypeError(
-                '{} is not a subtype of {}'.format(self, supertype)
-            )
 
     def instantiate(self) -> 'Type':
         return self
