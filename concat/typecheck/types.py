@@ -1539,6 +1539,7 @@ class PythonFunctionType(IndividualType):
             sub = Substitutions()
             sub.add_subtyping_provenance((self, supertype))
             return sub
+        raise ConcatTypeError(f'{self} is not a subtype of {supertype}')
 
 
 class _PythonOverloadedType(Type):
