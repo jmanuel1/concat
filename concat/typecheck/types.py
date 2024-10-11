@@ -982,7 +982,7 @@ _T = TypeVar('_T')
 def _contains_assumption(
     assumptions: Sequence[Tuple[Type, Type]], subtype: Type, supertype: Type
 ) -> bool:
-    any(
+    return any(
         sub._type_id == subtype._type_id and sup._type_id == supertype._type_id
         for sub, sup in assumptions
     )
@@ -1046,6 +1046,12 @@ class NominalType(Type):
     def constrain_and_bind_variables(
         self, supertype, rigid_variables, subtyping_assumptions
     ) -> 'Substitutions':
+        if (
+            supertype._type_id == get_object_type()._type_id
+            or self._type_id == supertype._type_id
+            or _contains_assumption(subtyping_assumptions, self, supertype)
+        ):
+            return concat.typecheck.Substitutions()
         if isinstance(supertype, NominalType):
             if self._brand <= supertype._brand:
                 return concat.typecheck.Substitutions()
@@ -1243,8 +1249,6 @@ class ObjectType(IndividualType):
             )
         if not isinstance(supertype, ObjectType):
             raise NotImplementedError(repr(supertype))
-
-        subtyping_assumptions = subtyping_assumptions + [(self, supertype)]
 
         # don't constrain the type arguments, constrain those based on
         # the attributes
