@@ -1517,7 +1517,7 @@ class PythonFunctionType(IndividualType):
                 )
                 sub.add_subtyping_provenance((self, supertype))
                 return sub
-            if isinstance(supertype, ObjectType) and not supertype.nominal:
+            if isinstance(supertype, ObjectType):
                 sub = Substitutions()
                 for attr in supertype.attributes:
                     self_attr_type = sub(self.get_type_of_attribute(attr))
