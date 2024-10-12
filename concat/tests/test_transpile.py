@@ -1,12 +1,11 @@
 import concat.visitors
-from concat.astutils import get_explicit_positional_function_parameters
 from concat.lex import Token
 import concat.parse
 import concat.transpile
 from concat.typecheck import StackEffectTypeNode, TypeSequenceNode
 import unittest
 import ast
-from typing import Iterable, Iterator, List, Sequence, Type, cast
+from typing import Iterable, Iterator, Type
 import astunparse  # type: ignore
 
 
@@ -53,6 +52,7 @@ class TestSubVisitors(unittest.TestCase):
         name_token.value, name_token.start = 'a', (0, 0)
         node = concat.parse.FuncdefStatementNode(
             name_token,
+            [],
             [],
             [],
             [],

@@ -27,12 +27,21 @@ readme = "README.md"
 [project.optional-dependencies]
 dev = [
   "axblack==20220330",
+  "importlib-metadata<5",
   "mypy>=1.1.1",
   "pre-commit>=2.6.0,<3",
-  "tox>=4.5.1,<5",
-  "hypothesis>=6.75.1,<7"
+  "pylsp-mypy",
+  "python-lsp-server[all]==1.7.2",
+  "snakeviz",
+  "virtualenv<=20.17.1",
 ]
-
+test = [
+  "coverage>=6.4.4,<7",
+  "hypothesis>=6.75.1,<7",
+  "nose2==0.13.0",
+  "pywinpty>=2.0.7,<3; platform_system==\"Windows\"",
+  "scripttest",
+]
 
 [project.urls]
 "Source code" = "https://github.com/jmanuel1/concat"
@@ -43,6 +52,10 @@ pattern = "version = '(?P<version>.*)'"
 
 [tool.hatch.envs.default]
 features = [
-  "dev"
+  "dev",
+  "test",
 ]
 python = "3.7"
+
+[tool.hatch.metadata]
+allow-direct-references = true

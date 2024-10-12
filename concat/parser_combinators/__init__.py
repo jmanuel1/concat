@@ -92,6 +92,7 @@ class Result(Generic[_T_co]):
         current_index: int,
         is_success: bool,
         failures: Optional[FailureTree] = None,
+        is_committed: bool = False,
     ) -> None:
         self.output = output
         self.current_index = current_index
@@ -101,9 +102,10 @@ class Result(Generic[_T_co]):
             )
         self.is_success = is_success
         self.failures = failures
+        self.is_committed = is_committed
 
     def __repr__(self) -> str:
-        return f'{type(self).__qualname__}({self.output!r}, {self.current_index!r}, {self.is_success!r}, {self.failures!r})'
+        return f'{type(self).__qualname__}({self.output!r}, {self.current_index!r}, {self.is_success!r}, {self.failures!r}, is_committed={self.is_committed!r})'
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Result):
@@ -112,17 +114,25 @@ class Result(Generic[_T_co]):
                 self.current_index,
                 self.is_success,
                 self.failures,
+                self.is_committed,
             ) == (
                 other.output,
                 other.current_index,
                 other.is_success,
                 other.failures,
+                other.is_committed,
             )
         return NotImplemented
 
     def __hash__(self) -> int:
         return hash(
-            (self.output, self.current_index, self.is_success, self.failures)
+            (
+                self.output,
+                self.current_index,
+                self.is_success,
+                self.failures,
+                self.is_committed,
+            )
         )
 
 
@@ -142,29 +152,37 @@ class Parser(Generic[_T_contra, _U_co]):
             stream: Sequence[_T_contra], index: int
         ) -> Result[Union[_U_co, _V]]:
             left_result = self(stream, index)
-            if left_result.is_success:
+            if (
+                left_result.is_success
+                or left_result.is_committed
+                and left_result.current_index > index
+            ):
                 return left_result
             right_result = other(stream, index)
             new_failure: Optional[FailureTree]
             if right_result.is_success:
                 if left_result.current_index > right_result.current_index:
-                    if (
-                        left_result.failures is not None
-                        and right_result.failures is not None
-                    ):
+                    if right_result.failures is not None:
+                        assert left_result.failures is not None
                         new_failure = FailureTree(
                             f'{left_result.failures.expected} or {right_result.failures.expected}',
                             left_result.failures.furthest_index,
                             left_result.failures.children
                             + right_result.failures.children,
                         )
-                        return Result(
-                            right_result.output,
-                            right_result.current_index,
-                            True,
-                            new_failure,
-                        )
-                    raise Exception('todo')
+                    else:
+                        new_failure = left_result.failures
+                    return Result(
+                        right_result.output,
+                        right_result.current_index,
+                        True,
+                        new_failure,
+                    )
+                return right_result
+            if (
+                right_result.is_committed
+                and right_result.current_index > index
+            ):
                 return right_result
             assert left_result.failures is not None
             assert right_result.failures is not None
@@ -321,14 +339,30 @@ class Parser(Generic[_T_contra, _U_co]):
         return new_parser
 
     def optional(self) -> 'Parser[_T_contra, Optional[_U_co]]':
+        return self | success(None)
+
+    # See
+    # https://elixirforum.com/t/parser-combinators-how-to-know-when-many-should-return-an-error/46048/12
+    # on the problem this solves.
+    def commit(self) -> 'Parser[_T_contra, _U_co]':
+        """Do not try alteratives adjacent to this parser if it consumes input before failure.
+
+        This is useful with combinators like many(): parser.many() succeeds
+        even if `parser` fails in a way that you know is an error and should be
+        reported for a better error message."""
+
         @Parser
         def new_parser(
             stream: Sequence[_T_contra], index: int
-        ) -> Result[Optional[_U_co]]:
+        ) -> Result[_U_co]:
             result = self(stream, index)
-            if result.is_success:
-                return result
-            return Result(None, index, True, result.failures)
+            return Result(
+                result.output,
+                result.current_index,
+                result.is_success,
+                result.failures,
+                is_committed=True,
+            )
 
         return new_parser
 

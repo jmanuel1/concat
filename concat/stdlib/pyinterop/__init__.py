@@ -1,21 +1,6 @@
 """Concat-Python interoperation helpers."""
+from concat.common_types import ConcatFunction
 import concat.stdlib.ski
-from concat.typecheck.types import (
-    ForAll,
-    IndividualVariable,
-    SequenceVariable,
-    StackEffect,
-    TypeSequence,
-    dict_type,
-    iterable_type,
-    object_type,
-    optional_type,
-    py_function_type,
-    slice_type,
-    str_type,
-    subscriptable_type,
-    tuple_type,
-)
 import builtins
 import importlib
 import os
@@ -34,63 +19,6 @@ from typing import (
     Union,
     cast,
 )
-
-
-_stack_type_var = SequenceVariable()
-_rest_var = SequenceVariable()
-_rest_var_2 = SequenceVariable()
-_rest_var_3 = SequenceVariable()
-_x = IndividualVariable()
-_y = IndividualVariable()
-_z = IndividualVariable()
-globals()['@@types'] = {
-    'getitem': ForAll(
-        [_stack_type_var, _x, _y],
-        StackEffect(
-            TypeSequence([_stack_type_var, subscriptable_type[_x, _y], _x,]),
-            TypeSequence([_stack_type_var, _y]),
-        ),
-    ),
-    'to_dict': ForAll(
-        [_stack_type_var, _x, _y],
-        StackEffect(
-            TypeSequence(
-                [
-                    _stack_type_var,
-                    optional_type[
-                        iterable_type[tuple_type[TypeSequence([_x, _y]),],],
-                    ],
-                ]
-            ),
-            TypeSequence([_stack_type_var, dict_type[_x, _y]]),
-        ),
-    ),
-    'to_slice': ForAll(
-        [_stack_type_var, _x, _y, _z],
-        StackEffect(
-            TypeSequence(
-                [
-                    _stack_type_var,
-                    optional_type[_x,],
-                    optional_type[_y,],
-                    optional_type[_z,],
-                ]
-            ),
-            TypeSequence([_stack_type_var, slice_type[_z, _y, _x]]),
-        ),
-    ),
-    'to_str': StackEffect(
-        TypeSequence([_stack_type_var, object_type, object_type, object_type]),
-        TypeSequence([_stack_type_var, str_type]),
-    ),
-    'to_py_function': ForAll(
-        [_rest_var, _rest_var_2, _rest_var_3],
-        StackEffect(
-            [_rest_var, StackEffect([_rest_var_2], [_rest_var_3])],
-            [_rest_var, py_function_type],
-        ),
-    ),
-}
 
 
 def to_py_function(stack: List[object], stash: List[object]) -> None:
@@ -337,6 +265,19 @@ def import_advanced(stack: List[object], stash: List[object]) -> None:
             0 if level is None else cast(int, level),
         )
     )
+
+
+def map(stack: List[object], stash: List[object]) -> None:
+    'f iterable -- map(f, iterable)'
+    iterable = cast(Iterable[object], stack.pop())
+    f = cast(ConcatFunction, stack.pop())
+
+    def python_f(x: object) -> object:
+        stack.append(x)
+        f(stack, stash)
+        return stack.pop()
+
+    stack.append(builtins.map(python_f, iterable))
 
 
 def open(stack: List[object], stash: List[object]) -> None:

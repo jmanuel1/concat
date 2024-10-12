@@ -17,6 +17,7 @@ def simple_str(obj:object -- string:str):
   None swap None swap to_str
 
 def strstr(haystack:str needle:str -- index:int):
-  [(), None, None] None to_dict swap pick$.find py_call cast (int) nip
+  # FIXME: These casts should be unnecessary
+  [(), None, None] None to_dict swap pick cast (str) $.find py_call cast (int) nip
 
 get_input get_input strstr simple_str put_output

@@ -6,10 +6,10 @@ from concat.stdlib.continuation import ContinuationMonad
 from concat.stdlib.continuation import call_with_current_continuation
 from concat.stdlib.continuation import eval_cont
 from concat.stdlib.continuation import cont_pure
+from concat.stdlib.continuation import map_cont
 from concat.stdlib.continuation import bind_cont
 from concat.stdlib.continuation import cont_from_cps
 from concat.stdlib.pyinterop import to_dict
-# from concat.stdlib.execution import loop  # FIXME: This line should cause an error when there's no @@types in that module
 
 
 def abort(k:forall *s. (*s x:`a -- *s n:none) -- n:none):
@@ -21,10 +21,14 @@ def abort(k:forall *s. (*s x:`a -- *s n:none) -- n:none):
 # arguments.
 
 
+def ignore_int(i:int -- n:none):
+  drop None
+
+
 def ten_times(k:forall *s. (*s i:int -- *s c:ContinuationMonad[none, int]) -- c:ContinuationMonad[none, none]):
   # k
   0 $(k:forall *s. (*s i:int -- *s c:ContinuationMonad[none, int]) n:int:
-    1 + dup pick call eval_cont drop dup 10 <
+    1 + dup pick call $:~ignore_int map_cont eval_cont drop dup 10 <
   ) loop drop drop
   $:~abort cont_from_cps
 
