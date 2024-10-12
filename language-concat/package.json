@@ -36,6 +36,11 @@
       "versions": {
         "2.0.0": "consumeLinterV2"
       }
+    },
+    "datatip": {
+      "versions": {
+        "0.1.0": "consumeDatatip"
+      }
     }
   }
 }

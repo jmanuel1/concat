@@ -1,0 +1,108 @@
+class object:
+  ()
+
+!@@concat.typecheck.builtin_object object
+
+class bool:
+  ()
+
+!@@concat.typecheck.builtin_bool bool
+
+class int:
+  def __add__(--) @cast (py_function[(int), int]):
+    ()
+
+  def __invert__(--) @cast (py_function[(), int]):
+    ()
+
+  def __sub__(--) @cast (py_function[(int), str]):
+    ()
+
+  def __le__(--) @cast (py_function[(int), bool]):
+    ()
+
+  def __lt__(--) @cast (py_function[(int), bool]):
+    ()
+
+  def __ge__(--) @cast (py_function[(int), bool]):
+    ()
+
+!@@concat.typecheck.builtin_int int
+
+class float:
+  ()
+
+class slice[`start, `stop, `step]:
+  ()
+
+class str:
+  def __getitem__(--) @cast (py_overloaded[
+    py_function[(int), str],
+    py_function[
+      (slice[Optional[int], Optional[int], Optional[int]]),
+      str
+    ]
+  ]):
+    ()
+
+  def __add__(--) @cast (py_function[(object), str]):
+    ()
+
+  def find(--) @cast (py_function[(str Optional[int] Optional[int]), int]):
+    ()
+
+  def join(--) @cast (py_function[(str iterable[str]), str]):
+    ()
+
+  def __iter__(--) @cast (py_function[(), iterator[str]]):
+    ()
+
+  def index(--) @cast (py_function[(str Optional[int] Optional[int]), int]):
+    ()
+
+!@@concat.typecheck.builtin_str str
+
+def eval(--) @cast (py_function[(str), object]):
+  ()
+
+def print(--) @cast (py_function[(), none]):
+  ()
+
+class BaseException:
+  ()
+
+class Exception($BaseException,):
+  ()
+
+def input(--) @cast (py_function[(str), str]):
+  ()
+
+class tuple[`t...]:
+  # NOTE: Will need a new feature to get the type of __getitem__ right.
+  def __getitem__(--) @cast (py_function[(int), object]):
+    ()
+
+!@@concat.typecheck.builtin_tuple tuple
+
+class dict[`key, `value]:
+  def __iter__(--) @cast (py_function[(), iterator[`key]]):
+    ()
+
+class list[`element]:
+  def __getitem__(--) @cast (py_overloaded[
+    py_function[(int), `element],
+    py_function[
+      (slice[Optional[int], Optional[int], Optional[int]]),
+      list[`element]
+    ]
+  ]):
+    ()
+
+  def __iter__(--) @cast (py_function[(), iterator[`element]]):
+    ()
+
+!@@concat.typecheck.builtin_list list
+
+# SupportAbs is the name of the protocol in Python
+def abs(--) @cast (py_function[(SupportsAbs[`t]), `t]):
+  ()

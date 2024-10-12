@@ -1,0 +1,4 @@
+class none:
+  ()
+
+!@@concat.typecheck.builtin_none none

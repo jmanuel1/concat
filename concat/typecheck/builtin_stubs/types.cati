@@ -1,0 +1,4 @@
+class ModuleType:
+  ()
+
+!@@concat.typecheck.builtin_module ModuleType

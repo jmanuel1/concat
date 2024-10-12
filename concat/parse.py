@@ -29,19 +29,18 @@ tokenization phase.
 import abc
 import operator
 from typing import (
+    Any,
+    Generator,
     Iterable,
     Iterator,
+    List,
     Optional,
+    Sequence,
+    TYPE_CHECKING,
+    Tuple,
     Type,
     TypeVar,
-    Any,
-    Sequence,
-    Tuple,
-    Dict,
-    Generator,
-    List,
-    Callable,
-    TYPE_CHECKING,
+    Union,
 )
 import concat.lex
 import concat.astutils
@@ -56,10 +55,14 @@ if TYPE_CHECKING:
 
 
 class Node(abc.ABC):
-    @abc.abstractmethod
     def __init__(self):
         self.location = (0, 0)
         self.children: Iterable[Node] = []
+
+    def assert_no_parse_errors(self) -> None:
+        failures = list(self.parsing_failures)
+        if failures:
+            raise concat.parser_combinators.ParseError(failures)
 
     @property
     def parsing_failures(
@@ -212,6 +215,9 @@ class QuoteWordNode(WordNode):
         )
         return '(' + input_stack_type + ' '.join(map(str, self.children)) + ')'
 
+    def __repr__(self) -> str:
+        return f'{type(self).__qualname__}(children={self.children!r}, location={self.location!r}, input_stack_type={self.input_stack_type!r})'
+
 
 class NameWordNode(WordNode):
     def __init__(self, name: 'concat.lex.Token'):
@@ -260,6 +266,9 @@ class ParseError(Node):
         assert self.result.failures is not None
         yield self.result.failures
 
+    def __repr__(self) -> str:
+        return f'{type(self).__qualname__}(result={self.result!r})'
+
 
 class BytesWordNode(WordNode):
     def __init__(self, bytes: 'concat.lex.Token'):
@@ -296,6 +305,7 @@ class FuncdefStatementNode(StatementNode):
     def __init__(
         self,
         name: 'Token',
+        type_parameters: Sequence[Tuple['Token', Node]],
         decorators: Iterable[WordNode],
         annotation: Optional[Iterable[WordNode]],
         body: 'WordsOrStatements',
@@ -305,25 +315,21 @@ class FuncdefStatementNode(StatementNode):
         super().__init__()
         self.location = location
         self.name = name.value
+        self.type_parameters = type_parameters
         self.decorators = decorators
         self.annotation = annotation
         self.body = body
+        self.stack_effect = stack_effect
         self.children = [
+            *self.type_parameters,
             *self.decorators,
             *(self.annotation or []),
+            self.stack_effect,
             *self.body,
         ]
-        self.stack_effect = stack_effect
 
     def __repr__(self) -> str:
-        return 'FuncdefStatementNode(decorators={!r}, name={!r}, annotation={!r}, body={!r}, stack_effect={!r}, location={!r})'.format(
-            self.decorators,
-            self.name,
-            self.annotation,
-            self.body,
-            self.stack_effect,
-            self.location,
-        )
+        return f'FuncdefStatementNode(decorators={self.decorators!r}, name={self.name!r}, type_parameters={self.type_parameters!r}, annotation={self.annotation!r}, body={self.body!r}, stack_effect={self.stack_effect!r}, location={self.location!r})'
 
 
 class FromImportStatementNode(ImportStatementNode):
@@ -352,6 +358,8 @@ class ClassdefStatementNode(StatementNode):
         decorators: Optional['Words'] = None,
         bases: Iterable['Words'] = (),
         keyword_args: Iterable[Tuple[str, WordNode]] = (),
+        type_parameters: Iterable[Node] = (),
+        is_variadic: bool = False,
     ):
         super().__init__()
         self.location = location
@@ -360,6 +368,18 @@ class ClassdefStatementNode(StatementNode):
         self.decorators = [] if decorators is None else decorators
         self.bases = bases
         self.keyword_args = keyword_args
+        self.type_parameters = type_parameters
+        self.is_variadic = is_variadic
+
+
+class PragmaNode(Node):
+    def __init__(
+        self, location: 'Location', pragma_name: str, args: Sequence[str]
+    ) -> None:
+        super().__init__()
+        self.location = location
+        self.pragma = pragma_name
+        self.args = args
 
 
 def token(typ: str) -> concat.parser_combinators.Parser:
@@ -382,9 +402,7 @@ def extension(parsers: ParserDict) -> None:
         newline = token('NEWLINE')
         statement = parsers['statement']
         word = parsers['word']
-        children = yield recover(
-            (word | statement | newline).many(), skip_until(token('ENDMARKER'))
-        ).map(lambda w: [ParseError(w[1])] if isinstance(w, tuple) else w)
+        children = yield (word | statement | newline).commit().many()
         children = [
             child
             for child in children
@@ -405,10 +423,6 @@ def extension(parsers: ParserDict) -> None:
     # The specific statement node is returned.
     # statement = import statement ;
     parsers['statement'] = parsers.ref_parser('import-statement')
-
-    ImportStatementParserGenerator = Generator[
-        concat.parser_combinators.Parser, Any, ImportStatementNode
-    ]
 
     # This parses one of many types of word.
     # The specific word node is returned.
@@ -434,10 +448,10 @@ def extension(parsers: ParserDict) -> None:
 
     @concat.parser_combinators.generate
     def quote_word_contents() -> Generator:
-        if 'type-sequence' in parsers:
-            input_stack_type_parser = parsers['type-sequence'] << token(
-                'COLON'
-            )
+        if 'stack-effect-type-sequence' in parsers:
+            input_stack_type_parser = parsers[
+                'stack-effect-type-sequence'
+            ] << token('COLON')
             input_stack_type = yield input_stack_type_parser.optional()
         else:
             input_stack_type = None
@@ -554,25 +568,48 @@ def extension(parsers: ParserDict) -> None:
     )
 
     # This parses a function definition.
-    # funcdef statement = DEF, NAME, stack effect, decorator*,
+    # funcdef statement = DEF, NAME, [ type parameters ], stack effect, decorator*,
     #   [ annotation ], COLON, suite ;
     # decorator = AT, word ;
     # annotation = RARROW, word* ;
     # suite = NEWLINE, INDENT, (word | statement, NEWLINE)+, DEDENT | statement
     #    | word+ ;
+    # type parameters = "[", [ type parameter ],
+    #   (",", type parameter)*, [ "," ], "]" ;
+    # type parameter = NAME, COLON, type ;
     # The stack effect syntax is defined within the typecheck module.
     @concat.parser_combinators.generate
     def funcdef_statement_parser() -> Generator:
         location = (yield token('DEF')).start
         name = yield token('NAME')
+        type_params = (yield type_parameters.optional()) or []
         effect_ast = yield parsers['stack-effect-type']
         decorators = yield decorator.many()
         annotation = yield annotation_parser.optional()
         yield token('COLON')
         body = yield suite
         return FuncdefStatementNode(
-            name, decorators, annotation, body, location, effect_ast
+            name,
+            type_params,
+            decorators,
+            annotation,
+            body,
+            location,
+            effect_ast,
         )
+
+    @concat.parser_combinators.generate
+    def type_parameter() -> Generator:
+        name = yield token('NAME')
+        yield token('COLON')
+        ty = yield parsers['type']
+        return (name, ty)
+
+    type_parameters = bracketed(
+        token('LSQB'),
+        type_parameter.sep_by(token('COMMA')) << token('COMMA').optional(),
+        token('RQSB'),
+    ).map(handle_recovery)
 
     parsers['funcdef-statement'] = funcdef_statement_parser.desc(
         'funcdef statement'
@@ -592,7 +629,7 @@ def extension(parsers: ParserDict) -> None:
         statement = concat.parser_combinators.seq(parsers['statement'])
         block_content = (
             parsers['word'] << token('NEWLINE').optional()
-            | parsers['statement'] << token('NEWLINE')
+            | parsers['statement'] << token('NEWLINE').optional()
         ).at_least(1)
         indented_block = token('NEWLINE').optional() >> bracketed(
             token('INDENT'), block_content, token('DEDENT')
@@ -654,15 +691,47 @@ def extension(parsers: ParserDict) -> None:
 
     parsers['import-statement'] |= from_import_star_statement_parser
 
-    # This parses a class definition statement.
-    # classdef statement = CLASS, NAME, decorator*, [ bases ], keyword arg*,
-    #   COLON, suite ;
-    # bases = tuple word ;
-    # keyword arg = NAME, EQUAL, word ;
     @concat.parser_combinators.generate('classdef statement')
     def classdef_statement_parser():
+        """This parses a class definition statement.
+
+        classdef statement = CLASS, NAME,
+            [ LSQB, ((type variable, (COMMA, type variable)*, [ COMMA ]) | (type variable, NAME=...)), RSQB) ],
+            decorator*, [ bases ], keyword arg*,
+            COLON, suite ;
+        bases = tuple word ;
+        keyword arg = NAME, EQUAL, word ;"""
         location = (yield token('CLASS')).start
         name_token = yield token('NAME')
+        is_variadic = False
+
+        def ellispis_verify(
+            tok: concat.lex.Token,
+        ) -> concat.parser_combinators.Parser[concat.lex.Token, Any]:
+            nonlocal is_variadic
+
+            if tok.value == '...':
+                is_variadic = True
+                return concat.parser_combinators.success(None)
+            return concat.parser_combinators.fail('a literal ellispis (...)')
+
+        ellispis_parser = token('NAME').bind(ellispis_verify)
+        type_parameters = (
+            yield bracketed(
+                token('LSQB'),
+                (
+                    concat.parser_combinators.seq(parsers['type-variable'])
+                    << ellispis_parser
+                )
+                | (
+                    parsers['type-variable'].sep_by(token('COMMA'))
+                    << token('COMMA').optional()
+                ),
+                token('RSQB'),
+            )
+            .map(handle_recovery)
+            .optional()
+        )
         decorators = yield decorator.many()
         bases_list = yield bases.optional()
         keyword_args = yield keyword_arg.map(tuple).many()
@@ -675,6 +744,8 @@ def extension(parsers: ParserDict) -> None:
             decorators,
             bases_list,
             keyword_args,
+            type_parameters=type_parameters or [],
+            is_variadic=is_variadic,
         )
 
     parsers['classdef-statement'] = classdef_statement_parser
@@ -687,6 +758,24 @@ def extension(parsers: ParserDict) -> None:
         token('NAME').map(operator.attrgetter('value')) << token('EQUAL'),
         parsers.ref_parser('word'),
     )
+
+    @concat.parser_combinators.generate('internal pragma')
+    def pragma_parser() -> Generator:
+        """This parses a pragma for internal use.
+
+        pragma = EXCLAMATIONMARK, @, @, qualified name+
+        qualified name = module"""
+        location = (yield token('EXCLAMATIONMARK')).start
+        for _ in range(2):
+            name_token = yield token('NAME')
+            if name_token.value != '@':
+                return concat.parser_combinators.fail('a literal at sign (@)')
+        pragma_name = yield module
+        args = yield module.many()
+        return PragmaNode(location, pragma_name, args)
+
+    parsers['pragma'] = pragma_parser
+    parsers['statement'] |= parsers.ref_parser('pragma')
 
     parsers['word'] |= parsers.ref_parser('cast-word')
 
@@ -729,3 +818,17 @@ def extension(parsers: ParserDict) -> None:
     # parsers['word'] |= parsers['freeze-word'].should_fail(
     #     'not a freeze word, which has polymorphic type'
     # )
+
+
+def handle_recovery(
+    x: Union[
+        Sequence[Node], Tuple[Any, concat.parser_combinators.Result[Any]],
+    ]
+) -> Sequence[Node]:
+    if (
+        isinstance(x, tuple)
+        and len(x) > 1
+        and isinstance(x[1], concat.parser_combinators.Result)
+    ):
+        return [ParseError(x[1])]
+    return x

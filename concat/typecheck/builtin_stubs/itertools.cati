@@ -1,0 +1,6 @@
+def islice(--) @cast (py_overloaded[
+  py_function[(iterable[`t] Optional[int]), iterator[`t]],
+  py_function[(iterable[`t] Optional[int] Optional[int]), iterator[`t]],
+  py_function[(iterable[`t] Optional[int] Optional[int] Optional[int]), iterator[`t]]  # TODO: allow trailing commas
+]):
+  ()

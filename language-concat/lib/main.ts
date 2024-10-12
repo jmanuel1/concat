@@ -32,4 +32,8 @@ module.exports = {
   consumeLinterV2: concatLanguageClient.consumeLinterV2.bind(
     concatLanguageClient
   ),
+
+  consumeDatatip: concatLanguageClient.consumeDatatip.bind(
+    concatLanguageClient
+  ),
 };
