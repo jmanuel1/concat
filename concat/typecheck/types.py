@@ -597,15 +597,19 @@ class GenericType(Type):
 class TypeSequence(Type, Iterable[Type]):
     def __init__(self, sequence: Sequence[Type]) -> None:
         super().__init__()
-        self._rest: Optional[SequenceVariable]
-        if sequence and isinstance(sequence[0], SequenceVariable):
+        self._rest: Optional[Variable]
+        if (
+            sequence
+            and sequence[0].kind is SequenceKind
+            and isinstance(sequence[0], Variable)
+        ):
             self._rest = sequence[0]
             self._individual_types = sequence[1:]
         else:
             self._rest = None
             self._individual_types = sequence
         for ty in self._individual_types:
-            if ty.kind == SequenceKind:
+            if ty.kind is SequenceKind:
                 raise ConcatTypeError(f'{ty} cannot be a sequence type')
 
     def as_sequence(self) -> Sequence[Type]:

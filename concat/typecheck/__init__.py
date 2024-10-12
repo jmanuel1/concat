@@ -479,7 +479,7 @@ def infer(
                 if node.asname is not None:
                     gamma[node.asname] = current_subs(
                         _generate_type_of_innermost_module(
-                            node.value
+                            node.value, source_dir=pathlib.Path(source_dir)
                         ).generalized_wrt(current_subs(gamma))
                     )
                 else:
@@ -490,7 +490,7 @@ def infer(
                     # should implement namespaces properly.
                     gamma[components[0]] = current_subs(
                         _generate_module_type(
-                            components, source_dir=source_dir
+                            components, source_dir=pathlib.Path(source_dir)
                         )
                     )
             elif isinstance(node, concat.parse.FuncdefStatementNode):
@@ -709,14 +709,20 @@ def infer(
     return current_subs, current_effect, gamma
 
 
-def _find_stub_path(module_parts: Sequence[str]) -> pathlib.Path:
-    module_spec = None
-    path = None
+def _find_stub_path(
+    module_parts: Sequence[str], source_dir: pathlib.Path
+) -> pathlib.Path:
     if module_parts[0] in sys.builtin_module_names:
         stub_path = pathlib.Path(__file__) / '../builtin_stubs'
         for part in module_parts:
             stub_path = stub_path / part
     else:
+        module_spec = None
+        path: Optional[List[str]]
+        if source_dir is not None:
+            path = [str(source_dir)] + sys.path
+        else:
+            path = sys.path
         for module_prefix in itertools.accumulate(
             module_parts, lambda a, b: f'{a}.{b}'
         ):
@@ -725,7 +731,10 @@ def _find_stub_path(module_parts: Sequence[str]) -> pathlib.Path:
                 if module_spec is not None:
                     path = module_spec.submodule_search_locations
                     break
-        assert module_spec is not None
+        if module_spec is None:
+            raise TypeError(
+                f'Cannot find module {".".join(module_parts)} from source dir {source_dir}'
+            )
         module_path = module_spec.origin
         if module_path is None:
             raise TypeError(
@@ -1334,8 +1343,10 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
 _seq_var = SequenceVariable()
 
 
-def _generate_type_of_innermost_module(qualified_name: str,) -> StackEffect:
-    stub_path = _find_stub_path(str.split('.'))
+def _generate_type_of_innermost_module(
+    qualified_name: str, source_dir: pathlib.Path
+) -> StackEffect:
+    stub_path = _find_stub_path(qualified_name.split('.'), source_dir)
     init_env = load_builtins_and_preamble()
     module_attributes = _check_stub(stub_path, init_env)
     module_type_brand = get_module_type().unroll().brand  # type: ignore
@@ -1350,7 +1361,7 @@ def _generate_type_of_innermost_module(qualified_name: str,) -> StackEffect:
 
 def _generate_module_type(
     components: Sequence[str], _full_name: Optional[str] = None, source_dir='.'
-) -> ObjectType:
+) -> 'Type':
     if _full_name is None:
         _full_name = '.'.join(components)
     if len(components) > 1:
@@ -1371,12 +1382,12 @@ def _generate_module_type(
         effect = StackEffect(
             TypeSequence([_seq_var]), TypeSequence([_seq_var, module_t])
         )
-        return GenericType([_seq_var], ObjectType({'__call__': effect,}))
+        return GenericType([_seq_var], effect)
     else:
-        innermost_type = _generate_type_of_innermost_module(_full_name,)
-        return GenericType(
-            [_seq_var], ObjectType({'__call__': innermost_type,})
+        innermost_type = _generate_type_of_innermost_module(
+            _full_name, source_dir=pathlib.Path(source_dir)
         )
+        return GenericType([_seq_var], innermost_type)
 
 
 def _ensure_type(
