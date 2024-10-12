@@ -30,7 +30,7 @@ jobs:
         pip install -e .[test]
     - name: Test
       run: |
-        nose2 --pretty-assert concat.tests
+        coverage run -m nose2 --pretty-assert concat.tests
     - name: Collect coverage into one file
       run: |
         coverage combine
