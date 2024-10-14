@@ -10,7 +10,7 @@ Examples are in the examples directory. To see the (out of date and incomplete)
 spec, go to
 [http://jmanuel1.github.io/concat-spec/](http://jmanuel1.github.io/concat-spec/).
 
-Python 3.7 required.
+Python 3.12 required.
 
 Development
 -----------
@@ -43,8 +43,8 @@ though `pywinpty` claims to require `x86_64-pc-windows-msvc` to build from
 source. Then set the environment variable `CARGO_BUILD_TARGET` to
 `i686-pc-windows-msvc` and try to install `pywinpty` again.
 
-Run the tests and get coverage info using `tox run`. (Make sure you've installed
-the development dependencies first.)
+Run the tests and get coverage info using `coverage run -m nose2 --pretty-assert
+concat.tests`. (Make sure you've installed the development dependencies first.)
 
 **Nota Bene**: If you have `concat` installed globally, make sure to create and
 enter a `virtualenv` before testing, so you don't end up running the installed
