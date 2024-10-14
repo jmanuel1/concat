@@ -32,17 +32,21 @@ jobs:
       run: |
         coverage run -m nose2 --pretty-assert concat.tests
     - name: Collect coverage into one file
+      # https://stackoverflow.com/a/58859404
+      if: always()
       run: |
         coverage combine
         coverage xml
         coverage lcov
     - name: Report test coverage to DeepSource
+      if: always()
       uses: deepsourcelabs/test-coverage-action@master
       with:
         key: python
         coverage-file: coverage.xml
         dsn: ${{ secrets.DEEPSOURCE_DSN }}
     - name: Coveralls
+      if: always()
       uses: coverallsapp/github-action@master
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
