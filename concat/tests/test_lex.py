@@ -1,8 +1,6 @@
 import concat.lex as lex
-from concat.lex import TokenTuple
 from concat.tests.small_example_programs import examples
 import unittest
-from typing import Tuple, Dict, Sequence
 
 
 class TestSmallExamples(unittest.TestCase):
