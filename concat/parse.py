@@ -58,8 +58,6 @@ class Node(abc.ABC):
         self.location = location
         self.end_location = end_location
         self.children = list(children)
-        assert location[0] <= end_location[0]
-        assert location[0] != end_location[0] or location[1] <= end_location[1]
 
     def assert_no_parse_errors(self) -> None:
         failures = list(self.parsing_failures)
@@ -215,7 +213,9 @@ class NameWordNode(WordNode):
 
 
 class AttributeWordNode(WordNode):
-    def __init__(self, location: Location, attribute: 'concat.lex.Token'):
+    def __init__(
+        self, location: concat.astutils.Location, attribute: 'concat.lex.Token'
+    ):
         super().__init__(location, attribute.end, [])
         self.value = attribute.value
         self._name_token = attribute

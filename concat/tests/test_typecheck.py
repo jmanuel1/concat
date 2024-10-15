@@ -257,7 +257,7 @@ class TestNamedTypeNode(unittest.TestCase):
         )
 
     def test_builtin_name_does_not_exist_in_empty_environment(self) -> None:
-        named_type_node = concat.typecheck.NamedTypeNode((0, 0), 'int')
+        named_type_node = concat.typecheck.NamedTypeNode((0, 0), (0, 0), 'int')
         self.assertRaises(
             concat.typecheck.NameError,
             named_type_node.to_type,
@@ -269,7 +269,7 @@ class TestNamedTypeNode(unittest.TestCase):
         from_type(concat.typecheck.IndividualType),
     )
     @example(
-        named_type_node=concat.typecheck.NamedTypeNode((0, 0), ''),
+        named_type_node=concat.typecheck.NamedTypeNode((0, 0), (0, 0), ''),
         type=ItemVariable(IndividualKind),
     )
     def test_name_does_exist(self, named_type_node, type) -> None:
