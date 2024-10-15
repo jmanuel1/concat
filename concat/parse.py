@@ -58,6 +58,8 @@ class Node(abc.ABC):
         self.location = location
         self.end_location = end_location
         self.children = list(children)
+        assert location[0] <= end_location[0]
+        assert location[0] != end_location[0] or location[1] <= end_location[1]
 
     def assert_no_parse_errors(self) -> None:
         failures = list(self.parsing_failures)
@@ -219,7 +221,7 @@ class AttributeWordNode(WordNode):
         self._name_token = attribute
 
     def __repr__(self) -> str:
-        return f'AttributeWordNode({self._name_token!r})'
+        return f'AttributeWordNode({self.location!r}, {self._name_token!r})'
 
 
 T = TypeVar('T')
@@ -262,10 +264,10 @@ class IterableWordNode(WordNode, abc.ABC):
         location: 'Location',
         end_location: 'Location',
     ):
-        children = []
+        flattened_children = []
         for children in element_words:
-            children += list(children)
-        super().__init__(location, end_location, children)
+            flattened_children += list(children)
+        super().__init__(location, end_location, flattened_children)
         self.element_words = list(element_words)
 
     def __repr__(self) -> str:
@@ -306,7 +308,7 @@ class FuncdefStatementNode(StatementNode):
         stack_effect: 'StackEffectTypeNode',
     ):
         children = [
-            *type_parameters,
+            *map(lambda p: p[1], type_parameters),
             *decorators,
             *(annotation or []),
             stack_effect,
@@ -330,16 +332,19 @@ class FromImportStatementNode(ImportStatementNode):
         self,
         relative_module: str,
         imported_name: str,
+        location: 'Location',
+        end_location: Location,
         asname: Optional[str] = None,
-        location: 'Location' = (0, 0),
     ):
-        super().__init__(relative_module, asname, location)
+        super().__init__(relative_module, location, end_location, asname)
         self.imported_name = imported_name
 
 
 class FromImportStarStatementNode(FromImportStatementNode):
-    def __init__(self, module: str, location: 'Location' = (0, 0)):
-        super().__init__(module, '*', None, location)
+    def __init__(
+        self, module: str, location: 'Location', end_location: Location
+    ):
+        super().__init__(module, '*', location, end_location, None)
 
 
 class ClassdefStatementNode(StatementNode):
@@ -358,6 +363,7 @@ class ClassdefStatementNode(StatementNode):
         children.extend(type_parameters)
         children.extend(map(lambda x: x[1], keyword_args))
         children.extend(decorators)
+        children.extend(body)
         super().__init__(location, body[-1].end_location, children)
         self.class_name = name
         self.decorators = [] if decorators is None else decorators
@@ -365,14 +371,18 @@ class ClassdefStatementNode(StatementNode):
         self.keyword_args = keyword_args
         self.type_parameters = type_parameters
         self.is_variadic = is_variadic
+        self.body = body
 
 
 class PragmaNode(Node):
     def __init__(
-        self, location: 'Location', pragma_name: str, args: Sequence[str]
+        self,
+        location: 'Location',
+        end_location: Location,
+        pragma_name: str,
+        args: Sequence[str],
     ) -> None:
-        super().__init__()
-        self.location = location
+        super().__init__(location, end_location, [])
         self.pragma = pragma_name
         self.args = args
 
@@ -469,8 +479,8 @@ def extension(parsers: ParserDict) -> None:
         else:
             input_stack_type = children['input-stack-type']
             children = children['children']
-        yield token('RPAR')
-        return QuoteWordNode(children, lpar.start, input_stack_type)
+        rpar = yield token('RPAR')
+        return QuoteWordNode(children, lpar.start, rpar.end, input_stack_type)
 
     parsers['quote-word'] = quote_word_parser
 
@@ -489,7 +499,9 @@ def extension(parsers: ParserDict) -> None:
     # attribute word = DOT, NAME ;
     dot = token('DOT')
     name = token('NAME')
-    parsers['attribute-word'] = dot >> name.map(AttributeWordNode)
+    parsers['attribute-word'] = concat.parser_combinators.seq(dot, name).map(
+        lambda xs: AttributeWordNode(xs[0].start, xs[1])
+    )
 
     parsers['literal-word'] |= concat.parser_combinators.alt(
         parsers.ref_parser('bytes-word'),
@@ -672,7 +684,10 @@ def extension(parsers: ParserDict) -> None:
         asname = None
         if (yield token('AS').optional()):
             asname = yield name_parser
-        return FromImportStatementNode(module, imported_name, asname, location)
+        end_location = (yield concat.parser_combinators.peek_prev).end
+        return FromImportStatementNode(
+            module, imported_name, location, end_location, asname
+        )
 
     parsers['import-statement'] |= from_import_statement_parser
 
@@ -681,8 +696,8 @@ def extension(parsers: ParserDict) -> None:
         location = (yield token('FROM')).start
         module_name = yield module
         yield token('IMPORT')
-        yield token('STAR')
-        return FromImportStarStatementNode(module_name, location)
+        end_location = (yield token('STAR')).end
+        return FromImportStarStatementNode(module_name, location, end_location)
 
     parsers['import-statement'] |= from_import_star_statement_parser
 
@@ -767,7 +782,8 @@ def extension(parsers: ParserDict) -> None:
                 return concat.parser_combinators.fail('a literal at sign (@)')
         pragma_name = yield module
         args = yield module.many()
-        return PragmaNode(location, pragma_name, args)
+        end_location = (yield concat.parser_combinators.peek_prev).end
+        return PragmaNode(location, end_location, pragma_name, args)
 
     parsers['pragma'] = pragma_parser
     parsers['statement'] |= parsers.ref_parser('pragma')

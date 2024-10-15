@@ -40,10 +40,22 @@ def are_on_same_line_and_offset_by(
 # Python AST Manipulation utilities
 
 
+# TODO: exposing names from modules
+def python_safe_name(id: str, ctx: ast.expr_context) -> ast.Name:
+    """Python 3.8+ disallows None, True, and False as names in compiled code."""
+
+    return ast.Name(python_safe_name_mangle(id), ctx)
+
+
+def python_safe_name_mangle(id: str) -> str:
+    if id in ['True', 'False', 'None']:
+        return f'@@concat_python_safe_rename_{id}'
+    return id
+
+
 def pop_stack(index: int = -1) -> ast.Call:
-    load = ast.Load()
-    stack = ast.Name(id='stack', ctx=load)
-    pop = ast.Attribute(value=stack, attr='pop', ctx=load)
+    stack = ast.Name(id='stack', ctx=ast.Load())
+    pop = ast.Attribute(value=stack, attr='pop', ctx=ast.Load())
     pop_call = ast.Call(func=pop, args=[ast.Num(index)], keywords=[])
     return pop_call
 
@@ -59,10 +71,9 @@ def to_transpiled_quotation(
 
 
 def pack_expressions(expressions: Iterable[ast.expr]) -> ast.Subscript:
-    load = ast.Load()
-    subtuple = ast.Tuple(elts=[*expressions], ctx=load)
+    subtuple = ast.Tuple(elts=[*expressions], ctx=ast.Load())
     index = ast.Constant(-1)
-    last = ast.Subscript(value=subtuple, slice=index, ctx=load)
+    last = ast.Subscript(value=subtuple, slice=index, ctx=ast.Load())
     return last
 
 
@@ -147,9 +158,8 @@ def flatten(list: List[Union['concat.parse.WordNode', Words]]) -> Words:
 
 
 def call_concat_function(func: ast.expr) -> ast.Call:
-    load = ast.Load()
-    stack = ast.Name(id='stack', ctx=load)
-    stash = ast.Name(id='stash', ctx=load)
+    stack = ast.Name(id='stack', ctx=ast.Load())
+    stash = ast.Name(id='stash', ctx=ast.Load())
     call_node = ast.Call(func=func, args=[stack, stash], keywords=[])
     return call_node
 
@@ -165,6 +175,7 @@ def abstract(func: ast.expr) -> ast.Lambda:
         defaults=[],
     )
     py_node = ast.Lambda(args, func)
+    ast.copy_location(py_node, func)
     return py_node
 
 
@@ -237,6 +248,8 @@ def dump_locations(node: ast.AST) -> str:
     if hasattr(node, 'end_col_offset'):
         string += ' end_col_offset=' + str(node.end_col_offset)
     for field in node._fields:
+        if not hasattr(node, field):
+            continue
         possible_child = getattr(node, field)
         if isinstance(possible_child, ast.AST):
             string += '\n ' + field + ':'

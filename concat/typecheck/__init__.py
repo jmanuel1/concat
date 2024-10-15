@@ -674,7 +674,7 @@ def infer(
                 temp_gamma[node.class_name] = self_type
                 _, _, body_attrs = infer(
                     temp_gamma,
-                    node.children,
+                    node.body,
                     extensions=extensions,
                     source_dir=source_dir,
                     initial_stack=TypeSequence([]),
@@ -1048,7 +1048,7 @@ class _ItemVariableNode(TypeNode):
     """The AST type for item type variables."""
 
     def __init__(self, name: Token) -> None:
-        super().__init__(name.start)
+        super().__init__(name.start, name.end, [])
         self._name = name.value
         self.children = []
 
@@ -1119,10 +1119,10 @@ class _ForallTypeNode(TypeNode):
         ],
         ty: TypeNode,
     ) -> None:
-        super().__init__(location)
+        children = list(type_variables) + [ty]
+        super().__init__(location, ty.end_location, children)
         self._type_variables = type_variables
         self._type = ty
-        self.children = list(type_variables) + [ty]
 
     def to_type(self, env: Environment) -> Tuple['Type', Environment]:
         temp_env = env.copy()
