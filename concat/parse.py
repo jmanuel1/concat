@@ -665,7 +665,8 @@ def extension(parsers: ParserDict) -> None:
         asname = None
         if (yield token('AS').optional()):
             asname = yield asname_parser
-        return ImportStatementNode(module_name, asname, location)
+        end_location = (yield concat.parser_combinators.peek_prev).end
+        return ImportStatementNode(module_name, location, end_location, asname)
 
     parsers['import-statement'] = import_statement_parser
 
