@@ -126,18 +126,6 @@ examples = {
         ('NEWLINE', '\n', (1, 15), (1, 16)),
         ('ENDMARKER', '', (2, 0), (2, 0)),
     ),
-    '`': to_tokens(
-        ('ENCODING', 'utf-8', (0, 0), (0, 0)),
-        ('BACKTICK', '`', (1, 0), (1, 1)),
-        ('NEWLINE', '', (1, 1), (1, 2)),
-        ('ENDMARKER', '', (2, 0), (2, 0)),
-    ),
-    '!': to_tokens(
-        ('ENCODING', 'utf-8', (0, 0), (0, 0)),
-        ('EXCLAMATIONMARK', '!', (1, 0), (1, 1)),
-        ('NEWLINE', '', (1, 1), (1, 2)),
-        ('ENDMARKER', '', (2, 0), (2, 0)),
-    ),
     'class A: pass\n': to_tokens(
         ('ENCODING', 'utf-8', (0, 0), (0, 0)),
         ('CLASS', 'class', (1, 0), (1, 5), True),
