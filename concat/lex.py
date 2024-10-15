@@ -125,13 +125,13 @@ class Lexer:
                     if tok.value == ' ':
                         self._update_position(tok)
                         continue
-                    elif tok.value == '$':
-                        tok.type = 'DOLLARSIGN'
                     elif tok.value == '!':
                         tok.type = 'EXCLAMATIONMARK'
                 elif tok.value in {'def', 'import', 'from'}:
                     tok.type = tok.value.upper()
                     tok.is_keyword = True
+                elif tok.value == '$':
+                    tok.type = 'DOLLARSIGN'
                 elif tok.type != 'NAME' and tok.value in {
                     '...',
                     '-',
