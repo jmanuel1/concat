@@ -217,7 +217,6 @@ def wrap_in_statement(statments: Iterable[ast.stmt]) -> ast.stmt:
 
 
 def clear_locations(node: ast.AST) -> None:
-    return
     if hasattr(node, 'lineno'):
         del node.lineno
     if hasattr(node, 'col_offset'):

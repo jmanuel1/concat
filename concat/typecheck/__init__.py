@@ -5,6 +5,7 @@ The type inference algorithm was originally based on the one described in
 """
 
 
+from __future__ import annotations
 from collections.abc import Generator
 from concat.typecheck.errors import (
     NameError,
@@ -840,21 +841,6 @@ class NamedTypeNode(TypeNode):
         return type, env
 
 
-class IntersectionTypeNode(IndividualTypeNode):
-    def __init__(
-        self,
-        location: concat.astutils.Location,
-        type_1: IndividualTypeNode,
-        type_2: IndividualTypeNode,
-    ):
-        super().__init__(location)
-        self.type_1 = type_1
-        self.type_2 = type_2
-
-    def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
-        raise NotImplementedError('intersection types should longer exist')
-
-
 class _GenericTypeNode(IndividualTypeNode):
     def __init__(
         self,
@@ -884,7 +870,8 @@ class _GenericTypeNode(IndividualTypeNode):
 class _TypeSequenceIndividualTypeNode(IndividualTypeNode):
     def __init__(
         self,
-        args: Sequence[Union[concat.lex.Token, IndividualTypeNode, None]],
+        args: Tuple[concat.lex.Token, Optional[TypeNode]]
+        | Tuple[Optional[concat.lex.Token], TypeNode],
     ) -> None:
         if args[0] is None:
             location = args[1].location
@@ -904,34 +891,35 @@ class _TypeSequenceIndividualTypeNode(IndividualTypeNode):
 
     # QUESTION: Should I have a separate space for the temporary associated
     # names?
-    def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
-        if self._name is None:
-            return self._type.to_type(env)
-        elif self._type is None:
-            ty = env[self._name]
-            if not isinstance(ty, IndividualType):
+    def to_type(self, env: Environment) -> Tuple[Type, Environment]:
+        if self._type is not None:
+            if self._name in env:
                 raise TypeError(
-                    f'an individual type was expected in this part of a type sequence, got {ty}'
+                    '{} is associated with a type more than once in this sequence of types'.format(
+                        self._name
+                    )
+                )
+            else:
+                type, env = self._type.to_type(env)
+                env = env.copy()
+                if self._name is not None:
+                    env[self._name] = type
+                return type, env
+        elif self._name is not None:
+            ty = env[self._name]
+            if not (ty.kind <= ItemKind):
+                raise TypeError(
+                    f'an item type was expected in this part of a type sequence, got {ty}'
                 )
             return ty, env
-        elif self._name in env:
-            raise TypeError(
-                '{} is associated with a type more than once in this sequence of types'.format(
-                    self._name
-                )
-            )
-        else:
-            type, env = self._type.to_type(env)
-            env = env.copy()
-            env[self._name] = type
-            return type, env
+        assert False, 'there must be a name or a type'
 
     @property
     def name(self) -> Optional[str]:
         return self._name
 
     @property
-    def type(self) -> Optional[IndividualTypeNode]:
+    def type(self) -> Optional[TypeNode]:
         return self._type
 
 
@@ -943,14 +931,14 @@ class TypeSequenceNode(TypeNode):
         seq_var: Optional['_SequenceVariableNode'],
         individual_type_items: Iterable[_TypeSequenceIndividualTypeNode],
     ) -> None:
-        children = [] if seq_var is None else [seq_var]
+        children: List[TypeNode] = [] if seq_var is None else [seq_var]
         children.extend(individual_type_items)
         super().__init__(location, end_location, children)
         self._sequence_variable = seq_var
         self._individual_type_items = tuple(individual_type_items)
 
     def to_type(self, env: Environment) -> Tuple[TypeSequence, Environment]:
-        sequence: List[StackItemType] = []
+        sequence: List[Type] = []
         temp_env = env.copy()
         if self._sequence_variable is None:
             # implicit stack polymorphism
@@ -1144,8 +1132,9 @@ class _ObjectTypeNode(IndividualTypeNode):
         location: concat.astutils.Location,
         end_location: concat.astutils.Location,
     ) -> None:
-        super().__init__(location)
-        self.end_location = end_location
+        super().__init__(
+            location, end_location, map(lambda p: p[1], attribute_type_pairs)
+        )
         self._attribute_type_pairs = attribute_type_pairs
 
     def to_type(self, env: Environment) -> Tuple[ObjectType, Environment]:

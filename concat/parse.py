@@ -166,7 +166,10 @@ class NumberWordNode(WordNode):
             )
 
     def __repr__(self) -> str:
-        return f'NumberWordNode(Token("NUMBER", {str(self.value)!r}, {self.location!r}, {self.end_location!r}))'
+        val = str(self.value)
+        start = self.location
+        end = self.end_location
+        return f'NumberWordNode(Token("NUMBER", {val!r}, {start!r}, {end!r}))'
 
 
 class StringWordNode(WordNode):
@@ -200,7 +203,12 @@ class QuoteWordNode(WordNode):
         return '(' + input_stack_type + ' '.join(map(str, self.children)) + ')'
 
     def __repr__(self) -> str:
-        return f'QuoteWordNode(children={self.children!r}, location={self.location!r}, end_location={self.end_location!r}, input_stack_type={self.input_stack_type!r})'
+        children = self.children
+        location = self.location
+        end_location = self.end_location
+        input_stack_type = self.input_stack_type
+        return f'QuoteWordNode({children=!r}, {location=!r}, \
+{end_location=!r}, {input_stack_type=!r})'
 
 
 class NameWordNode(WordNode):
@@ -271,7 +279,12 @@ class IterableWordNode(WordNode, abc.ABC):
         self.element_words = list(element_words)
 
     def __repr__(self) -> str:
-        return f'{type(self).__qualname__}(element_words={self.element_words!r}, location={self.location!r}, end_location={self.end_location!r})'
+        clsname = type(self).__qualname__
+        elems = self.element_words
+        start = self.location
+        end = self.end_location
+        return f'{clsname}(element_words={elems!r}, location={start!r}, \
+end_location={end!r})'
 
 
 class TupleWordNode(IterableWordNode):
