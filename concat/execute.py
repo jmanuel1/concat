@@ -1,5 +1,6 @@
 """This module takes the transpiler/compiler output and executes it."""
 import ast
+import concat.astutils
 import concat.stdlib.compositional
 import concat.stdlib.execution
 import concat.stdlib.importlib
@@ -169,9 +170,18 @@ def _do_preamble(globals: Dict[str, object], should_log_stacks=False) -> None:
     globals.setdefault('case', concat.stdlib.execution.case)
     globals.setdefault('loop', concat.stdlib.execution.loop)
 
-    globals.setdefault('True', lambda s, _: s.append(True))
-    globals.setdefault('False', lambda s, _: s.append(False))
-    globals.setdefault('None', lambda s, _: s.append(None))
+    globals.setdefault(
+        concat.astutils.python_safe_name_mangle('True'),
+        lambda s, _: s.append(True),
+    )
+    globals.setdefault(
+        concat.astutils.python_safe_name_mangle('False'),
+        lambda s, _: s.append(False),
+    )
+    globals.setdefault(
+        concat.astutils.python_safe_name_mangle('None'),
+        lambda s, _: s.append(None),
+    )
     globals.setdefault('NotImplemented', lambda s, _: s.append(NotImplemented))
     globals.setdefault('Ellipsis', lambda s, _: s.append(...))
     globals.setdefault('...', lambda s, _: s.append(...))

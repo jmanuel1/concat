@@ -440,6 +440,15 @@ def fail(expected: str) -> Parser[T, None]:
     return parser
 
 
+@Parser
+def peek_prev(stream: Sequence[T], index: int) -> Result[T]:
+    if index:
+        return Result(stream[index - 1], index, True)
+    return Result(
+        None, index, False, FailureTree('not the start of file', index, [])
+    )
+
+
 def test_item(
     func: Callable[[T], bool], description: str
 ) -> Parser[T, Optional[T]]:

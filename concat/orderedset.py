@@ -1,3 +1,4 @@
+from __future__ import annotations
 from concat.linked_list import LinkedList
 from typing import (
     AbstractSet,
@@ -10,6 +11,7 @@ from typing import (
 )
 
 _T = TypeVar('_T', covariant=True)
+_A = TypeVar('_A')
 
 
 class OrderedSet(AbstractSet[_T]):
@@ -64,11 +66,13 @@ class InsertionOrderedSet(AbstractSet[_T]):
             # elements might be an iterator that gets exhausted
             self._data = OrderedSet(self._order)
 
-    def __sub__(self, other: object) -> 'InsertionOrderedSet[_T]':
+    def __sub__(
+        self: InsertionOrderedSet[_A], other: object
+    ) -> 'InsertionOrderedSet[_A]':
         if not isinstance(other, AbstractSet):
             return NotImplemented
         data = self._data - other
-        new_set = InsertionOrderedSet[_T](
+        new_set = InsertionOrderedSet[_A](
             data, self._order.filter(lambda x: x not in other)
         )
         return new_set
@@ -95,10 +99,10 @@ class InsertionOrderedSet(AbstractSet[_T]):
         return len(self._data)
 
 
-def filter_duplicates(xs: LinkedList[_T]) -> LinkedList[_T]:
+def filter_duplicates(xs: LinkedList[_A]) -> LinkedList[_A]:
     found = set()
 
-    def predicate(x: _T) -> bool:
+    def predicate(x: _A) -> bool:
         nonlocal found
         if x in found:
             return False

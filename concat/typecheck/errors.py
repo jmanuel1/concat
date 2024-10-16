@@ -77,3 +77,13 @@ class StackMismatchError(TypeError):
 
 class UnhandledNodeTypeError(builtins.NotImplementedError):
     pass
+
+
+def format_item_type_expected_in_type_sequence_error(ty: object) -> str:
+    return f'an item type was expected in this part of a type sequence, got \
+{ty}'
+
+
+def format_name_reassigned_in_type_sequence_error(name: str) -> str:
+    return f'{name} is associated with a type more than once in this sequence \
+of types'

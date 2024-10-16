@@ -20,7 +20,7 @@ class TestImports(TestCase):
         ).resolve()
         env = infer(
             Environment(),
-            [ImportStatementNode('imported_module')],
+            [ImportStatementNode('imported_module', (0, 0), (0, 0))],
             is_top_level=True,
             source_dir=test_module_path,
         )[2]

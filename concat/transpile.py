@@ -79,15 +79,16 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
             concat.astutils.statementfy(cast(Union[ast.stmt, ast.expr], child))
             for child in body
         ]
-        module = ast.Module(body=statements)
+        module = ast.Module(body=statements, type_ignores=[])
+        concat.astutils.copy_location(module, node)
         ast.fix_missing_locations(module)
         # debugging output
         try:
             with open('debug.py', 'w') as f:
-                f.write(astunparse.unparse(module))
+                f.write(ast.unparse(module))
             with open('ast.out', 'w') as f:
                 f.write('------------ AST DUMP ------------\n')
-                f.write(astunparse.dump(module))
+                f.write(ast.dump(module, include_attributes=True, indent='\t'))
         except UnicodeEncodeError:
             pass
         return module
@@ -102,7 +103,8 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         node: concat.parse.ParseError,
     ) -> ast.Module:
         statements = [visitors['parse-error-statement'].visit(node)]
-        module = ast.Module(body=statements)
+        module = ast.Module(body=statements, type_ignores=[])
+        concat.astutils.copy_location(module, node)
         ast.fix_missing_locations(module)
         return module
 
@@ -113,9 +115,11 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
     def parse_error_statement_visitor(
         node: concat.parse.ParseError,
     ) -> ast.stmt:
-        return concat.astutils.statementfy(
+        py_node = concat.astutils.statementfy(
             cast(ast.expr, visitors['parse-error-word'].visit(node))
         )
+        concat.astutils.copy_location(py_node, node)
+        return py_node
 
     # Converts an ImportStatementNode to a Python import statement node
 
@@ -126,7 +130,9 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         import_node = ast.Import([ast.alias(node.value, None)])
         # reassign the import to a module type that is self-pushing
         class_store = ast.Attribute(
-            value=ast.Name(id=node.value, ctx=ast.Load()),
+            value=concat.astutils.python_safe_name(
+                id=node.value, ctx=ast.Load()
+            ),
             attr='__class__',
             ctx=ast.Store(),
         )
@@ -134,10 +140,13 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
             ast.Expression,
             ast.parse('concat.stdlib.importlib.Module', mode='eval'),
         ).body
+        concat.astutils.clear_locations(module_type)
         assign = ast.Assign(targets=[class_store], value=module_type)
         import_node.lineno, import_node.col_offset = node.location
         assign.lineno, assign.col_offset = node.location
-        return concat.astutils.wrap_in_statement([import_node, assign])
+        py_node = concat.astutils.wrap_in_statement([import_node, assign])
+        concat.astutils.copy_location(py_node, node)
+        return py_node
 
     @assert_annotated_type
     def import_statement_visitor(
@@ -150,6 +159,7 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         if_statement.body[
             1:
         ] = assign_self_pushing_module_type_to_all_components(qualified_name)
+        concat.astutils.copy_location(if_statement, node)
         return if_statement
 
     @assert_annotated_type
@@ -162,6 +172,7 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         level = count_leading_dots(node.value)
         from_import = ast.ImportFrom(module, names, level)
         if_statement.body = [from_import]
+        concat.astutils.copy_location(if_statement, node)
         return if_statement
 
     visitors['import-statement'] = alt(
@@ -173,8 +184,11 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
     @visitors.add_alternative_to('word', 'parse-error-word')
     @assert_annotated_type
     def parse_error_word_visitor(node: concat.parse.ParseError) -> ast.expr:
-        hole = ast.Name(id='@@concat_parse_error_hole', ctx=ast.Load())
+        hole = concat.astutils.python_safe_name(
+            id='@@concat_parse_error_hole', ctx=ast.Load()
+        )
         hole.lineno, hole.col_offset = node.location
+        concat.astutils.copy_location(hole, node)
         return hole
 
     @visitors.add_alternative_to('word', 'quote-word')
@@ -189,8 +203,9 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
             ast.Expression,
             ast.parse(visitors.data['quote-constructor-string'], mode='eval'),
         ).body
+        concat.astutils.clear_locations(quote_constructor)
         py_node = ast.Call(func=quote_constructor, args=[lst], keywords=[])
-        py_node.lineno, py_node.col_offset = node.location
+        concat.astutils.copy_location(py_node, node)
         return py_node
 
     visitors.data['quote-constructor-string'] = 'concat.stdlib.types.Quotation'
@@ -200,9 +215,10 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         node: concat.parse.AttributeWordNode,
     ) -> ast.expr:
         top = cast(ast.Expression, ast.parse('stack.pop()', mode='eval')).body
+        concat.astutils.clear_locations(top)
         load = ast.Load()
         attribute = ast.Attribute(value=top, attr=node.value, ctx=load)
-        attribute.lineno, attribute.col_offset = node.location
+        concat.astutils.copy_location(attribute, node)
         return attribute
 
     visitors['pushed-word-special-case'] = pushed_attribute_visitor
@@ -219,6 +235,7 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         ).visit(pushed_node)
         args = ast.arguments(
             args=[ast.arg('stack', None), ast.arg('stash', None)],
+            posonlyargs=[],
             vararg=None,
             kwonlyargs=[],
             kw_defaults=[],
@@ -228,9 +245,10 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         stack_append = cast(
             ast.Expression, ast.parse('stack.append', mode='eval')
         ).body
+        concat.astutils.clear_locations(stack_append)
         body = ast.Call(stack_append, [child], [])
         py_node = ast.Lambda(args, body)
-        py_node.lineno, py_node.col_offset = node.location
+        concat.astutils.copy_location(py_node, node)
         return py_node
 
     visitors['literal-word'] = fail
@@ -241,9 +259,11 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         """Converts a NumberWordNode to an ast.expr."""
         num = ast.Num(n=node.value)
         py_node = ast.Call(
-            func=ast.Name('push', ast.Load()), args=[num], keywords=[]
+            func=concat.astutils.python_safe_name('push', ast.Load()),
+            args=[num],
+            keywords=[],
         )
-        py_node.lineno, py_node.col_offset = node.location
+        concat.astutils.copy_location(py_node, node)
         return py_node
 
     @visitors.add_alternative_to('literal-word', 'string-word')
@@ -252,9 +272,11 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         """Converts a StringWordNode to an ast.expr."""
         string = ast.Str(s=node.value)
         py_node = ast.Call(
-            func=ast.Name('push', ast.Load()), args=[string], keywords=[]
+            func=concat.astutils.python_safe_name('push', ast.Load()),
+            args=[string],
+            keywords=[],
         )
-        py_node.lineno, py_node.col_offset = node.location
+        concat.astutils.copy_location(py_node, node)
         return py_node
 
     @visitors.add_alternative_to('word', 'attribute-word')
@@ -270,7 +292,7 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
                 pushed_attribute_visitor.visit(node)
             )
         )
-        attribute.lineno, attribute.col_offset = node.location
+        concat.astutils.copy_location(attribute, node)
         return attribute
 
     @visitors.add_alternative_to('word', 'name-word')
@@ -278,7 +300,9 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
     def name_word_visitor(node: concat.parse.NameWordNode) -> ast.Name:
         """Converts a NameWordNode to a Python expression which is the name."""
         name = node.value
-        return ast.Name(id=name, ctx=ast.Load())
+        py_node = concat.astutils.python_safe_name(id=name, ctx=ast.Load())
+        concat.astutils.copy_location(py_node, node)
+        return py_node
 
     @visitors.add_alternative_to('literal-word', 'bytes-word')
     @assert_annotated_type
@@ -286,9 +310,9 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         """Converts a BytesWordNode to the Python expression `push(b'...')`."""
         load = ast.Load()
         bytes = ast.Bytes(s=node.value)
-        push_func = ast.Name(id='push', ctx=load)
+        push_func = concat.astutils.python_safe_name(id='push', ctx=load)
         py_node = ast.Call(func=push_func, args=[bytes], keywords=[])
-        py_node.lineno, py_node.col_offset = node.location
+        concat.astutils.copy_location(py_node, node)
         return py_node
 
     def iterable_word_visitor(
@@ -300,24 +324,34 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
 
         Lambda abstraction is used so that the inside elements of the list are
         not evaluated immediately, even when the list is in a push word."""
-        load = ast.Load()
         elements = []
         for words in node.element_words:
             location = list(words)[0].location if words else node.location
-            quote = concat.parse.QuoteWordNode(list(words), location)
-            py_quote = visitors['quote-word'].visit(quote)
-            stack = ast.Name(id='stack', ctx=load)
-            stash = ast.Name(id='stash', ctx=load)
+            end_location = (
+                list(words)[-1].end_location if words else node.end_location
+            )
+            quote = concat.parse.QuoteWordNode(
+                list(words), location, end_location
+            )
+            py_quote = quote_word_visitor.visit(quote)
+            stack = concat.astutils.python_safe_name(
+                id='stack', ctx=ast.Load()
+            )
+            stash = concat.astutils.python_safe_name(
+                id='stash', ctx=ast.Load()
+            )
             quote_call = ast.Call(
                 func=py_quote, args=[stack, stash], keywords=[]
             )
-            subtuple = ast.Tuple(elts=[quote_call, pop_stack()], ctx=load)
+            subtuple = ast.Tuple(
+                elts=[quote_call, pop_stack()], ctx=ast.Load()
+            )
             index = ast.Index(value=ast.Num(n=-1))
-            last = ast.Subscript(value=subtuple, slice=index, ctx=load)
+            last = ast.Subscript(value=subtuple, slice=index, ctx=ast.Load())
             elements.append(last)
         iterable = kind(elts=elements, **kwargs)
         py_node = abstract(append_to_stack(iterable))
-        py_node.lineno, py_node.col_offset = node.location
+        concat.astutils.copy_location(py_node, node)
         return py_node
 
     @visitors.add_alternative_to('literal-word', 'tuple-word')
@@ -353,14 +387,18 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
             quote = to_transpiled_quotation(
                 [*node.annotation], node.location, visitors
             )
-            load = ast.Load()
-            stack = ast.Name(id='stack', ctx=load)
-            stash = ast.Name(id='stash', ctx=load)
+            stack = concat.astutils.python_safe_name(
+                id='stack', ctx=ast.Load()
+            )
+            stash = concat.astutils.python_safe_name(
+                id='stash', ctx=ast.Load()
+            )
             quote_call = ast.Call(func=quote, args=[stack, stash], keywords=[])
             py_annotation = quote_call
         stack_args = [ast.arg('stack', None), ast.arg('stash', None)]
         arguments = ast.arguments(
             args=stack_args,
+            posonlyargs=[],
             vararg=None,
             kwonlyargs=[],
             kwarg=None,
@@ -374,7 +412,7 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
             decorator_list=py_decorators,
             returns=py_annotation,
         )
-        py_node.lineno, py_node.col_offset = node.location
+        concat.astutils.copy_location(py_node, node)
         return py_node
 
     @visitors.add_alternative_to('statement', 'classdef-statement')
@@ -400,8 +438,12 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         py_keywords = []
         for keyword_arg in node.keyword_args:
             py_word = visitors['word'].visit(keyword_arg[1])
-            stack = ast.Name(id='stack', ctx=ast.Load())
-            stash = ast.Name(id='stash', ctx=ast.Load())
+            stack = concat.astutils.python_safe_name(
+                id='stack', ctx=ast.Load()
+            )
+            stash = concat.astutils.python_safe_name(
+                id='stash', ctx=ast.Load()
+            )
             py_word_call = ast.Call(py_word, args=[stack, stash], keywords=[])
             py_keyword_value = pack_expressions([py_word_call, pop_stack()])
             py_keyword = ast.keyword(keyword_arg[0], py_keyword_value)

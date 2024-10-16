@@ -240,7 +240,9 @@ class VisitorDict(Dict[str, Visitor[_NodeType1, _ReturnType1]]):
     @overload
     def add_alternative_to(
         self, choice_name: str, alternative_name: str
-    ) -> Callable[[Visitor[_NodeType1, _ReturnType1]], None]:
+    ) -> Callable[
+        [Visitor[_NodeType1, _ReturnType1]], Visitor[_NodeType1, _ReturnType1]
+    ]:
         ...
 
     @overload
@@ -257,14 +259,21 @@ class VisitorDict(Dict[str, Visitor[_NodeType1, _ReturnType1]]):
         choice_name: str,
         alternative_name: str,
         visitor: Optional[Visitor[_NodeType1, _ReturnType1]] = None,
-    ) -> Optional[Callable[[Visitor[_NodeType1, _ReturnType1]], None]]:
+    ) -> Optional[
+        Callable[
+            [Visitor[_NodeType1, _ReturnType1]],
+            Optional[Visitor[_NodeType1, _ReturnType1]],
+        ]
+    ]:
         self[choice_name] = Choice(
             self[choice_name], self.ref_visitor(alternative_name)
         )
 
         def partial(visitor):
             self.update({alternative_name: visitor})
+            return visitor
 
         if visitor:
-            return partial(visitor)
+            self.update({alternative_name: visitor})
+            return None
         return partial

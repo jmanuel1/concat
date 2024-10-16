@@ -125,13 +125,13 @@ class Lexer:
                     if tok.value == ' ':
                         self._update_position(tok)
                         continue
-                    elif tok.value == '$':
-                        tok.type = 'DOLLARSIGN'
                     elif tok.value == '!':
                         tok.type = 'EXCLAMATIONMARK'
                 elif tok.value in {'def', 'import', 'from'}:
                     tok.type = tok.value.upper()
                     tok.is_keyword = True
+                elif tok.value == '$':
+                    tok.type = 'DOLLARSIGN'
                 elif tok.type != 'NAME' and tok.value in {
                     '...',
                     '-',
@@ -171,14 +171,16 @@ class Lexer:
                 if tok.type == 'NAME':
                     type_map = {'as': 'AS', 'class': 'CLASS', 'cast': 'CAST'}
                     if tok.value in type_map:
-                        tok.type = type_map.get(tok.value)
+                        tok.type = type_map[tok.value]
                         tok.is_keyword = True
                 elif tok.type == 'STRING' and self.__is_bytes_literal(
                     tok.value
                 ):
                     tok.type = 'BYTES'
-                elif tok.type == 'ERRORTOKEN' and tok.value == '`':
+                elif tok.value == '`':
                     tok.type = 'BACKTICK'
+                elif tok.type == 'EXCLAMATION':
+                    tok.type = 'EXCLAMATIONMARK'
 
                 yield tok
 

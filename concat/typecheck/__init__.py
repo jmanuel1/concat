@@ -5,17 +5,20 @@ The type inference algorithm was originally based on the one described in
 """
 
 
+from __future__ import annotations
+from collections.abc import Generator
 from concat.typecheck.errors import (
     NameError,
     StaticAnalysisError,
     TypeError,
     UnhandledNodeTypeError,
+    format_item_type_expected_in_type_sequence_error,
+    format_name_reassigned_in_type_sequence_error,
 )
 from typing import (
     Any,
     Callable,
     Dict,
-    Generator,
     Iterable,
     Iterator,
     List,
@@ -169,7 +172,6 @@ from concat.typecheck.types import (
     SequenceKind,
     SequenceVariable,
     StackEffect,
-    StackItemType,
     TypeSequence,
     free_type_variables_of_mapping,
     get_int_type,
@@ -232,7 +234,7 @@ def check(
 # object to store it, or turn this algorithm into an object.
 def infer(
     gamma: Environment,
-    e: 'concat.astutils.WordsOrStatements',
+    e: Sequence[concat.parse.Node],
     extensions: Optional[Tuple[Callable]] = None,
     is_top_level=False,
     source_dir='.',
@@ -674,7 +676,7 @@ def infer(
                 temp_gamma[node.class_name] = self_type
                 _, _, body_attrs = infer(
                     temp_gamma,
-                    node.children,
+                    node.body,
                     extensions=extensions,
                     source_dir=source_dir,
                     initial_stack=TypeSequence([]),
@@ -806,31 +808,25 @@ def _check_stub(
 
 
 class TypeNode(concat.parse.Node, abc.ABC):
-    def __init__(self, location: concat.astutils.Location) -> None:
-        super().__init__()
-        self.location = location
-        self.children: Sequence[concat.parse.Node]
-
     @abc.abstractmethod
     def to_type(self, env: Environment) -> Tuple['Type', Environment]:
         pass
 
 
 class IndividualTypeNode(TypeNode, abc.ABC):
-    @abc.abstractmethod
-    def __init__(self, location: concat.astutils.Location) -> None:
-        super().__init__(location)
-
-    @abc.abstractmethod
-    def to_type(self, env: Environment) -> Tuple['Type', Environment]:
-        pass
+    pass
 
 
 # A dataclass is not used here because making this a subclass of an abstract
 # class does not work without overriding __init__ even when it's a dataclass.
 class NamedTypeNode(TypeNode):
-    def __init__(self, location: concat.astutils.Location, name: str) -> None:
-        super().__init__(location)
+    def __init__(
+        self,
+        location: concat.astutils.Location,
+        end_location: concat.astutils.Location,
+        name: str,
+    ) -> None:
+        super().__init__(location, end_location, [])
         self.name = name
         self.children = []
 
@@ -846,21 +842,6 @@ class NamedTypeNode(TypeNode):
         return type, env
 
 
-class IntersectionTypeNode(IndividualTypeNode):
-    def __init__(
-        self,
-        location: concat.astutils.Location,
-        type_1: IndividualTypeNode,
-        type_2: IndividualTypeNode,
-    ):
-        super().__init__(location)
-        self.type_1 = type_1
-        self.type_2 = type_2
-
-    def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
-        raise NotImplementedError('intersection types should longer exist')
-
-
 class _GenericTypeNode(IndividualTypeNode):
     def __init__(
         self,
@@ -869,11 +850,12 @@ class _GenericTypeNode(IndividualTypeNode):
         generic_type: IndividualTypeNode,
         type_arguments: Sequence[IndividualTypeNode],
     ) -> None:
-        super().__init__(location)
+        super().__init__(
+            location, end_location, [generic_type] + list(type_arguments)
+        )
         self._generic_type = generic_type
         self._type_arguments = type_arguments
         self.end_location = end_location
-        self.children = [generic_type] + list(type_arguments)
 
     def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
         args = []
@@ -888,65 +870,73 @@ class _GenericTypeNode(IndividualTypeNode):
 
 class _TypeSequenceIndividualTypeNode(IndividualTypeNode):
     def __init__(
-        self, args: Sequence[Union[concat.lex.Token, IndividualTypeNode]],
+        self,
+        args: Tuple[concat.lex.Token, Optional[TypeNode]]
+        | Tuple[Optional[concat.lex.Token], TypeNode],
     ) -> None:
         if args[0] is None:
             location = args[1].location
         else:
             location = args[0].start
-        super().__init__(location)
+        if args[1] is None:
+            end_location = args[0].end
+        else:
+            end_location = args[1].end_location
+        super().__init__(
+            location,
+            end_location,
+            [n for n in args if isinstance(n, concat.parse.Node)],
+        )
         self._name = None if args[0] is None else args[0].value
         self._type = args[1]
-        self.children = [n for n in args if isinstance(n, TypeNode)]
 
     # QUESTION: Should I have a separate space for the temporary associated
     # names?
-    def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
-        if self._name is None:
-            return self._type.to_type(env)
-        elif self._type is None:
-            ty = env[self._name]
-            if not isinstance(ty, IndividualType):
+    def to_type(self, env: Environment) -> Tuple[Type, Environment]:
+        if self._type is not None:
+            if self._name in env:
                 raise TypeError(
-                    f'an individual type was expected in this part of a type sequence, got {ty}'
+                    format_name_reassigned_in_type_sequence_error(self._name)
+                )
+            ty, env = self._type.to_type(env)
+            env = env.copy()
+            if self._name is not None:
+                env[self._name] = ty
+            return ty, env
+        if self._name is not None:
+            ty = env[self._name]
+            if not (ty.kind <= ItemKind):
+                raise TypeError(
+                    format_item_type_expected_in_type_sequence_error(ty)
                 )
             return ty, env
-        elif self._name in env:
-            raise TypeError(
-                '{} is associated with a type more than once in this sequence of types'.format(
-                    self._name
-                )
-            )
-        else:
-            type, env = self._type.to_type(env)
-            env = env.copy()
-            env[self._name] = type
-            return type, env
+        assert False, 'there must be a name or a type'
 
     @property
     def name(self) -> Optional[str]:
         return self._name
 
     @property
-    def type(self) -> Optional[IndividualTypeNode]:
+    def type(self) -> Optional[TypeNode]:
         return self._type
 
 
 class TypeSequenceNode(TypeNode):
     def __init__(
         self,
-        location: Optional[concat.astutils.Location],
+        location: concat.astutils.Location,
+        end_location: concat.astutils.Location,
         seq_var: Optional['_SequenceVariableNode'],
         individual_type_items: Iterable[_TypeSequenceIndividualTypeNode],
     ) -> None:
-        super().__init__(location or (-1, -1))
+        children: List[TypeNode] = [] if seq_var is None else [seq_var]
+        children.extend(individual_type_items)
+        super().__init__(location, end_location, children)
         self._sequence_variable = seq_var
         self._individual_type_items = tuple(individual_type_items)
-        self.children = [] if seq_var is None else [seq_var]
-        self.children.extend(self._individual_type_items)
 
     def to_type(self, env: Environment) -> Tuple[TypeSequence, Environment]:
-        sequence: List[StackItemType] = []
+        sequence: List[Type] = []
         temp_env = env.copy()
         if self._sequence_variable is None:
             # implicit stack polymorphism
@@ -980,12 +970,11 @@ class StackEffectTypeNode(IndividualTypeNode):
         input: TypeSequenceNode,
         output: TypeSequenceNode,
     ) -> None:
-        super().__init__(location)
+        super().__init__(location, output.end_location, [input, output])
         self.input_sequence_variable = input.sequence_variable
         self.input = [(i.name, i.type) for i in input.individual_type_items]
         self.output_sequence_variable = output.sequence_variable
         self.output = [(o.name, o.type) for o in output.individual_type_items]
-        self.children = [input, output]
 
     def __repr__(self) -> str:
         return '{}({!r}, {!r}, {!r}, {!r}, location={!r})'.format(
@@ -1045,7 +1034,7 @@ class _ItemVariableNode(TypeNode):
     """The AST type for item type variables."""
 
     def __init__(self, name: Token) -> None:
-        super().__init__(name.start)
+        super().__init__(name.start, name.end, [])
         self._name = name.value
         self.children = []
 
@@ -1076,7 +1065,7 @@ class _SequenceVariableNode(TypeNode):
     """The AST type for sequence type variables."""
 
     def __init__(self, name: Token) -> None:
-        super().__init__(name.start)
+        super().__init__(name.start, name.end, [])
         self._name = name.value
         self.children = []
 
@@ -1116,10 +1105,10 @@ class _ForallTypeNode(TypeNode):
         ],
         ty: TypeNode,
     ) -> None:
-        super().__init__(location)
+        children = list(type_variables) + [ty]
+        super().__init__(location, ty.end_location, children)
         self._type_variables = type_variables
         self._type = ty
-        self.children = list(type_variables) + [ty]
 
     def to_type(self, env: Environment) -> Tuple['Type', Environment]:
         temp_env = env.copy()
@@ -1141,8 +1130,9 @@ class _ObjectTypeNode(IndividualTypeNode):
         location: concat.astutils.Location,
         end_location: concat.astutils.Location,
     ) -> None:
-        super().__init__(location)
-        self.end_location = end_location
+        super().__init__(
+            location, end_location, map(lambda p: p[1], attribute_type_pairs)
+        )
         self._attribute_type_pairs = attribute_type_pairs
 
     def to_type(self, env: Environment) -> Tuple[ObjectType, Environment]:
@@ -1169,7 +1159,9 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
     @concat.parser_combinators.generate
     def named_type_parser() -> Generator:
         name_token = yield non_star_name_parser
-        return NamedTypeNode(name_token.start, name_token.value)
+        return NamedTypeNode(
+            name_token.start, name_token.end, name_token.value
+        )
 
     @concat.parser_combinators.generate
     def possibly_nullary_generic_type_parser() -> Generator:
@@ -1225,9 +1217,20 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         elif seq_var_parsed is not None:
             location = seq_var_parsed.location
         else:
-            location = None
+            prev_token = yield concat.parser_combinators.peek_prev.optional()
+            if prev_token:
+                location = prev_token.start
+            else:
+                location = (1, 0)
 
-        return TypeSequenceNode(location, seq_var_parsed, i)
+        if i:
+            end_location = i[-1].end_location
+        elif seq_var_parsed:
+            end_location = seq_var_parsed.end_location
+        else:
+            end_location = location
+
+        return TypeSequenceNode(location, end_location, seq_var_parsed, i)
 
     parsers['stack-effect-type-sequence'] = stack_effect_type_sequence_parser
 
@@ -1248,9 +1251,20 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         elif seq_var_parsed is not None:
             location = seq_var_parsed.location
         else:
-            location = None
+            prev_token = yield concat.parser_combinators.peek_prev.optional()
+            if prev_token:
+                location = prev_token.start
+            else:
+                location = (1, 0)
 
-        return TypeSequenceNode(location, seq_var_parsed, i)
+        if i:
+            end_location = i[-1].end_location
+        elif seq_var_parsed:
+            end_location = seq_var_parsed.end_location
+        else:
+            end_location = location
+
+        return TypeSequenceNode(location, end_location, seq_var_parsed, i)
 
     @concat.parser_combinators.generate
     def stack_effect_type_parser() -> Generator:

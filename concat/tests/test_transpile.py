@@ -50,17 +50,18 @@ class TestSubVisitors(unittest.TestCase):
         """Function definitions are transpiled to the same kind of Python statement."""
         name_token = concat.lex.Token()
         name_token.value, name_token.start = 'a', (0, 0)
+        empty = concat.parse.QuoteWordNode([], (0, 0), (0, 0))
         node = concat.parse.FuncdefStatementNode(
             name_token,
             [],
             [],
             [],
-            [],
+            [empty],
             (0, 0),
             StackEffectTypeNode(
                 (0, 0),
-                TypeSequenceNode((0, 0), None, []),
-                TypeSequenceNode((0, 0), None, []),
+                TypeSequenceNode((0, 0), (0, 0), None, []),
+                TypeSequenceNode((0, 0), (0, 0), None, []),
             ),
         )
 
@@ -73,7 +74,9 @@ class TestSubVisitors(unittest.TestCase):
 
         The as-clause will be present in the resulting Python AST."""
 
-        node = concat.parse.ImportStatementNode('a.submodule', 'b')
+        node = concat.parse.ImportStatementNode(
+            'a.submodule', (0, 0), (0, 0), 'b'
+        )
 
         for py_node in self._test_visitors(
             node, {'import-statement', 'statement'}, ast.stmt
@@ -85,7 +88,9 @@ class TestSubVisitors(unittest.TestCase):
             )
 
     def test_import_statement_visitor_with_from(self) -> None:
-        node = concat.parse.FromImportStatementNode('a.submodule', 'b')
+        node = concat.parse.FromImportStatementNode(
+            'a.submodule', 'b', (0, 0), (0, 0)
+        )
 
         for py_node in self._test_visitors(
             node, {'import-statement', 'statement'}, ast.stmt
@@ -97,7 +102,9 @@ class TestSubVisitors(unittest.TestCase):
             )
 
     def test_import_statement_visitor_with_from_and_as(self) -> None:
-        node = concat.parse.FromImportStatementNode('a.submodule', 'b', 'c')
+        node = concat.parse.FromImportStatementNode(
+            'a.submodule', 'b', (0, 0), (0, 0), 'c'
+        )
 
         for py_node in self._test_visitors(
             node, {'import-statement', 'statement'}, ast.stmt
@@ -114,7 +121,7 @@ class TestSubVisitors(unittest.TestCase):
             )
 
     def test_import_statement_visitor_with_from_and_star(self) -> None:
-        node = concat.parse.FromImportStarStatementNode('a')
+        node = concat.parse.FromImportStarStatementNode('a', (0, 0), (0, 0))
 
         for py_node in self._test_visitors(
             node, {'import-statement', 'statement'}, ast.stmt
@@ -131,7 +138,8 @@ class TestSubVisitors(unittest.TestCase):
             )
 
     def test_classdef_statement_visitor(self) -> None:
-        node = concat.parse.ClassdefStatementNode('A', [], (0, 0))
+        empty = concat.parse.QuoteWordNode([], (0, 0), (0, 0))
+        node = concat.parse.ClassdefStatementNode('A', [empty], (0, 0), [])
 
         self._test_visitors(
             node, {'classdef-statement', 'statement'}, ast.ClassDef
@@ -141,7 +149,9 @@ class TestSubVisitors(unittest.TestCase):
         name = Token()
         name.start, name.value = (0, 0), 'decorator'
         decorator = concat.parse.NameWordNode(name)
-        node = concat.parse.ClassdefStatementNode('A', [], (0, 0), [decorator])
+        node = concat.parse.ClassdefStatementNode(
+            'A', [decorator], (0, 0), [decorator]
+        )
 
         for py_node in self._test_visitors(
             node, {'classdef-statement', 'statement'}, ast.ClassDef
@@ -157,7 +167,7 @@ class TestSubVisitors(unittest.TestCase):
         name.start, name.value = (0, 0), 'base'
         base = concat.parse.NameWordNode(name)
         node = concat.parse.ClassdefStatementNode(
-            'A', [], (0, 0), [], [[base]]
+            'A', [base], (0, 0), [], [[base]]
         )
 
         for py_node in self._test_visitors(
@@ -179,7 +189,7 @@ class TestSubVisitors(unittest.TestCase):
         name.start, name.value = (0, 0), 'meta'
         word = concat.parse.NameWordNode(name)
         node = concat.parse.ClassdefStatementNode(
-            'A', [], (0, 0), [], [], [('metaclass', word)]
+            'A', [word], (0, 0), [], [], [('metaclass', word)]
         )
 
         for py_node in self._test_visitors(

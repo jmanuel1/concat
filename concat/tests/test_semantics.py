@@ -102,7 +102,7 @@ def quote_word(
     for _ in range(length):
         sub_word, stack, stash = draw(word(stack, stash))
         sub_words.append(sub_word)
-    return concat.parse.QuoteWordNode(sub_words, (0, 0)), stack, stash
+    return concat.parse.QuoteWordNode(sub_words, (0, 0), (0, 0)), stack, stash
 
 
 @composite
@@ -137,7 +137,11 @@ def attribute_word(
 
     attribute_token = Token('NAME', attribute)
 
-    return concat.parse.AttributeWordNode(attribute_token), stack, stash
+    return (
+        concat.parse.AttributeWordNode((0, 0), attribute_token),
+        stack,
+        stash,
+    )
 
 
 @composite
@@ -145,7 +149,7 @@ def push_word(
     draw, init_stack, init_stash
 ) -> ProgramFragmentAndEffect[concat.parse.PushWordNode]:
     sub_word, stack, stash = draw(word([], []))
-    push_word = concat.parse.PushWordNode(sub_word)
+    push_word = concat.parse.PushWordNode((0, 0), sub_word)
     return (
         push_word,
         *static_push(sub_word, stack, stash, init_stack, init_stash),
@@ -250,7 +254,9 @@ class TestDynamicSemantics(unittest.TestCase):
                 Token('ENCODING', '', (0, 0)),
                 [
                     NumberWordNode(Token('NUMBER', '0', (0, 0))),
-                    AttributeWordNode(Token('NAME', '__init__', (0, 0))),
+                    AttributeWordNode(
+                        (0, 0), Token('NAME', '__init__', (0, 0))
+                    ),
                 ],
             ),
             [],
