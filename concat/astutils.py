@@ -43,7 +43,6 @@ def are_on_same_line_and_offset_by(
 # TODO: exposing names from modules
 def python_safe_name(id: str, ctx: ast.expr_context) -> ast.Name:
     """Python 3.8+ disallows None, True, and False as names in compiled code."""
-
     return ast.Name(python_safe_name_mangle(id), ctx)
 
 
