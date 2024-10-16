@@ -12,6 +12,8 @@ from concat.typecheck.errors import (
     StaticAnalysisError,
     TypeError,
     UnhandledNodeTypeError,
+    format_item_type_expected_in_type_sequence_error,
+    format_name_reassigned_in_type_sequence_error,
 )
 from typing import (
     Any,
@@ -170,7 +172,6 @@ from concat.typecheck.types import (
     SequenceKind,
     SequenceVariable,
     StackEffect,
-    StackItemType,
     TypeSequence,
     free_type_variables_of_mapping,
     get_int_type,
@@ -895,21 +896,18 @@ class _TypeSequenceIndividualTypeNode(IndividualTypeNode):
         if self._type is not None:
             if self._name in env:
                 raise TypeError(
-                    '{} is associated with a type more than once in this sequence of types'.format(
-                        self._name
-                    )
+                    format_name_reassigned_in_type_sequence_error(self._name)
                 )
-            else:
-                type, env = self._type.to_type(env)
-                env = env.copy()
-                if self._name is not None:
-                    env[self._name] = type
-                return type, env
+            ty, env = self._type.to_type(env)
+            env = env.copy()
+            if self._name is not None:
+                env[self._name] = ty
+            return ty, env
         elif self._name is not None:
             ty = env[self._name]
             if not (ty.kind <= ItemKind):
                 raise TypeError(
-                    f'an item type was expected in this part of a type sequence, got {ty}'
+                    format_item_type_expected_in_type_sequence_error(ty)
                 )
             return ty, env
         assert False, 'there must be a name or a type'
