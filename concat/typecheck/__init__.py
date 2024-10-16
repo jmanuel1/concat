@@ -903,7 +903,7 @@ class _TypeSequenceIndividualTypeNode(IndividualTypeNode):
             if self._name is not None:
                 env[self._name] = ty
             return ty, env
-        elif self._name is not None:
+        if self._name is not None:
             ty = env[self._name]
             if not (ty.kind <= ItemKind):
                 raise TypeError(
