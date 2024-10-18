@@ -150,7 +150,9 @@ def infer(
                     variable.kind for variable in type_parameters
                 ]
                 kind = GenericTypeKind(parameter_kinds, IndividualKind)
-            gamma |= {type_name: ForwardTypeReference(kind, type_name, gamma)}
+            gamma |= {
+                type_name: ForwardTypeReference(kind, type_name, lambda: gamma)
+            }
 
     for node in e:
         try:

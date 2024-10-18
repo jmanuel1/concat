@@ -1,4 +1,5 @@
 import abc
+from collections.abc import Callable
 from concat.orderedset import InsertionOrderedSet
 import concat.typecheck
 from concat.typecheck.errors import (
@@ -68,10 +69,10 @@ class Type(abc.ABC):
         )
         return not subtype_sub and not supertype_sub
 
-    # NOTE: Avoid hashing types. I might I'm having correctness issues related
-    # to hashing that I'd rather avoid entirely. Maybe one day I'll introduce
-    # hash consing, but that would only reflect syntactic eequality, and I've
-    # been using hashing for type equality.
+    # NOTE: Avoid hashing types. I'm having correctness issues related to
+    # hashing that I'd rather avoid entirely. Maybe one day I'll introduce hash
+    # consing, but that would only reflect syntactic eequality, and I've been
+    # using hashing for type equality.
 
     def get_type_of_attribute(self, name: str) -> 'Type':
         attributes = self.attributes
@@ -1778,8 +1779,6 @@ class GenericTypeKind(Kind):
         )
 
     def __lt__(self, other: Kind) -> bool:
-        if not isinstance(other, Kind):
-            return NotImplemented
         if other is ItemKind:
             return True
         if not isinstance(other, GenericTypeKind):
@@ -1887,7 +1886,7 @@ class ForwardTypeReference(Type):
         self,
         kind: Kind,
         name_to_resolve: str,
-        resolution_env: 'Environment',
+        resolution_env: Callable[[], 'Environment'],
         _type_arguments: TypeArguments = (),
     ) -> None:
         super().__init__()
@@ -1898,18 +1897,10 @@ class ForwardTypeReference(Type):
         self._type_arguments = _type_arguments
 
     def _resolve(self) -> Type:
-        ty = self._resolution_env[self._name_to_resolve]
+        ty = self._resolution_env()[self._name_to_resolve]
         if self._type_arguments:
             ty = ty[self._type_arguments]
         return ty
-
-    def _as_hashable_tuple(self) -> tuple:
-        return (
-            self._kind,
-            id(self._resolution_env),
-            self._name_to_resolve,
-            tuple(self._type_arguments),
-        )
 
     def __getitem__(self, args: TypeArguments) -> Type:
         if self._resolved_type is not None:
@@ -1926,7 +1917,7 @@ class ForwardTypeReference(Type):
                         f'Type argument has kind {arg.kind}, expected kind {kind}'
                     )
             return ForwardTypeReference(
-                IndividualKind,
+                self.kind.result_kind,
                 self._name_to_resolve,
                 self._resolution_env,
                 _type_arguments=args,
