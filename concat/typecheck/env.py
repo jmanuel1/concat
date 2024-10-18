@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 class Environment(Mapping[str, 'Type']):
     def __init__(self, env: Optional[Mapping[str, Type]] = None) -> None:
-        self._env = env or dict()
+        self._env = env or {}
         self._sub_cache = dict[int, Environment]()
 
     def apply_substitution(self, sub: 'Substitutions') -> 'Environment':

@@ -44,7 +44,7 @@ class Type(abc.ABC):
         self._internal_name: Optional[str] = None
         self._type_id = Type._next_type_id
         Type._next_type_id += 1
-        self._sub_cache: Dict[int, Type] = dict()
+        self._sub_cache: Dict[int, Type] = {}
 
     # No <= implementation using subtyping, because variables overload that for
     # sort by identity.
