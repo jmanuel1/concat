@@ -148,7 +148,9 @@ class TestFix(unittest.TestCase):
 
 class TestForwardReferences(unittest.TestCase):
     env = Environment({'ty': get_object_type()})
-    ty = ForwardTypeReference(IndividualKind, 'ty', env)
+    ty = ForwardTypeReference(
+        IndividualKind, 'ty', lambda: TestForwardReferences.env
+    )
 
     def test_resolve_supertype(self) -> None:
         self.assertEqual(
