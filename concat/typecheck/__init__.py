@@ -14,146 +14,22 @@ from concat.typecheck.errors import (
     UnhandledNodeTypeError,
     format_item_type_expected_in_type_sequence_error,
     format_name_reassigned_in_type_sequence_error,
+    format_not_a_variable_error,
 )
+import concat.typecheck.preamble_types
+from concat.typecheck.substitutions import Substitutions
 from typing import (
-    Any,
     Callable,
     Dict,
     Iterable,
-    Iterator,
     List,
-    Mapping,
     Optional,
     Sequence,
-    Set,
     TYPE_CHECKING,
     Tuple,
-    TypeVar,
     Union,
     cast,
 )
-from typing_extensions import Protocol
-
-
-if TYPE_CHECKING:
-    import concat.astutils
-    from concat.orderedset import InsertionOrderedSet
-    from concat.typecheck.types import Type, Variable
-
-
-class Environment(Dict[str, 'Type']):
-    _next_id = -1
-
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        self.id = Environment._next_id
-        Environment._next_id -= 1
-
-    def copy(self) -> 'Environment':
-        return Environment(super().copy())
-
-    def apply_substitution(self, sub: 'Substitutions') -> 'Environment':
-        return Environment({name: sub(t) for name, t in self.items()})
-
-    def free_type_variables(self) -> 'InsertionOrderedSet[Variable]':
-        return free_type_variables_of_mapping(self)
-
-
-_Result = TypeVar('_Result', covariant=True)
-
-
-class _Substitutable(Protocol[_Result]):
-    def apply_substitution(self, sub: 'Substitutions') -> _Result:
-        # empty, abstract protocol method
-        pass
-
-
-class Substitutions(Mapping['Variable', 'Type']):
-    def __init__(
-        self,
-        sub: Union[
-            Iterable[Tuple['Variable', 'Type']],
-            Mapping['Variable', 'Type'],
-            None,
-        ] = None,
-    ) -> None:
-        self._sub = {} if sub is None else dict(sub)
-        for variable, ty in self._sub.items():
-            if not (variable.kind >= ty.kind):
-                raise TypeError(
-                    f'{variable} is being substituted by {ty}, which has the wrong kind ({variable.kind} vs {ty.kind})'
-                )
-        self._cache: Dict[int, 'Type'] = {}
-        # innermost first
-        self.subtyping_provenance: List[Any] = []
-
-    def add_subtyping_provenance(
-        self, subtyping_query: Tuple['Type', 'Type']
-    ) -> None:
-        self.subtyping_provenance.append(subtyping_query)
-
-    def __getitem__(self, var: 'Variable') -> 'Type':
-        return self._sub[var]
-
-    def __iter__(self) -> Iterator['Variable']:
-        return iter(self._sub)
-
-    def __len__(self) -> int:
-        return len(self._sub)
-
-    def __bool__(self) -> bool:
-        return bool(self._sub)
-
-    def __call__(self, arg: _Substitutable[_Result]) -> _Result:
-        from concat.typecheck.types import Type
-
-        result: _Result
-        # Previously I tried caching results by the id of the argument. But
-        # since the id is the memory address of the object in CPython, another
-        # object might have the same id later. I think this was leading to
-        # nondeterministic Concat type errors from the type checker.
-        if isinstance(arg, Type):
-            if arg._type_id not in self._cache:
-                if not (self._dom() & arg.free_type_variables()):
-                    self._cache[arg._type_id] = arg
-                else:
-                    self._cache[arg._type_id] = arg.apply_substitution(self)
-            result = self._cache[arg._type_id]
-        if isinstance(arg, Environment):
-            if arg.id not in self._cache:
-                self._cache[arg.id] = arg.apply_substitution(self)
-            result = self._cache[arg.id]
-        result = arg.apply_substitution(self)
-        return result
-
-    def _dom(self) -> Set['Variable']:
-        return {*self}
-
-    def __str__(self) -> str:
-        return (
-            '{'
-            + ',\n'.join(
-                map(lambda i: '{}: {}'.format(i[0], i[1]), self.items())
-            )
-            + '}'
-        )
-
-    def apply_substitution(self, sub: 'Substitutions') -> 'Substitutions':
-        new_sub = Substitutions(
-            {
-                **sub,
-                **{a: sub(i) for a, i in self.items() if a not in sub._dom()},
-            }
-        )
-        new_sub.subtyping_provenance = [
-            (self.subtyping_provenance, sub.subtyping_provenance)
-        ]
-        return new_sub
-
-    def __hash__(self) -> int:
-        return hash(tuple(self.items()))
-
-
 from concat.typecheck.types import (
     BoundVariable,
     Brand,
@@ -173,6 +49,7 @@ from concat.typecheck.types import (
     SequenceVariable,
     StackEffect,
     TypeSequence,
+    Variable,
     free_type_variables_of_mapping,
     get_int_type,
     get_list_type,
@@ -189,6 +66,34 @@ import pathlib
 import sys
 import concat.parser_combinators
 import concat.parse
+
+
+if TYPE_CHECKING:
+    import concat.astutils
+    from concat.orderedset import InsertionOrderedSet
+    from concat.typecheck.types import Type
+
+
+class Environment(Dict[str, 'Type']):
+    _next_id = -1
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.id = Environment._next_id
+        self._sub_cache: Dict[int, Environment] = dict()
+        Environment._next_id -= 1
+
+    def copy(self) -> 'Environment':
+        return Environment(super().copy())
+
+    def apply_substitution(self, sub: 'Substitutions') -> 'Environment':
+        # if sub.id not in self._sub_cache:
+        #     self._sub_cache[sub.id] = Environment({name: sub(t) for name, t in self.items()})
+        # return self._sub_cache[sub.id]
+        return Environment({name: sub(t) for name, t in self.items()})
+
+    def free_type_variables(self) -> 'InsertionOrderedSet[Variable]':
+        return free_type_variables_of_mapping(self)
 
 
 _builtins_stub_path = pathlib.Path(__file__) / '../builtin_stubs/builtins.cati'
@@ -209,12 +114,10 @@ def load_builtins_and_preamble() -> Environment:
 
 def check(
     environment: Environment,
-    program: 'concat.astutils.WordsOrStatements',
+    program: Sequence[concat.parse.Node],
     source_dir: str = '.',
     _should_check_bodies: bool = True,
 ) -> Environment:
-    import concat.typecheck.preamble_types
-
     environment = Environment(
         {**concat.typecheck.preamble_types.types, **environment,}
     )
@@ -895,6 +798,7 @@ class _TypeSequenceIndividualTypeNode(IndividualTypeNode):
     def to_type(self, env: Environment) -> Tuple[Type, Environment]:
         if self._type is not None:
             if self._name in env:
+                assert self._name is not None
                 raise TypeError(
                     format_name_reassigned_in_type_sequence_error(self._name)
                 )
@@ -1045,8 +949,12 @@ class _ItemVariableNode(TypeNode):
             ty = env[self._name]
             if not (ty.kind <= ItemKind):
                 error = TypeError(
-                    f'{self._name} is not an item type variable (has kind {ty.kind})'
+                    f'{self._name} is not of item kind (has kind {ty.kind})'
                 )
+                error.location = self.location
+                raise error
+            if not isinstance(ty, Variable):
+                error = TypeError(format_not_a_variable_error(self._name))
                 error.location = self.location
                 raise error
             return ty, env
@@ -1137,7 +1045,7 @@ class _ObjectTypeNode(IndividualTypeNode):
 
     def to_type(self, env: Environment) -> Tuple[ObjectType, Environment]:
         temp_env = env.copy()
-        attribute_type_mapping: Dict[str, IndividualType] = {}
+        attribute_type_mapping: Dict[str, Type] = {}
         for attribute, type_node in self._attribute_type_pairs:
             ty, temp_env = type_node.to_type(temp_env)
             attribute_type_mapping[attribute.value] = ty
@@ -1150,14 +1058,14 @@ class _ObjectTypeNode(IndividualTypeNode):
 
 def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
     @concat.parser_combinators.generate
-    def non_star_name_parser() -> Generator:
+    def non_star_name_parser():
         name = yield concat.parse.token('NAME')
         if name.value == '*':
             yield concat.parser_combinators.fail('name that is not star (*)')
         return name
 
     @concat.parser_combinators.generate
-    def named_type_parser() -> Generator:
+    def named_type_parser():
         name_token = yield non_star_name_parser
         return NamedTypeNode(
             name_token.start, name_token.end, name_token.value
@@ -1181,14 +1089,14 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         return type_constructor_name
 
     @concat.parser_combinators.generate
-    def individual_type_variable_parser() -> Generator:
+    def individual_type_variable_parser():
         yield concat.parse.token('BACKTICK')
         name = yield non_star_name_parser
 
         return _ItemVariableNode(name)
 
     @concat.parser_combinators.generate
-    def sequence_type_variable_parser() -> Generator:
+    def sequence_type_variable_parser():
         star = yield concat.parse.token('NAME')
         if star.value != '*':
             yield concat.parser_combinators.fail('star (*)')
@@ -1197,7 +1105,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         return _SequenceVariableNode(name)
 
     @concat.parser_combinators.generate
-    def stack_effect_type_sequence_parser() -> Generator:
+    def stack_effect_type_sequence_parser():
         type = parsers['type']
 
         # TODO: Allow type-only items
@@ -1235,7 +1143,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
     parsers['stack-effect-type-sequence'] = stack_effect_type_sequence_parser
 
     @concat.parser_combinators.generate
-    def type_sequence_parser() -> Generator:
+    def type_sequence_parser():
         type = parsers['type']
 
         item = type.map(lambda t: _TypeSequenceIndividualTypeNode((None, t)))
@@ -1267,7 +1175,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         return TypeSequenceNode(location, end_location, seq_var_parsed, i)
 
     @concat.parser_combinators.generate
-    def stack_effect_type_parser() -> Generator:
+    def stack_effect_type_parser():
         separator = concat.parse.token('MINUSMINUS')
 
         location = (yield concat.parse.token('LPAR')).start
@@ -1284,7 +1192,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
     )
 
     @concat.parser_combinators.generate
-    def generic_type_parser() -> Generator:
+    def generic_type_parser():
         type = yield parsers['nonparameterized-type']
         yield concat.parse.token('LSQB')
         type_arguments = yield parsers['type'].sep_by(
@@ -1297,7 +1205,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         )
 
     @concat.parser_combinators.generate
-    def forall_type_parser() -> Generator:
+    def forall_type_parser():
         forall = yield concat.parse.token('NAME')
         if forall.value != 'forall':
             yield concat.parser_combinators.fail('the word "forall"')
@@ -1322,7 +1230,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
     )
 
     @concat.parser_combinators.generate
-    def object_type_parser() -> Generator:
+    def object_type_parser():
         location = (yield concat.parse.token('LBRACE')).start
         attribute_type_pair = concat.parser_combinators.seq(
             concat.parse.token('NAME') << concat.parse.token('COLON'),

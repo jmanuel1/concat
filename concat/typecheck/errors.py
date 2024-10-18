@@ -87,3 +87,7 @@ def format_item_type_expected_in_type_sequence_error(ty: object) -> str:
 def format_name_reassigned_in_type_sequence_error(name: str) -> str:
     return f'{name} is associated with a type more than once in this sequence \
 of types'
+
+
+def format_not_a_variable_error(name: str) -> str:
+    return f'{name} does not refer to a variable'

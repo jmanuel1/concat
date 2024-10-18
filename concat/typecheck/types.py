@@ -7,6 +7,7 @@ from concat.typecheck.errors import (
     StaticAnalysisError,
     TypeError as ConcatTypeError,
 )
+from concat.typecheck.substitutions import Substitutions
 import functools
 from typing import (
     AbstractSet,
@@ -29,7 +30,7 @@ from typing import (
 
 
 if TYPE_CHECKING:
-    from concat.typecheck import Environment, Substitutions
+    from concat.typecheck import Environment
 
 
 class Type(abc.ABC):
@@ -42,13 +43,12 @@ class Type(abc.ABC):
         self._internal_name: Optional[str] = None
         self._type_id = Type._next_type_id
         Type._next_type_id += 1
+        self._sub_cache: Dict[int, Type] = dict()
 
     # No <= implementation using subtyping, because variables overload that for
     # sort by identity.
 
     def __eq__(self, other: object) -> bool:
-        from concat.typecheck import Substitutions
-
         if self is other:
             return True
         if not isinstance(other, Type):
@@ -103,8 +103,18 @@ class Type(abc.ABC):
             self._free_type_variables_cached = self._free_type_variables()
         return self._free_type_variables_cached
 
-    @abc.abstractmethod
     def apply_substitution(
+        self, sub: 'concat.typecheck.Substitutions'
+    ) -> 'Type':
+        if sub.id not in self._sub_cache:
+            if not (set(sub) & self.free_type_variables()):
+                self._sub_cache[sub.id] = self
+            else:
+                self._sub_cache[sub.id] = self._apply_substitution(sub)
+        return self._sub_cache[sub.id]
+
+    @abc.abstractmethod
+    def _apply_substitution(
         self, _: 'concat.typecheck.Substitutions'
     ) -> 'Type':
         pass
@@ -158,14 +168,12 @@ class StuckTypeApplication(IndividualType):
         self._head = head
         self._args = args
 
-    def apply_substitution(self, sub: 'Substitutions') -> Type:
+    def _apply_substitution(self, sub: 'Substitutions') -> Type:
         return sub(self._head)[[sub(t) for t in self._args]]
 
     def constrain_and_bind_variables(
         self, supertype, rigid_variables, subtyping_assumptions
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         if self is supertype or supertype is get_object_type():
             return Substitutions()
         if isinstance(supertype, StuckTypeApplication):
@@ -199,7 +207,7 @@ class Variable(Type, abc.ABC):
     variables can be made simply by creating new objects. They can also be
     compared by identity."""
 
-    def apply_substitution(
+    def _apply_substitution(
         self, sub: 'concat.typecheck.Substitutions'
     ) -> Type:
         if self in sub:
@@ -248,8 +256,6 @@ class BoundVariable(Variable):
     def constrain_and_bind_variables(
         self, supertype, rigid_variables, subtyping_assumptions
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         if (
             self._type_id == supertype._type_id
             or supertype._type_id == get_object_type()._type_id
@@ -307,8 +313,6 @@ class ItemVariable(Variable):
         rigid_variables: AbstractSet['Variable'],
         subtyping_assumptions: List[Tuple['Type', 'Type']],
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         if (
             self is supertype
             # QUESTION: subsumption of polytypes?
@@ -383,8 +387,6 @@ class SequenceVariable(Variable):
         rigid_variables: AbstractSet['Variable'],
         subtyping_assumptions: List[Tuple['Type', 'Type']],
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         if not isinstance(supertype, (SequenceVariable, TypeSequence)):
             raise ConcatTypeError(
                 '{} must be a sequence type, not {}'.format(self, supertype)
@@ -455,8 +457,6 @@ class GenericType(Type):
         return f'{type(self).__qualname__}({self._type_parameters!r}, {self._body!r}, is_variadic={self.is_variadic!r})'
 
     def __getitem__(self, type_arguments: 'TypeArguments') -> 'Type':
-        from concat.typecheck import Substitutions
-
         type_argument_ids = tuple(t._type_id for t in type_arguments)
         if type_argument_ids in self._instantiations:
             return self._instantiations[type_argument_ids]
@@ -498,8 +498,6 @@ class GenericType(Type):
         rigid_variables: AbstractSet['Variable'],
         subtyping_assumptions: List[Tuple['Type', 'Type']],
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         if self is supertype or _contains_assumption(
             subtyping_assumptions, self, supertype
         ):
@@ -567,9 +565,7 @@ class GenericType(Type):
             subtyping_assumptions,
         )
 
-    def apply_substitution(self, sub: 'Substitutions') -> 'GenericType':
-        from concat.typecheck import Substitutions
-
+    def _apply_substitution(self, sub: 'Substitutions') -> 'GenericType':
         sub = Substitutions(
             {
                 var: ty
@@ -617,7 +613,7 @@ class TypeSequence(Type, Iterable[Type]):
             return [self._rest, *self._individual_types]
         return self._individual_types
 
-    def apply_substitution(self, sub) -> 'TypeSequence':
+    def _apply_substitution(self, sub) -> 'TypeSequence':
         if all(v not in self.free_type_variables() for v in sub):
             return self
 
@@ -642,8 +638,6 @@ class TypeSequence(Type, Iterable[Type]):
         equal to their counterparts in the other sequence so that type
         information can be propagated into calls of named functions.
         """
-        from concat.typecheck import Substitutions
-
         if self is supertype or _contains_assumption(
             subtyping_assumptions, self, supertype
         ):
@@ -814,8 +808,6 @@ class _Function(IndividualType):
         rigid_variables: AbstractSet['Variable'],
         subtyping_assumptions: List[Tuple['Type', 'Type']],
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         if (
             self is supertype
             or _contains_assumption(subtyping_assumptions, self, supertype)
@@ -889,7 +881,7 @@ class _Function(IndividualType):
     def attributes(self) -> Mapping[str, 'StackEffect']:
         return {'__call__': self}
 
-    def apply_substitution(
+    def _apply_substitution(
         self, sub: 'concat.typecheck.Substitutions'
     ) -> '_Function':
         return _Function(sub(self.input), sub(self.output))
@@ -926,7 +918,7 @@ class QuotationType(_Function):
             supertype, rigid_variables, subtyping_assumptions
         )
 
-    def apply_substitution(
+    def _apply_substitution(
         self, sub: 'concat.typecheck.Substitutions'
     ) -> 'QuotationType':
         return QuotationType(super().apply_substitution(sub))
@@ -1005,7 +997,7 @@ class NominalType(Type):
     def _free_type_variables(self) -> InsertionOrderedSet[Variable]:
         return self._ty.free_type_variables()
 
-    def apply_substitution(self, sub: 'Substitutions') -> 'NominalType':
+    def _apply_substitution(self, sub: 'Substitutions') -> 'NominalType':
         return NominalType(self._brand, sub(self._ty))
 
     @property
@@ -1100,7 +1092,7 @@ class ObjectType(IndividualType):
     def kind(self) -> 'Kind':
         return IndividualKind
 
-    def apply_substitution(
+    def _apply_substitution(
         self, sub: 'concat.typecheck.Substitutions',
     ) -> 'ObjectType':
         # if no free type vars will be substituted, just return self
@@ -1127,8 +1119,6 @@ class ObjectType(IndividualType):
         rigid_variables: AbstractSet['Variable'],
         subtyping_assumptions: List[Tuple['Type', 'Type']],
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         # every object type is a subtype of object_type
         if (
             self is supertype
@@ -1389,7 +1379,7 @@ class PythonFunctionType(IndividualType):
             _type_arguments=(input, output), type_parameters=(), _overloads=[],
         )
 
-    def apply_substitution(
+    def _apply_substitution(
         self, sub: 'concat.typecheck.Substitutions'
     ) -> 'PythonFunctionType':
         if self._arity == 0:
@@ -1453,8 +1443,6 @@ class PythonFunctionType(IndividualType):
         rigid_variables: AbstractSet['Variable'],
         subtyping_assumptions: List[Tuple['Type', 'Type']],
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         if self is supertype or _contains_assumption(
             subtyping_assumptions, self, supertype
         ):
@@ -1575,7 +1563,7 @@ class _PythonOverloadedType(Type):
     def _free_type_variables(self) -> InsertionOrderedSet['Variable']:
         return InsertionOrderedSet([])
 
-    def apply_substitution(
+    def _apply_substitution(
         self, _: 'concat.typecheck.Substitutions'
     ) -> '_PythonOverloadedType':
         return self
@@ -1608,11 +1596,9 @@ class _NoReturnType(IndividualType):
     def constrain_and_bind_variables(
         self, supertype, rigid_variables, subtyping_assumptions
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         return Substitutions()
 
-    def apply_substitution(
+    def _apply_substitution(
         self, sub: 'concat.typecheck.Substitutions'
     ) -> '_NoReturnType':
         return self
@@ -1652,8 +1638,6 @@ class _OptionalType(IndividualType):
     def constrain_and_bind_variables(
         self, supertype, rigid_variables, subtyping_assumptions
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         if (
             self is supertype
             or _contains_assumption(subtyping_assumptions, self, supertype)
@@ -1686,7 +1670,7 @@ class _OptionalType(IndividualType):
         )
         return sub
 
-    def apply_substitution(
+    def _apply_substitution(
         self, sub: 'concat.typecheck.Substitutions'
     ) -> '_OptionalType':
         return _OptionalType(sub(self._type_argument))
@@ -1829,8 +1813,6 @@ class Fix(Type):
         return f'Fix({self._var}, {self._body})'
 
     def _apply(self, t: Type) -> Type:
-        from concat.typecheck import Substitutions
-
         if t._type_id not in self._cache:
             sub = Substitutions([(self._var, t)])
             self._cache[t._type_id] = sub(self._body)
@@ -1851,9 +1833,7 @@ class Fix(Type):
     def _free_type_variables(self) -> InsertionOrderedSet[Variable]:
         return self._body.free_type_variables() - {self._var}
 
-    def apply_substitution(self, sub: 'Substitutions') -> Type:
-        from concat.typecheck import Substitutions
-
+    def _apply_substitution(self, sub: 'Substitutions') -> Type:
         if all(v not in self.free_type_variables() for v in sub):
             return self
         sub = Substitutions(
@@ -1869,8 +1849,6 @@ class Fix(Type):
     def constrain_and_bind_variables(
         self, supertype, rigid_variables, subtyping_assumptions
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         if supertype._type_id == get_object_type()._type_id or _contains_assumption(
             subtyping_assumptions, self, supertype
         ):
@@ -1960,7 +1938,7 @@ class ForwardTypeReference(Type):
             self._resolved_type = self._resolve()
         return self._resolved_type
 
-    def apply_substitution(
+    def _apply_substitution(
         self, sub: 'concat.typecheck.Substitutions'
     ) -> Type:
         if self._resolved_type is not None:
