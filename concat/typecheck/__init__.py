@@ -1023,7 +1023,7 @@ class _ObjectTypeNode(IndividualTypeNode):
         self._attribute_type_pairs = attribute_type_pairs
 
     def to_type(self, env: Environment) -> Tuple[ObjectType, Environment]:
-        temp_env = env.copy()
+        temp_env = env
         attribute_type_mapping: Dict[str, Type] = {}
         for attribute, type_node in self._attribute_type_pairs:
             ty, temp_env = type_node.to_type(temp_env)
