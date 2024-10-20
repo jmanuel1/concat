@@ -2,9 +2,6 @@
 
 On Extensibility:
 
-The parser uses parsy, a parser combinator library. A custom parser
-primitive is used to call the lexer.
-
 - The extension mechanism:
 Assume there is an existing word parser, like:
 
