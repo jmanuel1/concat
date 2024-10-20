@@ -2,6 +2,7 @@
 
 
 from __future__ import annotations
+from concat.typecheck.errors import format_substitution_kind_error
 from typing import (
     Any,
     Iterable,
@@ -47,10 +48,9 @@ class Substitutions(Mapping['Variable', 'Type']):
         Substitutions.__next_id += 1
         for variable, ty in self._sub.items():
             if not (variable.kind >= ty.kind):
-                raise TypeError(
-                    f'{variable} is being substituted by {ty}, which has the wrong kind ({variable.kind} vs {ty.kind})'
-                )
+                raise TypeError(format_substitution_kind_error(variable, ty))
         # NOTE: Substitutable types should manage their own caching [SUBCACHE]
+
         # innermost first
         self.subtyping_provenance: List[Any] = []
 
