@@ -7,6 +7,7 @@ The type inference algorithm was originally based on the one described in
 
 from __future__ import annotations
 from collections.abc import Generator
+from concat.typecheck.env import Environment
 from concat.typecheck.errors import (
     NameError,
     StaticAnalysisError,
@@ -14,146 +15,22 @@ from concat.typecheck.errors import (
     UnhandledNodeTypeError,
     format_item_type_expected_in_type_sequence_error,
     format_name_reassigned_in_type_sequence_error,
+    format_not_a_variable_error,
 )
+import concat.typecheck.preamble_types
+from concat.typecheck.substitutions import Substitutions
 from typing import (
-    Any,
     Callable,
     Dict,
     Iterable,
-    Iterator,
     List,
-    Mapping,
     Optional,
     Sequence,
-    Set,
     TYPE_CHECKING,
     Tuple,
-    TypeVar,
     Union,
     cast,
 )
-from typing_extensions import Protocol
-
-
-if TYPE_CHECKING:
-    import concat.astutils
-    from concat.orderedset import InsertionOrderedSet
-    from concat.typecheck.types import Type, Variable
-
-
-class Environment(Dict[str, 'Type']):
-    _next_id = -1
-
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        self.id = Environment._next_id
-        Environment._next_id -= 1
-
-    def copy(self) -> 'Environment':
-        return Environment(super().copy())
-
-    def apply_substitution(self, sub: 'Substitutions') -> 'Environment':
-        return Environment({name: sub(t) for name, t in self.items()})
-
-    def free_type_variables(self) -> 'InsertionOrderedSet[Variable]':
-        return free_type_variables_of_mapping(self)
-
-
-_Result = TypeVar('_Result', covariant=True)
-
-
-class _Substitutable(Protocol[_Result]):
-    def apply_substitution(self, sub: 'Substitutions') -> _Result:
-        # empty, abstract protocol method
-        pass
-
-
-class Substitutions(Mapping['Variable', 'Type']):
-    def __init__(
-        self,
-        sub: Union[
-            Iterable[Tuple['Variable', 'Type']],
-            Mapping['Variable', 'Type'],
-            None,
-        ] = None,
-    ) -> None:
-        self._sub = {} if sub is None else dict(sub)
-        for variable, ty in self._sub.items():
-            if not (variable.kind >= ty.kind):
-                raise TypeError(
-                    f'{variable} is being substituted by {ty}, which has the wrong kind ({variable.kind} vs {ty.kind})'
-                )
-        self._cache: Dict[int, 'Type'] = {}
-        # innermost first
-        self.subtyping_provenance: List[Any] = []
-
-    def add_subtyping_provenance(
-        self, subtyping_query: Tuple['Type', 'Type']
-    ) -> None:
-        self.subtyping_provenance.append(subtyping_query)
-
-    def __getitem__(self, var: 'Variable') -> 'Type':
-        return self._sub[var]
-
-    def __iter__(self) -> Iterator['Variable']:
-        return iter(self._sub)
-
-    def __len__(self) -> int:
-        return len(self._sub)
-
-    def __bool__(self) -> bool:
-        return bool(self._sub)
-
-    def __call__(self, arg: _Substitutable[_Result]) -> _Result:
-        from concat.typecheck.types import Type
-
-        result: _Result
-        # Previously I tried caching results by the id of the argument. But
-        # since the id is the memory address of the object in CPython, another
-        # object might have the same id later. I think this was leading to
-        # nondeterministic Concat type errors from the type checker.
-        if isinstance(arg, Type):
-            if arg._type_id not in self._cache:
-                if not (self._dom() & arg.free_type_variables()):
-                    self._cache[arg._type_id] = arg
-                else:
-                    self._cache[arg._type_id] = arg.apply_substitution(self)
-            result = self._cache[arg._type_id]
-        if isinstance(arg, Environment):
-            if arg.id not in self._cache:
-                self._cache[arg.id] = arg.apply_substitution(self)
-            result = self._cache[arg.id]
-        result = arg.apply_substitution(self)
-        return result
-
-    def _dom(self) -> Set['Variable']:
-        return {*self}
-
-    def __str__(self) -> str:
-        return (
-            '{'
-            + ',\n'.join(
-                map(lambda i: '{}: {}'.format(i[0], i[1]), self.items())
-            )
-            + '}'
-        )
-
-    def apply_substitution(self, sub: 'Substitutions') -> 'Substitutions':
-        new_sub = Substitutions(
-            {
-                **sub,
-                **{a: sub(i) for a, i in self.items() if a not in sub._dom()},
-            }
-        )
-        new_sub.subtyping_provenance = [
-            (self.subtyping_provenance, sub.subtyping_provenance)
-        ]
-        return new_sub
-
-    def __hash__(self) -> int:
-        return hash(tuple(self.items()))
-
-
 from concat.typecheck.types import (
     BoundVariable,
     Brand,
@@ -173,7 +50,7 @@ from concat.typecheck.types import (
     SequenceVariable,
     StackEffect,
     TypeSequence,
-    free_type_variables_of_mapping,
+    Variable,
     get_int_type,
     get_list_type,
     get_str_type,
@@ -191,6 +68,11 @@ import concat.parser_combinators
 import concat.parse
 
 
+if TYPE_CHECKING:
+    import concat.astutils
+    from concat.typecheck.types import Type
+
+
 _builtins_stub_path = pathlib.Path(__file__) / '../builtin_stubs/builtins.cati'
 
 
@@ -201,20 +83,17 @@ def load_builtins_and_preamble() -> Environment:
         pathlib.Path(__file__).with_name('preamble.cati'), initial_env=env,
     )
     # pick up ModuleType
-    _check_stub(
-        _builtins_stub_path.with_name('types.cati'), initial_env=env.copy(),
+    return _check_stub(
+        _builtins_stub_path.with_name('types.cati'), initial_env=env,
     )
-    return env
 
 
 def check(
     environment: Environment,
-    program: 'concat.astutils.WordsOrStatements',
+    program: Sequence[concat.parse.Node],
     source_dir: str = '.',
     _should_check_bodies: bool = True,
 ) -> Environment:
-    import concat.typecheck.preamble_types
-
     environment = Environment(
         {**concat.typecheck.preamble_types.types, **environment,}
     )
@@ -252,7 +131,6 @@ def infer(
 
     # Prepare for forward references.
     # TODO: Do this in a more principled way with scope graphs.
-    gamma = gamma.copy()
     for node in e:
         if isinstance(node, concat.parse.ClassdefStatementNode):
             type_name = node.class_name
@@ -272,7 +150,9 @@ def infer(
                     variable.kind for variable in type_parameters
                 ]
                 kind = GenericTypeKind(parameter_kinds, IndividualKind)
-            gamma[type_name] = ForwardTypeReference(kind, type_name, gamma)
+            gamma |= {
+                type_name: ForwardTypeReference(kind, type_name, lambda: gamma)
+            }
 
     for node in e:
         try:
@@ -475,26 +355,30 @@ def infer(
                         f'Cannot find {node.imported_name} in module {node.value}'
                     )
                 # TODO: Support star imports
-                gamma[imported_name] = current_subs(imported_type)
+                gamma |= {imported_name: current_subs(imported_type)}
             elif isinstance(node, concat.parse.ImportStatementNode):
                 # TODO: Support all types of import correctly.
                 if node.asname is not None:
-                    gamma[node.asname] = current_subs(
-                        _generate_type_of_innermost_module(
-                            node.value, source_dir=pathlib.Path(source_dir)
-                        ).generalized_wrt(current_subs(gamma))
-                    )
+                    gamma |= {
+                        node.asname: current_subs(
+                            _generate_type_of_innermost_module(
+                                node.value, source_dir=pathlib.Path(source_dir)
+                            ).generalized_wrt(current_subs(gamma))
+                        ),
+                    }
                 else:
                     imported_name = node.value
                     # mutate type environment
                     components = node.value.split('.')
                     # FIXME: This replaces whatever was previously imported. I really
                     # should implement namespaces properly.
-                    gamma[components[0]] = current_subs(
-                        _generate_module_type(
-                            components, source_dir=pathlib.Path(source_dir)
-                        )
-                    )
+                    gamma |= {
+                        components[0]: current_subs(
+                            _generate_module_type(
+                                components, source_dir=pathlib.Path(source_dir)
+                            )
+                        ),
+                    }
             elif isinstance(node, concat.parse.FuncdefStatementNode):
                 S = current_subs
                 name = node.name
@@ -503,12 +387,13 @@ def infer(
                 # TODO: Make the return types optional?
                 declared_type, _ = node.stack_effect.to_type(S(gamma))
                 declared_type = S(declared_type)
-                recursion_env = gamma.copy()
                 if not isinstance(declared_type, StackEffect):
                     raise TypeError(
                         f'declared type of {name} must be a stack effect, got {declared_type}'
                     )
-                recursion_env[name] = declared_type.generalized_wrt(S(gamma))
+                recursion_env = gamma | {
+                    name: declared_type.generalized_wrt(S(gamma))
+                }
                 if check_bodies:
                     phi1, inferred_type, _ = infer(
                         S(recursion_env),
@@ -555,12 +440,13 @@ def infer(
                     raise TypeError(
                         f'Decorators should produce something of individual type, got {final_type}'
                     )
-                # we *mutate* the type environment
-                gamma[name] = (
-                    final_type.generalized_wrt(S(gamma))
-                    if isinstance(final_type, StackEffect)
-                    else final_type
-                )
+                gamma |= {
+                    name: (
+                        final_type.generalized_wrt(S(gamma))
+                        if isinstance(final_type, StackEffect)
+                        else final_type
+                    ),
+                }
             elif isinstance(node, concat.parse.NumberWordNode):
                 if isinstance(node.value, int):
                     current_effect = StackEffect(
@@ -657,7 +543,7 @@ def infer(
                 node, concat.parse.ClassdefStatementNode
             ):
                 type_parameters: List[Variable] = []
-                temp_gamma = gamma.copy()
+                temp_gamma = gamma
                 if node.is_variadic:
                     type_parameters.append(SequenceVariable())
                 else:
@@ -673,7 +559,7 @@ def infer(
                         [v.kind for v in type_parameters], IndividualKind
                     )
                 self_type = BoundVariable(kind)
-                temp_gamma[node.class_name] = self_type
+                temp_gamma |= {node.class_name: self_type}
                 _, _, body_attrs = infer(
                     temp_gamma,
                     node.body,
@@ -699,7 +585,7 @@ def infer(
                         type_parameters, ty, is_variadic=node.is_variadic
                     )
                 ty = Fix(self_type, ty)
-                gamma[node.class_name] = ty
+                gamma |= {node.class_name: ty}
             # TODO: Type aliases
             else:
                 raise UnhandledNodeTypeError(
@@ -895,13 +781,13 @@ class _TypeSequenceIndividualTypeNode(IndividualTypeNode):
     def to_type(self, env: Environment) -> Tuple[Type, Environment]:
         if self._type is not None:
             if self._name in env:
+                assert self._name is not None
                 raise TypeError(
                     format_name_reassigned_in_type_sequence_error(self._name)
                 )
             ty, env = self._type.to_type(env)
-            env = env.copy()
             if self._name is not None:
-                env[self._name] = ty
+                env |= {self._name: ty}
             return ty, env
         if self._name is not None:
             ty = env[self._name]
@@ -937,15 +823,14 @@ class TypeSequenceNode(TypeNode):
 
     def to_type(self, env: Environment) -> Tuple[TypeSequence, Environment]:
         sequence: List[Type] = []
-        temp_env = env.copy()
+        temp_env = env
         if self._sequence_variable is None:
             # implicit stack polymorphism
             # FIXME: This should be handled in stack effect construction
             sequence.append(SequenceVariable())
         elif self._sequence_variable.name not in temp_env:
-            temp_env = temp_env.copy()
             var = SequenceVariable()
-            temp_env[self._sequence_variable.name] = var
+            temp_env |= {self._sequence_variable.name: var}
             sequence.append(var)
         for type_node in self._individual_type_items:
             type, temp_env = type_node.to_type(temp_env)
@@ -989,7 +874,7 @@ class StackEffectTypeNode(IndividualTypeNode):
     def to_type(self, env: Environment) -> Tuple[StackEffect, Environment]:
         a_bar = SequenceVariable()
         b_bar = a_bar
-        new_env = env.copy()
+        new_env = env
         known_stack_item_names = Environment()
         if self.input_sequence_variable is not None:
             if self.input_sequence_variable.name in new_env:
@@ -997,7 +882,7 @@ class StackEffectTypeNode(IndividualTypeNode):
                     SequenceVariable,
                     new_env[self.input_sequence_variable.name],
                 )
-            new_env[self.input_sequence_variable.name] = a_bar
+            new_env |= {self.input_sequence_variable.name: a_bar}
         if self.output_sequence_variable is not None:
             if self.output_sequence_variable.name in new_env:
                 b_bar = cast(
@@ -1006,17 +891,17 @@ class StackEffectTypeNode(IndividualTypeNode):
                 )
             else:
                 b_bar = SequenceVariable()
-                new_env[self.output_sequence_variable.name] = b_bar
+                new_env |= {self.output_sequence_variable.name: b_bar}
 
         in_types = []
         for item in self.input:
-            type, new_env = _ensure_type(
+            type, new_env, known_stack_item_names = _ensure_type(
                 item[1], new_env, item[0], known_stack_item_names,
             )
             in_types.append(type)
         out_types = []
         for item in self.output:
-            type, new_env = _ensure_type(
+            type, new_env, known_stack_item_names = _ensure_type(
                 item[1], new_env, item[0], known_stack_item_names,
             )
             out_types.append(type)
@@ -1045,15 +930,18 @@ class _ItemVariableNode(TypeNode):
             ty = env[self._name]
             if not (ty.kind <= ItemKind):
                 error = TypeError(
-                    f'{self._name} is not an item type variable (has kind {ty.kind})'
+                    f'{self._name} is not of item kind (has kind {ty.kind})'
                 )
+                error.location = self.location
+                raise error
+            if not isinstance(ty, Variable):
+                error = TypeError(format_not_a_variable_error(self._name))
                 error.location = self.location
                 raise error
             return ty, env
 
-        env = env.copy()
         var = BoundVariable(ItemKind)
-        env[self._name] = var
+        env |= {self._name: var}
         return var, env
 
     @property
@@ -1084,9 +972,8 @@ class _SequenceVariableNode(TypeNode):
                 raise error
             return ty, env
 
-        env = env.copy()
         var = SequenceVariable()
-        env[self._name] = var
+        env |= {self._name: var}
         return var, env
 
     @property
@@ -1111,7 +998,7 @@ class _ForallTypeNode(TypeNode):
         self._type = ty
 
     def to_type(self, env: Environment) -> Tuple['Type', Environment]:
-        temp_env = env.copy()
+        temp_env = env
         variables = []
         for var in self._type_variables:
             parameter, temp_env = var.to_type(temp_env)
@@ -1136,8 +1023,8 @@ class _ObjectTypeNode(IndividualTypeNode):
         self._attribute_type_pairs = attribute_type_pairs
 
     def to_type(self, env: Environment) -> Tuple[ObjectType, Environment]:
-        temp_env = env.copy()
-        attribute_type_mapping: Dict[str, IndividualType] = {}
+        temp_env = env
+        attribute_type_mapping: Dict[str, Type] = {}
         for attribute, type_node in self._attribute_type_pairs:
             ty, temp_env = type_node.to_type(temp_env)
             attribute_type_mapping[attribute.value] = ty
@@ -1150,14 +1037,14 @@ class _ObjectTypeNode(IndividualTypeNode):
 
 def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
     @concat.parser_combinators.generate
-    def non_star_name_parser() -> Generator:
+    def non_star_name_parser():
         name = yield concat.parse.token('NAME')
         if name.value == '*':
             yield concat.parser_combinators.fail('name that is not star (*)')
         return name
 
     @concat.parser_combinators.generate
-    def named_type_parser() -> Generator:
+    def named_type_parser():
         name_token = yield non_star_name_parser
         return NamedTypeNode(
             name_token.start, name_token.end, name_token.value
@@ -1181,14 +1068,14 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         return type_constructor_name
 
     @concat.parser_combinators.generate
-    def individual_type_variable_parser() -> Generator:
+    def individual_type_variable_parser():
         yield concat.parse.token('BACKTICK')
         name = yield non_star_name_parser
 
         return _ItemVariableNode(name)
 
     @concat.parser_combinators.generate
-    def sequence_type_variable_parser() -> Generator:
+    def sequence_type_variable_parser():
         star = yield concat.parse.token('NAME')
         if star.value != '*':
             yield concat.parser_combinators.fail('star (*)')
@@ -1197,7 +1084,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         return _SequenceVariableNode(name)
 
     @concat.parser_combinators.generate
-    def stack_effect_type_sequence_parser() -> Generator:
+    def stack_effect_type_sequence_parser():
         type = parsers['type']
 
         # TODO: Allow type-only items
@@ -1235,7 +1122,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
     parsers['stack-effect-type-sequence'] = stack_effect_type_sequence_parser
 
     @concat.parser_combinators.generate
-    def type_sequence_parser() -> Generator:
+    def type_sequence_parser():
         type = parsers['type']
 
         item = type.map(lambda t: _TypeSequenceIndividualTypeNode((None, t)))
@@ -1267,7 +1154,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         return TypeSequenceNode(location, end_location, seq_var_parsed, i)
 
     @concat.parser_combinators.generate
-    def stack_effect_type_parser() -> Generator:
+    def stack_effect_type_parser():
         separator = concat.parse.token('MINUSMINUS')
 
         location = (yield concat.parse.token('LPAR')).start
@@ -1284,7 +1171,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
     )
 
     @concat.parser_combinators.generate
-    def generic_type_parser() -> Generator:
+    def generic_type_parser():
         type = yield parsers['nonparameterized-type']
         yield concat.parse.token('LSQB')
         type_arguments = yield parsers['type'].sep_by(
@@ -1297,7 +1184,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         )
 
     @concat.parser_combinators.generate
-    def forall_type_parser() -> Generator:
+    def forall_type_parser():
         forall = yield concat.parse.token('NAME')
         if forall.value != 'forall':
             yield concat.parser_combinators.fail('the word "forall"')
@@ -1322,7 +1209,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
     )
 
     @concat.parser_combinators.generate
-    def object_type_parser() -> Generator:
+    def object_type_parser():
         location = (yield concat.parse.token('LBRACE')).start
         attribute_type_pair = concat.parser_combinators.seq(
             concat.parse.token('NAME') << concat.parse.token('COLON'),
@@ -1409,7 +1296,7 @@ def _ensure_type(
     env: Environment,
     obj_name: Optional[str],
     known_stack_item_names: Environment,
-) -> Tuple['Type', Environment]:
+) -> Tuple['Type', Environment, Environment]:
     type: Type
     if obj_name and obj_name in known_stack_item_names:
         type = known_stack_item_names[obj_name]
@@ -1422,5 +1309,5 @@ def _ensure_type(
             'Cannot turn {!r} into a type'.format(typename)
         )
     if obj_name:
-        known_stack_item_names[obj_name] = type
-    return type, env
+        known_stack_item_names |= {obj_name: type}
+    return type, env, known_stack_item_names

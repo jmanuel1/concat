@@ -27,13 +27,12 @@ readme = "README.md"
 [project.optional-dependencies]
 dev = [
   "axblack==20220330",
-  "importlib-metadata<5",
-  "mypy>=1.11.2,<2",
+  "flake8>=7.1.0,<8",
+  "mypy>=1.12.0,<2",
   "pre-commit>=2.6.0,<3",
   "pylsp-mypy",
-  "python-lsp-server[all]==1.7.2",
+  "python-lsp-server[all]>=1.12.0,<2",
   "snakeviz",
-  "virtualenv<=20.17.1",
 ]
 test = [
   "coverage>=6.4.4,<7",

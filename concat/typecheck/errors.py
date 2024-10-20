@@ -1,3 +1,4 @@
+from __future__ import annotations
 import builtins
 import concat.parse
 import pathlib
@@ -6,7 +7,7 @@ from typing import Optional, Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
     import concat.astutils
-    from concat.typecheck.types import Type, TypeSequence
+    from concat.typecheck.types import Type, TypeSequence, Variable
 
 
 class StaticAnalysisError(Exception):
@@ -79,11 +80,26 @@ class UnhandledNodeTypeError(builtins.NotImplementedError):
     pass
 
 
-def format_item_type_expected_in_type_sequence_error(ty: object) -> str:
-    return f'an item type was expected in this part of a type sequence, got \
-{ty}'
+def format_item_type_expected_in_type_sequence_error(ty: Type) -> str:
+    return (
+        'an item type was expected in this part of a type sequence, got '
+        f'{ty}'
+    )
 
 
 def format_name_reassigned_in_type_sequence_error(name: str) -> str:
-    return f'{name} is associated with a type more than once in this sequence \
-of types'
+    return (
+        f'{name} is associated with a type more than once in this sequence '
+        'of types'
+    )
+
+
+def format_not_a_variable_error(name: str) -> str:
+    return f'{name} does not refer to a variable'
+
+
+def format_substitution_kind_error(variable: Variable, ty: Type) -> str:
+    return (
+        f'{variable} is being substituted by {ty}, which has the wrong kind '
+        f'({variable.kind} vs {ty.kind})'
+    )

@@ -1,4 +1,6 @@
+from __future__ import annotations
 import abc
+from collections.abc import Callable
 from concat.orderedset import InsertionOrderedSet
 import concat.typecheck
 from concat.typecheck.errors import (
@@ -7,6 +9,7 @@ from concat.typecheck.errors import (
     StaticAnalysisError,
     TypeError as ConcatTypeError,
 )
+from concat.typecheck.substitutions import Substitutions
 import functools
 from typing import (
     AbstractSet,
@@ -29,7 +32,7 @@ from typing import (
 
 
 if TYPE_CHECKING:
-    from concat.typecheck import Environment, Substitutions
+    from concat.typecheck.env import Environment
 
 
 class Type(abc.ABC):
@@ -47,8 +50,6 @@ class Type(abc.ABC):
     # sort by identity.
 
     def __eq__(self, other: object) -> bool:
-        from concat.typecheck import Substitutions
-
         if self is other:
             return True
         if not isinstance(other, Type):
@@ -68,10 +69,10 @@ class Type(abc.ABC):
         )
         return not subtype_sub and not supertype_sub
 
-    # NOTE: Avoid hashing types. I might I'm having correctness issues related
-    # to hashing that I'd rather avoid entirely. Maybe one day I'll introduce
-    # hash consing, but that would only reflect syntactic eequality, and I've
-    # been using hashing for type equality.
+    # NOTE: Avoid hashing types. I'm having correctness issues related to
+    # hashing that I'd rather avoid entirely. Maybe one day I'll introduce hash
+    # consing, but that would only reflect syntactic eequality, and I've been
+    # using hashing for type equality.
 
     def get_type_of_attribute(self, name: str) -> 'Type':
         attributes = self.attributes
@@ -139,6 +140,21 @@ class Type(abc.ABC):
         )
 
 
+def _sub_cache[T: Type, R](f: Callable[[T, Substitutions], R]) -> Callable[[T, Substitutions], T | R]:
+    def apply_substitution(
+        self: T, sub: 'concat.typecheck.Substitutions'
+    ) -> T | R:
+        _sub_cache = dict[int, T | R]()
+        if sub.id not in _sub_cache:
+            if not (set(sub) & self.free_type_variables()):
+                _sub_cache[sub.id] = self
+            else:
+                _sub_cache[sub.id] = f(self, sub)
+        return _sub_cache[sub.id]
+
+    return apply_substitution
+
+
 class IndividualType(Type):
     def instantiate(self) -> 'IndividualType':
         return cast(IndividualType, super().instantiate())
@@ -158,14 +174,13 @@ class StuckTypeApplication(IndividualType):
         self._head = head
         self._args = args
 
+    @_sub_cache
     def apply_substitution(self, sub: 'Substitutions') -> Type:
         return sub(self._head)[[sub(t) for t in self._args]]
 
     def constrain_and_bind_variables(
         self, supertype, rigid_variables, subtyping_assumptions
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         if self is supertype or supertype is get_object_type():
             return Substitutions()
         if isinstance(supertype, StuckTypeApplication):
@@ -199,6 +214,7 @@ class Variable(Type, abc.ABC):
     variables can be made simply by creating new objects. They can also be
     compared by identity."""
 
+    @_sub_cache
     def apply_substitution(
         self, sub: 'concat.typecheck.Substitutions'
     ) -> Type:
@@ -248,8 +264,6 @@ class BoundVariable(Variable):
     def constrain_and_bind_variables(
         self, supertype, rigid_variables, subtyping_assumptions
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         if (
             self._type_id == supertype._type_id
             or supertype._type_id == get_object_type()._type_id
@@ -307,8 +321,6 @@ class ItemVariable(Variable):
         rigid_variables: AbstractSet['Variable'],
         subtyping_assumptions: List[Tuple['Type', 'Type']],
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         if (
             self is supertype
             # QUESTION: subsumption of polytypes?
@@ -383,8 +395,6 @@ class SequenceVariable(Variable):
         rigid_variables: AbstractSet['Variable'],
         subtyping_assumptions: List[Tuple['Type', 'Type']],
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         if not isinstance(supertype, (SequenceVariable, TypeSequence)):
             raise ConcatTypeError(
                 '{} must be a sequence type, not {}'.format(self, supertype)
@@ -455,8 +465,6 @@ class GenericType(Type):
         return f'{type(self).__qualname__}({self._type_parameters!r}, {self._body!r}, is_variadic={self.is_variadic!r})'
 
     def __getitem__(self, type_arguments: 'TypeArguments') -> 'Type':
-        from concat.typecheck import Substitutions
-
         type_argument_ids = tuple(t._type_id for t in type_arguments)
         if type_argument_ids in self._instantiations:
             return self._instantiations[type_argument_ids]
@@ -498,8 +506,6 @@ class GenericType(Type):
         rigid_variables: AbstractSet['Variable'],
         subtyping_assumptions: List[Tuple['Type', 'Type']],
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         if self is supertype or _contains_assumption(
             subtyping_assumptions, self, supertype
         ):
@@ -567,9 +573,8 @@ class GenericType(Type):
             subtyping_assumptions,
         )
 
+    @_sub_cache
     def apply_substitution(self, sub: 'Substitutions') -> 'GenericType':
-        from concat.typecheck import Substitutions
-
         sub = Substitutions(
             {
                 var: ty
@@ -617,6 +622,7 @@ class TypeSequence(Type, Iterable[Type]):
             return [self._rest, *self._individual_types]
         return self._individual_types
 
+    @_sub_cache
     def apply_substitution(self, sub) -> 'TypeSequence':
         if all(v not in self.free_type_variables() for v in sub):
             return self
@@ -642,8 +648,6 @@ class TypeSequence(Type, Iterable[Type]):
         equal to their counterparts in the other sequence so that type
         information can be propagated into calls of named functions.
         """
-        from concat.typecheck import Substitutions
-
         if self is supertype or _contains_assumption(
             subtyping_assumptions, self, supertype
         ):
@@ -814,8 +818,6 @@ class _Function(IndividualType):
         rigid_variables: AbstractSet['Variable'],
         subtyping_assumptions: List[Tuple['Type', 'Type']],
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         if (
             self is supertype
             or _contains_assumption(subtyping_assumptions, self, supertype)
@@ -889,6 +891,7 @@ class _Function(IndividualType):
     def attributes(self) -> Mapping[str, 'StackEffect']:
         return {'__call__': self}
 
+    @_sub_cache
     def apply_substitution(
         self, sub: 'concat.typecheck.Substitutions'
     ) -> '_Function':
@@ -926,6 +929,7 @@ class QuotationType(_Function):
             supertype, rigid_variables, subtyping_assumptions
         )
 
+    @_sub_cache
     def apply_substitution(
         self, sub: 'concat.typecheck.Substitutions'
     ) -> 'QuotationType':
@@ -1005,6 +1009,7 @@ class NominalType(Type):
     def _free_type_variables(self) -> InsertionOrderedSet[Variable]:
         return self._ty.free_type_variables()
 
+    @_sub_cache
     def apply_substitution(self, sub: 'Substitutions') -> 'NominalType':
         return NominalType(self._brand, sub(self._ty))
 
@@ -1100,6 +1105,7 @@ class ObjectType(IndividualType):
     def kind(self) -> 'Kind':
         return IndividualKind
 
+    @_sub_cache
     def apply_substitution(
         self, sub: 'concat.typecheck.Substitutions',
     ) -> 'ObjectType':
@@ -1127,8 +1133,6 @@ class ObjectType(IndividualType):
         rigid_variables: AbstractSet['Variable'],
         subtyping_assumptions: List[Tuple['Type', 'Type']],
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         # every object type is a subtype of object_type
         if (
             self is supertype
@@ -1389,6 +1393,7 @@ class PythonFunctionType(IndividualType):
             _type_arguments=(input, output), type_parameters=(), _overloads=[],
         )
 
+    @_sub_cache
     def apply_substitution(
         self, sub: 'concat.typecheck.Substitutions'
     ) -> 'PythonFunctionType':
@@ -1453,8 +1458,6 @@ class PythonFunctionType(IndividualType):
         rigid_variables: AbstractSet['Variable'],
         subtyping_assumptions: List[Tuple['Type', 'Type']],
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         if self is supertype or _contains_assumption(
             subtyping_assumptions, self, supertype
         ):
@@ -1575,6 +1578,7 @@ class _PythonOverloadedType(Type):
     def _free_type_variables(self) -> InsertionOrderedSet['Variable']:
         return InsertionOrderedSet([])
 
+    @_sub_cache
     def apply_substitution(
         self, _: 'concat.typecheck.Substitutions'
     ) -> '_PythonOverloadedType':
@@ -1608,10 +1612,9 @@ class _NoReturnType(IndividualType):
     def constrain_and_bind_variables(
         self, supertype, rigid_variables, subtyping_assumptions
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         return Substitutions()
 
+    @_sub_cache
     def apply_substitution(
         self, sub: 'concat.typecheck.Substitutions'
     ) -> '_NoReturnType':
@@ -1652,8 +1655,6 @@ class _OptionalType(IndividualType):
     def constrain_and_bind_variables(
         self, supertype, rigid_variables, subtyping_assumptions
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         if (
             self is supertype
             or _contains_assumption(subtyping_assumptions, self, supertype)
@@ -1686,6 +1687,7 @@ class _OptionalType(IndividualType):
         )
         return sub
 
+    @_sub_cache
     def apply_substitution(
         self, sub: 'concat.typecheck.Substitutions'
     ) -> '_OptionalType':
@@ -1794,8 +1796,6 @@ class GenericTypeKind(Kind):
         )
 
     def __lt__(self, other: Kind) -> bool:
-        if not isinstance(other, Kind):
-            return NotImplemented
         if other is ItemKind:
             return True
         if not isinstance(other, GenericTypeKind):
@@ -1829,8 +1829,6 @@ class Fix(Type):
         return f'Fix({self._var}, {self._body})'
 
     def _apply(self, t: Type) -> Type:
-        from concat.typecheck import Substitutions
-
         if t._type_id not in self._cache:
             sub = Substitutions([(self._var, t)])
             self._cache[t._type_id] = sub(self._body)
@@ -1851,9 +1849,8 @@ class Fix(Type):
     def _free_type_variables(self) -> InsertionOrderedSet[Variable]:
         return self._body.free_type_variables() - {self._var}
 
+    @_sub_cache
     def apply_substitution(self, sub: 'Substitutions') -> Type:
-        from concat.typecheck import Substitutions
-
         if all(v not in self.free_type_variables() for v in sub):
             return self
         sub = Substitutions(
@@ -1869,8 +1866,6 @@ class Fix(Type):
     def constrain_and_bind_variables(
         self, supertype, rigid_variables, subtyping_assumptions
     ) -> 'Substitutions':
-        from concat.typecheck import Substitutions
-
         if supertype._type_id == get_object_type()._type_id or _contains_assumption(
             subtyping_assumptions, self, supertype
         ):
@@ -1909,7 +1904,7 @@ class ForwardTypeReference(Type):
         self,
         kind: Kind,
         name_to_resolve: str,
-        resolution_env: 'Environment',
+        resolution_env: Callable[[], 'Environment'],
         _type_arguments: TypeArguments = (),
     ) -> None:
         super().__init__()
@@ -1920,18 +1915,10 @@ class ForwardTypeReference(Type):
         self._type_arguments = _type_arguments
 
     def _resolve(self) -> Type:
-        ty = self._resolution_env[self._name_to_resolve]
+        ty = self._resolution_env()[self._name_to_resolve]
         if self._type_arguments:
             ty = ty[self._type_arguments]
         return ty
-
-    def _as_hashable_tuple(self) -> tuple:
-        return (
-            self._kind,
-            id(self._resolution_env),
-            self._name_to_resolve,
-            tuple(self._type_arguments),
-        )
 
     def __getitem__(self, args: TypeArguments) -> Type:
         if self._resolved_type is not None:
@@ -1948,7 +1935,7 @@ class ForwardTypeReference(Type):
                         f'Type argument has kind {arg.kind}, expected kind {kind}'
                     )
             return ForwardTypeReference(
-                IndividualKind,
+                self.kind.result_kind,
                 self._name_to_resolve,
                 self._resolution_env,
                 _type_arguments=args,
@@ -1960,6 +1947,7 @@ class ForwardTypeReference(Type):
             self._resolved_type = self._resolve()
         return self._resolved_type
 
+    @_sub_cache
     def apply_substitution(
         self, sub: 'concat.typecheck.Substitutions'
     ) -> Type:
