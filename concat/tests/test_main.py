@@ -13,8 +13,7 @@ import unittest
 
 
 class SupportsReadline(Protocol):
-    def readline(self) -> str:
-        ...
+    def readline(self) -> str: ...
 
 
 if sys.platform == 'win32':
@@ -36,7 +35,10 @@ else:
     def spawn(program: str, *args: str) -> Iterator[SupportsReadline]:
         master, slave = pty.openpty()
         process = subprocess.Popen(
-            [program, *args], stdin=slave, stdout=slave, stderr=slave,
+            [program, *args],
+            stdin=slave,
+            stdout=slave,
+            stderr=slave,
         )
 
         with open(master) as master:
@@ -50,7 +52,12 @@ class TestREPL(unittest.TestCase):
         """Test that the REPL is activated when the input file to `concat` is a tty."""
 
         with spawn(
-            sys.executable, '-m', 'coverage', 'run', '-m', 'concat',
+            sys.executable,
+            '-m',
+            'coverage',
+            'run',
+            '-m',
+            'concat',
         ) as process:
             # TODO: Add a timeout. This will block if there's nothing to read.
             first_line = process.readline()

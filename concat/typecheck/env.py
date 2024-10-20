@@ -1,6 +1,5 @@
 """Typing environments."""
 
-
 from __future__ import annotations
 from collections.abc import Iterator, Mapping
 from concat.orderedset import InsertionOrderedSet

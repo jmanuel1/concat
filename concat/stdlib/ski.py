@@ -1,6 +1,5 @@
 """Combinators are based on the SKI Combinator Calculus and http://tunes.org/~iepos/joy.html"""
 
-
 from concat.stdlib.types import Quotation
 
 

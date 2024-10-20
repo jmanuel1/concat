@@ -4,7 +4,6 @@ The type inference algorithm was originally based on the one described in
 "Robert Kleffner: A Foundation for Typed Concatenative Languages, April 2017."
 """
 
-
 from __future__ import annotations
 from collections.abc import Generator
 from concat.typecheck.env import Environment
@@ -77,14 +76,18 @@ _builtins_stub_path = pathlib.Path(__file__) / '../builtin_stubs/builtins.cati'
 
 
 def load_builtins_and_preamble() -> Environment:
-    env = _check_stub(pathlib.Path(__file__).with_name('preamble0.cati'),)
+    env = _check_stub(
+        pathlib.Path(__file__).with_name('preamble0.cati'),
+    )
     env = _check_stub(_builtins_stub_path, initial_env=env)
     env = _check_stub(
-        pathlib.Path(__file__).with_name('preamble.cati'), initial_env=env,
+        pathlib.Path(__file__).with_name('preamble.cati'),
+        initial_env=env,
     )
     # pick up ModuleType
     return _check_stub(
-        _builtins_stub_path.with_name('types.cati'), initial_env=env,
+        _builtins_stub_path.with_name('types.cati'),
+        initial_env=env,
     )
 
 
@@ -95,7 +98,10 @@ def check(
     _should_check_bodies: bool = True,
 ) -> Environment:
     environment = Environment(
-        {**concat.typecheck.preamble_types.types, **environment,}
+        {
+            **concat.typecheck.preamble_types.types,
+            **environment,
+        }
     )
     res = infer(
         environment,
@@ -537,7 +543,8 @@ def infer(
                 )
             elif isinstance(node, concat.parse.ParseError):
                 current_effect = StackEffect(
-                    current_effect.input, TypeSequence([SequenceVariable()]),
+                    current_effect.input,
+                    TypeSequence([SequenceVariable()]),
                 )
             elif not check_bodies and isinstance(
                 node, concat.parse.ClassdefStatementNode
@@ -578,7 +585,9 @@ def infer(
                 )
                 ty: Type = NominalType(
                     Brand(node.class_name, IndividualKind, []),
-                    ObjectType(attributes=body_attrs,),
+                    ObjectType(
+                        attributes=body_attrs,
+                    ),
                 )
                 if type_parameters:
                     ty = GenericType(
@@ -638,7 +647,8 @@ _module_namespaces: Dict[pathlib.Path, 'Environment'] = {}
 
 
 def _check_stub_resolved_path(
-    path: pathlib.Path, initial_env: Optional['Environment'] = None,
+    path: pathlib.Path,
+    initial_env: Optional['Environment'] = None,
 ) -> 'Environment':
     if path in _module_namespaces:
         return _module_namespaces[path]
@@ -684,7 +694,8 @@ def _check_stub_resolved_path(
 
 
 def _check_stub(
-    path: pathlib.Path, initial_env: Optional['Environment'] = None,
+    path: pathlib.Path,
+    initial_env: Optional['Environment'] = None,
 ) -> 'Environment':
     path = path.resolve()
     return _check_stub_resolved_path(path, initial_env)
@@ -896,13 +907,19 @@ class StackEffectTypeNode(IndividualTypeNode):
         in_types = []
         for item in self.input:
             type, new_env, known_stack_item_names = _ensure_type(
-                item[1], new_env, item[0], known_stack_item_names,
+                item[1],
+                new_env,
+                item[0],
+                known_stack_item_names,
             )
             in_types.append(type)
         out_types = []
         for item in self.output:
             type, new_env, known_stack_item_names = _ensure_type(
-                item[1], new_env, item[0], known_stack_item_names,
+                item[1],
+                new_env,
+                item[0],
+                known_stack_item_names,
             )
             out_types.append(type)
 
@@ -1030,7 +1047,9 @@ class _ObjectTypeNode(IndividualTypeNode):
             attribute_type_mapping[attribute.value] = ty
         # FIXME: Support recursive types in syntax
         return (
-            ObjectType(attributes=attribute_type_mapping,),
+            ObjectType(
+                attributes=attribute_type_mapping,
+            ),
             env,
         )
 
@@ -1200,7 +1219,8 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         return _ForallTypeNode(forall.start, type_variables, ty)
 
     parsers['type-variable'] = concat.parser_combinators.alt(
-        sequence_type_variable_parser, individual_type_variable_parser,
+        sequence_type_variable_parser,
+        individual_type_variable_parser,
     )
 
     parsers['nonparameterized-type'] = concat.parser_combinators.alt(

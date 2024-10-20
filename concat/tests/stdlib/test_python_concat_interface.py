@@ -1,6 +1,7 @@
 """Python-Concat interface tests.
 
 Tests that the boundary between Python and Concat is correct."""
+
 import ast
 import asyncio
 import builtins

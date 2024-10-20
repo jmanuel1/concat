@@ -140,7 +140,9 @@ class Type(abc.ABC):
         )
 
 
-def _sub_cache[T: Type, R](f: Callable[[T, Substitutions], R]) -> Callable[[T, Substitutions], T | R]:
+def _sub_cache[T: Type, R](
+    f: Callable[[T, Substitutions], R],
+) -> Callable[[T, Substitutions], T | R]:
     def apply_substitution(
         self: T, sub: 'concat.typecheck.Substitutions'
     ) -> T | R:
@@ -768,12 +770,10 @@ class TypeSequence(Type, Iterable[Type]):
         return self._rest is None and not self._individual_types
 
     @overload
-    def __getitem__(self, key: int) -> 'StackItemType':
-        ...
+    def __getitem__(self, key: int) -> 'StackItemType': ...
 
     @overload
-    def __getitem__(self, key: slice) -> 'TypeSequence':
-        ...
+    def __getitem__(self, key: slice) -> 'TypeSequence': ...
 
     def __getitem__(self, key: Union[int, slice]) -> Type:
         if isinstance(key, int):
@@ -797,7 +797,9 @@ class TypeSequence(Type, Iterable[Type]):
 # TODO: Rename to StackEffect at all use sites.
 class _Function(IndividualType):
     def __init__(
-        self, input_types: TypeSequence, output_types: TypeSequence,
+        self,
+        input_types: TypeSequence,
+        output_types: TypeSequence,
     ) -> None:
         super().__init__()
         self.input = input_types
@@ -940,7 +942,7 @@ StackItemType = Union[SequenceVariable, IndividualType]
 
 
 def free_type_variables_of_mapping(
-    attributes: Mapping[str, Type]
+    attributes: Mapping[str, Type],
 ) -> InsertionOrderedSet[Variable]:
     ftv: InsertionOrderedSet[Variable] = InsertionOrderedSet([])
     for sigma in attributes.values():
@@ -970,6 +972,7 @@ def _contains_assumption(
 # Aldrich 2008).
 
 # http://reports-archive.adm.cs.cmu.edu/anon/anon/home/ftp/usr0/ftp/2008/CMU-CS-08-120.pdf
+
 
 # not using functools.total_ordering because == should be only identity.
 class Brand:
@@ -1107,7 +1110,8 @@ class ObjectType(IndividualType):
 
     @_sub_cache
     def apply_substitution(
-        self, sub: 'concat.typecheck.Substitutions',
+        self,
+        sub: 'concat.typecheck.Substitutions',
     ) -> 'ObjectType':
         # if no free type vars will be substituted, just return self
         if not any(free_var in sub for free_var in self.free_type_variables()):
@@ -1390,7 +1394,9 @@ class PythonFunctionType(IndividualType):
                 f'Second argument to {self} (the return type) must be an item type'
             )
         return PythonFunctionType(
-            _type_arguments=(input, output), type_parameters=(), _overloads=[],
+            _type_arguments=(input, output),
+            type_parameters=(),
+            _overloads=[],
         )
 
     @_sub_cache
@@ -1517,10 +1523,12 @@ class PythonFunctionType(IndividualType):
                         subtyping_assumptions_copy = subtyping_assumptions[:]
                         self_input_types = overload[0]
                         supertype_input_types = supertype.input
-                        sub = supertype_input_types.constrain_and_bind_variables(
-                            self_input_types,
-                            rigid_variables,
-                            subtyping_assumptions_copy,
+                        sub = (
+                            supertype_input_types.constrain_and_bind_variables(
+                                self_input_types,
+                                rigid_variables,
+                                subtyping_assumptions_copy,
+                            )
                         )
                         sub = sub(self.output).constrain_and_bind_variables(
                             sub(supertype.output),
@@ -1585,9 +1593,7 @@ class _PythonOverloadedType(Type):
         return self
 
     def instantiate(self) -> PythonFunctionType:
-        return self[
-            py_function_type.instantiate(),
-        ]
+        return self[py_function_type.instantiate(),]
 
     def constrain_and_bind_variables(
         self,
@@ -1866,8 +1872,9 @@ class Fix(Type):
     def constrain_and_bind_variables(
         self, supertype, rigid_variables, subtyping_assumptions
     ) -> 'Substitutions':
-        if supertype._type_id == get_object_type()._type_id or _contains_assumption(
-            subtyping_assumptions, self, supertype
+        if (
+            supertype._type_id == get_object_type()._type_id
+            or _contains_assumption(subtyping_assumptions, self, supertype)
         ):
             sub = Substitutions()
             sub.add_subtyping_provenance((self, supertype))

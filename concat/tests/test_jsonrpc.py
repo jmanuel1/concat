@@ -103,10 +103,10 @@ class TestServer(TestCase):
         server = Server()
 
         requests = [
-            '''[
+            """[
             {"jsonrpc": "2.0", "method": "sum", "params": [1,2,4], "id": "1"},
             {"jsonrpc": "2.0", "method"
-        ]'''
+        ]"""
         ]
         responses = list(server.start(requests))
         self.assertEqual(len(responses), 1)
@@ -168,14 +168,14 @@ class TestServer(TestCase):
             return ['hello', 5]
 
         requests = [
-            '''[
+            """[
             {"jsonrpc": "2.0", "method": "sum", "params": [1,2,4], "id": "1"},
             {"jsonrpc": "2.0", "method": "notify_hello", "params": [7]},
             {"jsonrpc": "2.0", "method": "subtract", "params": [42,23], "id": "2"},
             {"foo": "boo"},
             {"jsonrpc": "2.0", "method": "foo.get", "params": {"name": "myself"}, "id": "5"},
             {"jsonrpc": "2.0", "method": "get_data", "id": "9"}
-        ]'''
+        ]"""
         ]
         responses = list(server.start(requests))
         self.assertEqual(len(responses), 1)
@@ -196,10 +196,10 @@ class TestServer(TestCase):
             pass
 
         requests = [
-            '''[
+            """[
             {"jsonrpc": "2.0", "method": "notify_sum", "params": [1,2,4]},
             {"jsonrpc": "2.0", "method": "notify_hello", "params": [7]}
-        ]'''
+        ]"""
         ]
         responses = set(server.start(requests))
         self.assertEqual(responses, set())

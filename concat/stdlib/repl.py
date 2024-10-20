@@ -2,7 +2,6 @@
 
 It is like Factor's listener vocabulary."""
 
-
 import concat
 import concat.astutils
 import concat.typecheck
@@ -136,7 +135,12 @@ def repl(
     stack: List[object], stash: List[object], debug=False, initial_globals={}
 ) -> None:
     _repl_impl(
-        stack, stash, debug, {**initial_globals,},
+        stack,
+        stash,
+        debug,
+        {
+            **initial_globals,
+        },
     )
     print_exit_message()
 
@@ -178,7 +182,9 @@ def _repl_impl(
             try:
                 # FIXME: `stack` might not exist yet if there was no init file.
                 eval(
-                    'concat.stdlib.repl.read_form(stack, [])', globals, locals,
+                    'concat.stdlib.repl.read_form(stack, [])',
+                    globals,
+                    locals,
                 )
             except concat.parser_combinators.ParseError as e:
                 print('Syntax error:\n')

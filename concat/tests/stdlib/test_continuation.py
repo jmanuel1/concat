@@ -112,7 +112,7 @@ class TestContinuationMonad(unittest.TestCase):
     @given(integers(), integers())
     def test_call_with_current_continuation(self, i: int, j: int) -> None:
         def pure_i(
-            _: Callable[[int], ContinuationMonad[int, int]]
+            _: Callable[[int], ContinuationMonad[int, int]],
         ) -> ContinuationMonad[int, int]:
             return ContinuationMonad.pure(i)
 
@@ -123,7 +123,7 @@ class TestContinuationMonad(unittest.TestCase):
         self.assertEqual(cont.run(id), i)
 
         def aborted_mult(
-            k: Callable[[int], ContinuationMonad[int, int]]
+            k: Callable[[int], ContinuationMonad[int, int]],
         ) -> ContinuationMonad[int, int]:
             return k(i).map(lambda x: x * j)
 

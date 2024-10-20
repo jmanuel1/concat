@@ -3,6 +3,7 @@
 Inspired by chumsky:
 https://github.com/zesterer/chumsky/blob/3c8488e5973c287399632a39c56fa3f3ed48d81c/src/recovery.rs.
 """
+
 from concat.parser_combinators import (
     Parser,
     Result,

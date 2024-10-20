@@ -156,9 +156,9 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
         cast(ast.Import, if_statement.body[0]).names[0].asname = node.asname
         targets = cast(ast.Assign, if_statement.body[1]).targets
         qualified_name = astunparse.unparse(targets[0])
-        if_statement.body[
-            1:
-        ] = assign_self_pushing_module_type_to_all_components(qualified_name)
+        if_statement.body[1:] = (
+            assign_self_pushing_module_type_to_all_components(qualified_name)
+        )
         concat.astutils.copy_location(if_statement, node)
         return if_statement
 
@@ -193,7 +193,9 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
 
     @visitors.add_alternative_to('word', 'quote-word')
     @assert_annotated_type
-    def quote_word_visitor(node: concat.parse.QuoteWordNode,) -> ast.Call:
+    def quote_word_visitor(
+        node: concat.parse.QuoteWordNode,
+    ) -> ast.Call:
         """Converts a QuoteWordNode to a Python expression.
 
         This Python expression will be both a sequence and callable."""
@@ -255,7 +257,9 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
 
     @visitors.add_alternative_to('literal-word', 'number-word')
     @assert_annotated_type
-    def number_word_visitor(node: concat.parse.NumberWordNode,) -> ast.expr:
+    def number_word_visitor(
+        node: concat.parse.NumberWordNode,
+    ) -> ast.expr:
         """Converts a NumberWordNode to an ast.expr."""
         num = ast.Num(n=node.value)
         py_node = ast.Call(
@@ -268,7 +272,9 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
 
     @visitors.add_alternative_to('literal-word', 'string-word')
     @assert_annotated_type
-    def string_word_visitor(node: concat.parse.StringWordNode,) -> ast.expr:
+    def string_word_visitor(
+        node: concat.parse.StringWordNode,
+    ) -> ast.expr:
         """Converts a StringWordNode to an ast.expr."""
         string = ast.Str(s=node.value)
         py_node = ast.Call(
@@ -318,7 +324,7 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
     def iterable_word_visitor(
         node: concat.parse.IterableWordNode,
         kind: Type[ast.expr],
-        **kwargs: ast.AST
+        **kwargs: ast.AST,
     ) -> ast.expr:
         """Converts a IterableWordNode to a Python expression.
 
@@ -356,7 +362,9 @@ def extension(visitors: VisitorDict['concat.parse.Node', ast.AST]) -> None:
 
     @visitors.add_alternative_to('literal-word', 'tuple-word')
     @assert_annotated_type
-    def tuple_word_visitor(node: concat.parse.TupleWordNode,) -> ast.expr:
+    def tuple_word_visitor(
+        node: concat.parse.TupleWordNode,
+    ) -> ast.expr:
         """Converts a TupleWordNode to a Python expression."""
         return iterable_word_visitor(node, ast.Tuple, ctx=ast.Load())
 

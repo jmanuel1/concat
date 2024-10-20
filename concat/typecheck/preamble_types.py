@@ -39,6 +39,10 @@ types = {
     'Optional': optional_type,
     'SupportsAbs': GenericType(
         [_a_var],
-        ObjectType({'__abs__': py_function_type[TypeSequence([]), _a_var],},),
+        ObjectType(
+            {
+                '__abs__': py_function_type[TypeSequence([]), _a_var],
+            },
+        ),
     ),
 }

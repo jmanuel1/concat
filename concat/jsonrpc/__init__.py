@@ -72,12 +72,10 @@ class Server:
         self._messages_to_send: List[str] = []
 
     @overload
-    def handle(self, arg: Handler) -> Handler:
-        ...
+    def handle(self, arg: Handler) -> Handler: ...
 
     @overload
-    def handle(self, arg: str) -> Callable[[Handler], Handler]:
-        ...
+    def handle(self, arg: str) -> Callable[[Handler], Handler]: ...
 
     def handle(
         self, arg: Union[str, Handler]
@@ -125,7 +123,10 @@ class Server:
         }
         if parameters is not None:
             message['params'] = parameters
-        string_to_send = json.dumps(message, sort_keys=True,)
+        string_to_send = json.dumps(
+            message,
+            sort_keys=True,
+        )
         self._messages_to_send.append(string_to_send)
 
     def _process_requests(

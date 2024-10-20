@@ -1,4 +1,5 @@
 """Test that the parser accepts valid token streams."""
+
 import concat.parse
 from concat.tests.small_example_programs import examples
 import unittest
