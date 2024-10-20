@@ -372,7 +372,7 @@ class ClassdefStatementNode(StatementNode):
         type_parameters: Iterable[Node] = (),
         is_variadic: bool = False,
     ):
-        children = list(*bases)
+        children = list[Node](*bases)
         children.extend(type_parameters)
         children.extend(map(lambda x: x[1], keyword_args))
         children.extend(decorators)
@@ -465,7 +465,7 @@ def extension(parsers: ParserDict) -> None:
     parsers['string-word'] = token('STRING').map(StringWordNode)
 
     @concat.parser_combinators.generate
-    def quote_word_contents() -> Generator:
+    def quote_word_contents():
         if 'stack-effect-type-sequence' in parsers:
             input_stack_type_parser = parsers[
                 'stack-effect-type-sequence'
@@ -530,7 +530,7 @@ def extension(parsers: ParserDict) -> None:
         delimiter: str, cls: Type[IterableWordNode], desc: str
     ) -> 'concat.parser_combinators.Parser[Token, IterableWordNode]':
         @concat.parser_combinators.generate
-        def parser() -> Generator:
+        def parser():
             location = (yield token('L' + delimiter)).start
             element_words = yield word_list_parser
             end_location = (yield token('R' + delimiter)).end
@@ -599,7 +599,7 @@ def extension(parsers: ParserDict) -> None:
     # type parameter = NAME, COLON, type ;
     # The stack effect syntax is defined within the typecheck module.
     @concat.parser_combinators.generate
-    def funcdef_statement_parser() -> Generator:
+    def funcdef_statement_parser():
         location = (yield token('DEF')).start
         name = yield token('NAME')
         type_params = (yield type_parameters.optional()) or []
@@ -619,7 +619,7 @@ def extension(parsers: ParserDict) -> None:
         )
 
     @concat.parser_combinators.generate
-    def type_parameter() -> Generator:
+    def type_parameter():
         name = yield token('NAME')
         yield token('COLON')
         ty = yield parsers['type']
@@ -671,7 +671,7 @@ def extension(parsers: ParserDict) -> None:
     # relative module = DOT*, module | DOT+ ;
 
     @concat.parser_combinators.generate('import statement')
-    def import_statement_parser() -> Generator:
+    def import_statement_parser():
         location = (yield token('IMPORT')).start
         module_name = yield module
         asname_parser = token('NAME').map(operator.attrgetter('value'))
@@ -689,7 +689,7 @@ def extension(parsers: ParserDict) -> None:
         return (yield (dot.many().concat() + module) | dot.at_least(1))
 
     @concat.parser_combinators.generate('from-import statement')
-    def from_import_statement_parser() -> Generator:
+    def from_import_statement_parser():
         location = (yield token('FROM')).start
         module = yield relative_module
         name_parser = token('NAME').map(operator.attrgetter('value'))
@@ -706,7 +706,7 @@ def extension(parsers: ParserDict) -> None:
     parsers['import-statement'] |= from_import_statement_parser
 
     @concat.parser_combinators.generate('from-import-star statement')
-    def from_import_star_statement_parser() -> Generator:
+    def from_import_star_statement_parser():
         location = (yield token('FROM')).start
         module_name = yield module
         yield token('IMPORT')
@@ -784,7 +784,7 @@ def extension(parsers: ParserDict) -> None:
     )
 
     @concat.parser_combinators.generate('internal pragma')
-    def pragma_parser() -> Generator:
+    def pragma_parser():
         """This parses a pragma for internal use.
 
         pragma = EXCLAMATIONMARK, @, @, qualified name+
@@ -805,7 +805,7 @@ def extension(parsers: ParserDict) -> None:
     parsers['word'] |= parsers.ref_parser('cast-word')
 
     @concat.parser_combinators.generate
-    def cast_word_parser() -> Generator:
+    def cast_word_parser():
         location = (yield token('CAST')).start
         yield token('LPAR')
         type_ast = yield parsers['type']
@@ -852,7 +852,7 @@ def handle_recovery(
 ) -> Sequence[Node]:
     if (
         isinstance(x, tuple)
-        and len(x) > 1
+        and len(x) == 2
         and isinstance(x[1], concat.parser_combinators.Result)
     ):
         return [ParseError(x[1])]
