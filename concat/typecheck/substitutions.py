@@ -33,6 +33,8 @@ class _Substitutable(Protocol[_Result]):
 
 
 class Substitutions(Mapping['Variable', 'Type']):
+    """Substitutions of type variables with types."""
+
     __next_id = 0
 
     def __init__(

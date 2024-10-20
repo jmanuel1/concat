@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 
 
 class Environment(Mapping[str, 'Type']):
+    """A map from names in a typing context to the types of those names."""
+
     def __init__(self, env: Optional[Mapping[str, Type]] = None) -> None:
         self._env = env or {}
         self._sub_cache = dict[int, Environment]()
