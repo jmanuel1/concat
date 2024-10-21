@@ -96,7 +96,10 @@ _individual_type_strategy = recursive(
         PythonFunctionType,
     )
     | _mark_individual_type_strategy(
-        builds(lambda args: optional_type[args], tuples(children),),
+        builds(
+            lambda args: optional_type[args],
+            tuples(children),
+        ),
         type(optional_type[ObjectType({}),]),
     ),
     max_leaves=50,

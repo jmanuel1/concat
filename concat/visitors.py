@@ -26,8 +26,7 @@ _ReturnType2 = TypeVar('_ReturnType2')
 
 class _InternalNode(Protocol[_NodeType1_co]):
     @property
-    def children(self) -> Iterable[_NodeType1_co]:
-        ...
+    def children(self) -> Iterable[_NodeType1_co]: ...
 
 
 class VisitFailureException(Exception):
@@ -204,7 +203,7 @@ def assert_type(type: Type[object]) -> Visitor[object, None]:
 
 
 def assert_annotated_type(
-    fun: Callable[[Any], _ReturnType1]
+    fun: Callable[[Any], _ReturnType1],
 ) -> Visitor[object, _ReturnType1]:
     arg_name = [name for name in fun.__annotations__ if name != 'return'][0]
     type = fun.__annotations__[arg_name]
@@ -242,8 +241,7 @@ class VisitorDict(Dict[str, Visitor[_NodeType1, _ReturnType1]]):
         self, choice_name: str, alternative_name: str
     ) -> Callable[
         [Visitor[_NodeType1, _ReturnType1]], Visitor[_NodeType1, _ReturnType1]
-    ]:
-        ...
+    ]: ...
 
     @overload
     def add_alternative_to(
@@ -251,8 +249,7 @@ class VisitorDict(Dict[str, Visitor[_NodeType1, _ReturnType1]]):
         choice_name: str,
         alternative_name: str,
         visitor: Visitor[_NodeType1, _ReturnType1],
-    ) -> None:
-        ...
+    ) -> None: ...
 
     def add_alternative_to(
         self,

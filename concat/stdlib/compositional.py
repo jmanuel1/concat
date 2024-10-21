@@ -1,6 +1,5 @@
 """Compositional combinators are based on those of RetroForth."""
 
-
 from concat.stdlib.types import Quotation
 
 

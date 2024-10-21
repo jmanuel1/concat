@@ -25,8 +25,7 @@ from typing_extensions import Protocol
 
 
 class _SupportsPlus(Protocol):
-    def __add__(self, other: '_SupportsPlus') -> '_SupportsPlus':
-        ...
+    def __add__(self, other: '_SupportsPlus') -> '_SupportsPlus': ...
 
 
 T = TypeVar('T')
@@ -388,7 +387,9 @@ class Parser(Generic[_T_contra, _U_co]):
                 result.current_index,
                 False,
                 FailureTree(
-                    'end of input', result.current_index, failure_children,
+                    'end of input',
+                    result.current_index,
+                    failure_children,
                 ),
             )
         if result.is_success:
@@ -467,21 +468,20 @@ ParserGeneratingFunction = Callable[[], Generator[Parser[T, Any], Any, V]]
 @overload
 def generate(
     desc_or_generator: str,
-) -> Callable[[ParserGeneratingFunction[T, V]], Parser[T, V]]:
-    ...
+) -> Callable[[ParserGeneratingFunction[T, V]], Parser[T, V]]: ...
 
 
 @overload
 def generate(
-    desc_or_generator: ParserGeneratingFunction[T, V]
-) -> Parser[T, V]:
-    ...
+    desc_or_generator: ParserGeneratingFunction[T, V],
+) -> Parser[T, V]: ...
 
 
 def generate(
-    desc_or_generator: Union[str, ParserGeneratingFunction[T, V]]
+    desc_or_generator: Union[str, ParserGeneratingFunction[T, V]],
 ) -> Union[
-    Callable[[ParserGeneratingFunction[T, V]], Parser[T, V]], Parser[T, V],
+    Callable[[ParserGeneratingFunction[T, V]], Parser[T, V]],
+    Parser[T, V],
 ]:
     if isinstance(desc_or_generator, str):
         return lambda generator: generate(generator).desc(desc_or_generator)

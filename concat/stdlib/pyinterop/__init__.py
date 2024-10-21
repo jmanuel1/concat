@@ -1,4 +1,5 @@
 """Concat-Python interoperation helpers."""
+
 from concat.common_types import ConcatFunction
 import concat.stdlib.ski
 import builtins
@@ -268,7 +269,7 @@ def import_advanced(stack: List[object], stash: List[object]) -> None:
 
 
 def map(stack: List[object], stash: List[object]) -> None:
-    'f iterable -- map(f, iterable)'
+    """f iterable -- map(f, iterable)"""
     iterable = cast(Iterable[object], stack.pop())
     f = cast(ConcatFunction, stack.pop())
 
@@ -281,12 +282,12 @@ def map(stack: List[object], stash: List[object]) -> None:
 
 
 def open(stack: List[object], stash: List[object]) -> None:
-    'kwargs -- open(**kwargs)'  # open has a lot of arguments
+    """kwargs -- open(**kwargs)"""  # open has a lot of arguments
     stack.append(builtins.open(**cast(Mapping[str, Any], stack.pop())))
 
 
 def popen(stack: List[object], stash: List[object]) -> None:
-    'buffering mode cmd -- subprocess.popen(cmd, mode, buffering)'
+    """buffering mode cmd -- subprocess.popen(cmd, mode, buffering)"""
     cmd = cast(str, stack.pop())
     mode = cast(Optional[str], stack.pop())
     buffering = cast(Optional[int], stack.pop())
@@ -295,7 +296,7 @@ def popen(stack: List[object], stash: List[object]) -> None:
 
 
 def fdopen(stack: List[object], stash: List[object]) -> None:
-    'kwargs fd -- os.fdopen(fd, **kwargs)'  # fdopen has a lot of arguments
+    """kwargs fd -- os.fdopen(fd, **kwargs)"""  # fdopen has a lot of arguments
     stack.append(
         os.fdopen(
             cast(int, stack.pop()), **cast(Mapping[str, Any], stack.pop())

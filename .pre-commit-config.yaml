@@ -1,9 +1,9 @@
 repos:
   - repo: local
     hooks:
-      - id: axblack
-        name: axblack
-        description: Run Axblack on Python code (fork of Black).
-        entry: black --line-length 79
+      - id: ruff-format
+        name: ruff format
+        description: Run `ruff format` on Python code.
+        entry: ruff format
         language: system
         types: [python]

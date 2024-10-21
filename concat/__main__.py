@@ -1,6 +1,5 @@
 """The Concat Implementation."""
 
-
 import argparse
 from concat.transpile import parse, transpile_ast, typecheck
 from concat.error_reporting import get_line_at, create_parsing_failure_message

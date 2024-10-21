@@ -83,14 +83,14 @@ class Server:
                 _logger.info('{!r}', headers)
                 if not self._charset_regex.search(content_type):
                     _logger.error('unsupported charset')
-                    error_json = '''{
+                    error_json = """{
                         "jsonrpc": "2.0",
                         "error": {
                             "code": -32600,
                             "message": "Request body must be encoded in UTF-8"
                         },
                         "id": null
-                    }'''
+                    }"""
                     error_json_length = len(
                         error_json.encode(encoding='utf-8')
                     )
@@ -116,7 +116,10 @@ class Server:
                 response=response,
             )
             headers_response_file.writelines(
-                [f'Content-Length: {response_length}\n', '\n',]
+                [
+                    f'Content-Length: {response_length}\n',
+                    '\n',
+                ]
             )
             content_response_file.write(response)
             responses.flush()

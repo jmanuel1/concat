@@ -2,9 +2,6 @@
 
 On Extensibility:
 
-The parser uses parsy, a parser combinator library. A custom parser
-primitive is used to call the lexer.
-
 - The extension mechanism:
 Assume there is an existing word parser, like:
 
@@ -18,6 +15,7 @@ extendedParsers = parsers.extend_with(word_ext)
 The parsers object is a dictionary with a few methods:
 extend_with(extension) -- mutates the dictionary by adding the extension
 """
+
 from __future__ import annotations
 import abc
 import ast
@@ -413,9 +411,9 @@ def extension(parsers: ParserDict) -> None:
     #   ENCODING, (word | statement | NEWLINE)*, [ NEWLINE ],
     #   ENDMARKER ;
     @concat.parser_combinators.generate
-    def top_level_parser() -> Generator[
-        concat.parser_combinators.Parser, Any, TopLevelNode
-    ]:
+    def top_level_parser() -> (
+        Generator[concat.parser_combinators.Parser, Any, TopLevelNode]
+    ):
         encoding = yield token('ENCODING')
         newline = token('NEWLINE')
         statement = parsers['statement']
@@ -479,9 +477,9 @@ def extension(parsers: ParserDict) -> None:
     # This parses a quotation.
     # quote word = LPAR, word*, RPAR ;
     @concat.parser_combinators.generate('quote word')
-    def quote_word_parser() -> Generator[
-        concat.parser_combinators.Parser, Any, QuoteWordNode
-    ]:
+    def quote_word_parser() -> (
+        Generator[concat.parser_combinators.Parser, Any, QuoteWordNode]
+    ):
         lpar = yield token('LPAR')
         input_stack_type = None
         children = yield recover(
@@ -847,8 +845,9 @@ def extension(parsers: ParserDict) -> None:
 
 def handle_recovery(
     x: Union[
-        Sequence[Node], Tuple[Any, concat.parser_combinators.Result[Any]],
-    ]
+        Sequence[Node],
+        Tuple[Any, concat.parser_combinators.Result[Any]],
+    ],
 ) -> Sequence[Node]:
     if (
         isinstance(x, tuple)

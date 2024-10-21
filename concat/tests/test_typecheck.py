@@ -105,7 +105,10 @@ class TestTypeChecker(unittest.TestCase):
         tree = parse(try_prog)
         _, type, _ = concat.typecheck.infer(
             concat.typecheck.Environment(
-                {**default_env, **concat.typecheck.preamble_types.types,}
+                {
+                    **default_env,
+                    **concat.typecheck.preamble_types.types,
+                }
             ),
             tree.children,
             is_top_level=True,
@@ -159,14 +162,17 @@ class TestTypeChecker(unittest.TestCase):
         stricter than what would be inferred without the annotation."""
         tree = parse(
             dedent(
-                '''\
+                """\
                     def seek_file(file:file offset:int whence:int --):
                         swap [(), (),] [,] swap pick $.seek py_call drop drop
-                '''
+                """
             )
         )
         env = concat.typecheck.Environment(
-            {**default_env, **concat.typecheck.preamble_types.types,}
+            {
+                **default_env,
+                **concat.typecheck.preamble_types.types,
+            }
         )
         concat.typecheck.infer(env, tree.children, None, True)
         # If we get here, we passed
@@ -202,7 +208,13 @@ class TestStackEffectParser(unittest.TestCase):
             TypeSequence([_a_bar, _b]), TypeSequence([_a_bar])
         ),
         'a:object b:object -- b a': StackEffect(
-            TypeSequence([_a_bar, get_object_type(), get_object_type(),]),
+            TypeSequence(
+                [
+                    _a_bar,
+                    get_object_type(),
+                    get_object_type(),
+                ]
+            ),
             TypeSequence([_a_bar, *[get_object_type()] * 2]),
         ),
         'a:`t -- a a': StackEffect(
@@ -243,7 +255,8 @@ class TestStackEffectParser(unittest.TestCase):
                 print(str(actual))
                 print(str(expected))
                 self.assertEqual(
-                    actual, expected,
+                    actual,
+                    expected,
                 )
 
 
@@ -336,7 +349,9 @@ class TestSubtyping(unittest.TestCase):
         )
 
     __attributes_generator = dictionaries(
-        text(max_size=25), from_type(IndividualType), max_size=5  # type: ignore
+        text(max_size=25),
+        from_type(IndividualType),
+        max_size=5,  # type: ignore
     )
 
     @given(__attributes_generator, __attributes_generator)
@@ -426,9 +441,7 @@ class TestSubtyping(unittest.TestCase):
 
     @given(from_type(IndividualType))
     def test_none_subtype_of_optional(self, ty: IndividualType) -> None:
-        opt_ty = optional_type[
-            ty,
-        ]
+        opt_ty = optional_type[ty,]
         self.assertEqual(
             get_none_type().constrain_and_bind_variables(opt_ty, set(), []),
             Substitutions(),
@@ -436,9 +449,7 @@ class TestSubtyping(unittest.TestCase):
 
     @given(from_type(IndividualType))
     def test_type_subtype_of_optional(self, ty: IndividualType) -> None:
-        opt_ty = optional_type[
-            ty,
-        ]
+        opt_ty = optional_type[ty,]
         self.assertEqual(
             ty.constrain_and_bind_variables(opt_ty, set(), []), Substitutions()
         )

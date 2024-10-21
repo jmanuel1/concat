@@ -2,23 +2,22 @@
 
 We do not borrow Factor's deprecated 'complex' shuffle words."""
 
-
 from typing import List
 
 
 def drop(stack: List[object], stash: List[object]) -> None:
-    """x -- """
+    """x --"""
     stack.pop()
 
 
 def drop_2(stack: List[object], stash: List[object]) -> None:
-    """x y -- """
+    """x y --"""
     stack.pop()
     stack.pop()
 
 
 def drop_3(stack: List[object], stash: List[object]) -> None:
-    """x y z -- """
+    """x y z --"""
     stack.pop()
     stack.pop()
     stack.pop()

@@ -89,7 +89,7 @@ def call_with_current_continuation(
     f = cast(Callable[[List[object], List[object]], None], stack.pop())
 
     def python_function(
-        k: Callable[[_B], ContinuationMonad[_R, _C]]
+        k: Callable[[_B], ContinuationMonad[_R, _C]],
     ) -> ContinuationMonad[_R, _B]:
         def concat_function(stack: List[object], _: List[object]) -> None:
             stack.append(k(cast(_B, stack.pop())))

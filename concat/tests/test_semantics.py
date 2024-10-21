@@ -23,7 +23,9 @@ ProgramFragmentAndEffect = Tuple[ProgramFragment, List[object], List[object]]
 
 
 @composite
-def program(draw,) -> ProgramFragmentAndEffect[concat.parse.TopLevelNode]:
+def program(
+    draw,
+) -> ProgramFragmentAndEffect[concat.parse.TopLevelNode]:
     children, stack, stash = draw(suite([], []))
     return concat.parse.TopLevelNode(Token(), children), stack, stash
 
@@ -164,10 +166,17 @@ def static_push(
     init_stash: List[object],
 ) -> Tuple[List[object], List[object]]:
     if isinstance(
-        word, (concat.parse.NumberWordNode, concat.parse.StringWordNode,),
+        word,
+        (
+            concat.parse.NumberWordNode,
+            concat.parse.StringWordNode,
+        ),
     ):
         literal_node = cast(
-            Union[concat.parse.NumberWordNode, concat.parse.StringWordNode,],
+            Union[
+                concat.parse.NumberWordNode,
+                concat.parse.StringWordNode,
+            ],
             word,
         )
         return (
