@@ -670,12 +670,14 @@ def _check_stub_resolved_path(
             if r.type == 'token':
                 tokens.append(r.token)
             elif r.type == 'indent-err':
+                print('Indentation error:')
                 print(
                     create_indentation_error_message(
                         f, (r.err.lineno or 1, r.err.offset or 0), r.err.msg
                     )
                 )
             elif r.type == 'token-err':
+                print('Lexical error:')
                 print(create_lexical_error_message(f, r.location, str(r.err)))
             else:
                 assert_never(r)
