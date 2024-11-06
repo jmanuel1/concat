@@ -44,7 +44,7 @@ default_env = concat.typecheck.load_builtins_and_preamble()
 
 
 def lex_string(string: str) -> List[concat.lex.Token]:
-    return lex.tokenize(string)
+    return [r.token for r in lex.tokenize(string) if r.type == 'token']
 
 
 def parse(string: str) -> concat.parse.TopLevelNode:

@@ -23,6 +23,10 @@ from typing import Any, List, Dict, Optional, Set, Callable, NoReturn, cast
 sys.modules[__name__].__class__ = concat.stdlib.importlib.Module
 
 
+class _REPLTokenizeError(Exception):
+    pass
+
+
 def _tokenize(code: str) -> List[concat.lex.Token]:
     lexer = concat.lex.Lexer()
     lexer.input(code)
@@ -31,7 +35,9 @@ def _tokenize(code: str) -> List[concat.lex.Token]:
         token = lexer.token()
         if token is None:
             break
-        tokens.append(token)
+        if token.type != 'token':
+            raise _REPLTokenizeError from token.err
+        tokens.append(token.token)
     return tokens
 
 
@@ -191,6 +197,9 @@ def _repl_impl(
                 print(e)
             except concat.execute.ConcatRuntimeError as e:
                 print('Runtime error:\n')
+                print(e)
+            except _REPLTokenizeError as e:
+                print('Lexical error:\n')
                 print(e)
             except EOFError:
                 break

@@ -1,9 +1,10 @@
-import concat.astutils
+from __future__ import annotations
+from concat.astutils import Location, are_on_same_line_and_offset_by
 import dataclasses
 import io
 import json
 import tokenize as py_tokenize
-from typing import Iterator, List, Optional, Tuple, Union
+from typing import Iterator, List, Literal, Optional, Tuple, Union
 
 
 @dataclasses.dataclass
@@ -19,8 +20,8 @@ class Token:
 
     type: str = ''
     value: str = ''
-    start: 'concat.astutils.Location' = (0, 0)
-    end: 'concat.astutils.Location' = (0, 0)
+    start: Location = (0, 0)
+    end: Location = (0, 0)
     is_keyword: bool = False
 
 
@@ -33,7 +34,10 @@ class TokenEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-def tokenize(code: str, should_preserve_comments: bool = False) -> List[Token]:
+def tokenize(
+    code: str,
+    should_preserve_comments: bool = False,
+) -> List[Result]:
     lexer = Lexer()
     lexer.input(code, should_preserve_comments)
     tokens = []
@@ -46,10 +50,8 @@ def tokenize(code: str, should_preserve_comments: bool = False) -> List[Token]:
 
 
 TokenTuple = Union[
-    Tuple[str, str, 'concat.astutils.Location', 'concat.astutils.Location'],
-    Tuple[
-        str, str, 'concat.astutils.Location', 'concat.astutils.Location', bool
-    ],
+    Tuple[str, str, Location, Location],
+    Tuple[str, str, Location, Location, bool],
 ]
 
 
@@ -64,7 +66,7 @@ class Lexer:
         self.tokens: Optional[Iterator[py_tokenize.TokenInfo]]
         self.lineno: int
         self.lexpos: int
-        self._concat_token_iterator: Iterator['Token']
+        self._concat_token_iterator: Iterator[Result]
         self._should_preserve_comments: bool
 
     def input(self, data: str, should_preserve_comments: bool = False) -> None:
@@ -76,11 +78,11 @@ class Lexer:
         self._concat_token_iterator = self._tokens()
         self._should_preserve_comments = should_preserve_comments
 
-    def token(self) -> Optional['Token']:
+    def token(self) -> Optional[Result]:
         """Return the next token as a Token object."""
         return next(self._concat_token_iterator, None)
 
-    def _tokens(self) -> Iterator['Token']:
+    def _tokens(self) -> Iterator[Result]:
         import token
 
         if self.tokens is None:
@@ -88,8 +90,16 @@ class Lexer:
                 io.BytesIO(self.data.encode('utf-8')).readline
             )
 
-        glued_token_prefix = None
-        for token_ in self.tokens:
+        glued_token_prefix: Token | None = None
+        while True:
+            try:
+                token_ = next(self.tokens)
+            except StopIteration:
+                return
+            except IndentationError as e:
+                yield IndentationErrorResult(e)
+            except py_tokenize.TokenError as e:
+                yield TokenErrorResult(e, (self.lineno, self.lexpos))
             tok = Token()
             _, tok.value, tok.start, tok.end, _ = token_
             tok.type = token.tok_name[token_.exact_type]
@@ -98,7 +108,7 @@ class Lexer:
                 if (
                     glued_token_prefix.value == '-'
                     and tok.value == '-'
-                    and concat.astutils.are_on_same_line_and_offset_by(
+                    and are_on_same_line_and_offset_by(
                         glued_token_prefix.start, tok.start, 1
                     )
                 ):
@@ -106,7 +116,7 @@ class Lexer:
                     glued_token_prefix.type = 'MINUSMINUS'
                     glued_token_prefix.end = tok.end
                     self._update_position(glued_token_prefix)
-                    yield glued_token_prefix
+                    yield TokenResult(glued_token_prefix)
                     glued_token_prefix = None
                     continue
                 else:
@@ -119,7 +129,7 @@ class Lexer:
                         self._should_preserve_comments
                         and tok.type == 'COMMENT'
                     ):
-                        yield tok
+                        yield TokenResult(tok)
                     continue
                 elif tok.type == 'ERRORTOKEN':
                     if tok.value == ' ':
@@ -182,15 +192,48 @@ class Lexer:
                 elif tok.type == 'EXCLAMATION':
                     tok.type = 'EXCLAMATIONMARK'
 
-                yield tok
+                yield TokenResult(tok)
 
     def _update_position(self, tok: 'Token') -> None:
-        self.lexpos += len(tok.value)
-        if tok.type in {'NEWLINE', 'NL'}:
-            self.lineno += 1
+        self.lineno, self.lexpos = tok.start
 
     def __is_bytes_literal(self, literal: str) -> bool:
         return isinstance(eval(literal), bytes)
+
+
+@dataclasses.dataclass
+class TokenResult:
+    type: Literal['token']
+    token: Token
+
+    def __init__(self, token: Token) -> None:
+        self.type = 'token'
+        self.token = token
+
+
+@dataclasses.dataclass
+class IndentationErrorResult:
+    type: Literal['indent-err']
+    err: IndentationError
+
+    def __init__(self, err: IndentationError) -> None:
+        self.type = 'indent-err'
+        self.err = err
+
+
+@dataclasses.dataclass
+class TokenErrorResult:
+    type: Literal['token-err']
+    err: py_tokenize.TokenError
+    location: Location
+
+    def __init__(self, err: py_tokenize.TokenError, loc: Location) -> None:
+        self.type = 'token-err'
+        self.err = err
+        self.location = loc
+
+
+type Result = TokenResult | IndentationErrorResult | TokenErrorResult
 
 
 def to_tokens(*tokTuples: TokenTuple) -> List[Token]:

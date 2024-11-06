@@ -28,6 +28,7 @@ from typing import (
     TYPE_CHECKING,
     Tuple,
     Union,
+    assert_never,
     cast,
 )
 from concat.typecheck.types import (
@@ -58,7 +59,11 @@ from concat.typecheck.types import (
     no_return_type,
 )
 import abc
-from concat.error_reporting import create_parsing_failure_message
+from concat.error_reporting import (
+    create_indentation_error_message,
+    create_lexical_error_message,
+    create_parsing_failure_message,
+)
 from concat.lex import Token
 import itertools
 import pathlib
@@ -658,7 +663,22 @@ def _check_stub_resolved_path(
         raise TypeError(f'Type stubs at {path} do not exist') from e
     except IOError as e:
         raise TypeError(f'Failed to read type stubs at {path}') from e
-    tokens = concat.lex.tokenize(source)
+    token_results = concat.lex.tokenize(source)
+    tokens = list[Token]()
+    with path.open() as f:
+        for r in token_results:
+            if r.type == 'token':
+                tokens.append(r.token)
+            elif r.type == 'indent-err':
+                print(
+                    create_indentation_error_message(
+                        f, (r.err.lineno or 1, r.err.offset or 0), r.err.msg
+                    )
+                )
+            elif r.type == 'token-err':
+                print(create_lexical_error_message(f, r.location, str(r.err)))
+            else:
+                assert_never(r)
     env = initial_env or Environment()
     from concat.transpile import parse
 
