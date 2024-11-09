@@ -731,7 +731,9 @@ class TestIntoConcatFromPython(unittest.TestCase):
             token = lexer.token()
             if token is None:
                 break
-            tokens.append(token)
+            if token.type != 'token':
+                raise token.err
+            tokens.append(token.token)
         parser = concat.parse.ParserDict()
         parser.extend_with(concat.parse.extension)
         concat_ast = parser.parse(tokens)

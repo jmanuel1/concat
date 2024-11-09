@@ -2,7 +2,12 @@
 
 import argparse
 from concat.transpile import parse, transpile_ast, typecheck
-from concat.error_reporting import get_line_at, create_parsing_failure_message
+from concat.error_reporting import (
+    get_line_at,
+    create_indentation_error_message,
+    create_lexical_error_message,
+    create_parsing_failure_message,
+)
 import concat.execute
 import concat.lex
 import concat.parser_combinators
@@ -11,7 +16,7 @@ import concat.typecheck
 import json
 import os.path
 import sys
-from typing import Callable, IO, AnyStr
+from typing import Callable, IO, AnyStr, assert_never
 
 
 filename = '<stdin>'
@@ -52,28 +57,39 @@ arg_parser.add_argument(
     '--tokenize',
     action='store_true',
     default=False,
-    help='tokenize input from the given file and print the tokens as a JSON array',
+    help=(
+        'tokenize input from the given file and print the tokens as a JSON '
+        'array'
+    ),
 )
 
-# We should pass any unknown args onto the program we're about to run.
-# FIXME: There might be a better way to go about this, but I think this is fine
-# for now.
-args, rest = arg_parser.parse_known_args()
-sys.argv = [sys.argv[0], *rest]
+
+def tokenize_printing_errors() -> list[concat.lex.Token]:
+    token_results = concat.lex.tokenize(args.file.read())
+    tokens = list[concat.lex.Token]()
+    for r in token_results:
+        if r.type == 'token':
+            tokens.append(r.token)
+        elif r.type == 'indent-err':
+            position = (r.err.lineno or 1, r.err.offset or 0)
+            message = r.err.msg
+            print('Indentation error:')
+            print(
+                create_indentation_error_message(args.file, position, message)
+            )
+        elif r.type == 'token-err':
+            position = r.location
+            message = str(r.err)
+            print('Lexical error:')
+            print(create_lexical_error_message(args.file, position, message))
+        else:
+            assert_never(r)
+    return tokens
 
 
-if args.tokenize:
-    code = args.file.read()
-    tokens = concat.lex.tokenize(code, should_preserve_comments=True)
-    json.dump(tokens, sys.stdout, cls=concat.lex.TokenEncoder)
-    sys.exit()
-
-# interactive mode
-if args.file.isatty():
-    concat.stdlib.repl.repl([], [], args.debug)
-else:
+def batch_main():
     try:
-        tokens = concat.lex.tokenize(args.file.read())
+        tokens = tokenize_printing_errors()
         concat_ast = parse(tokens)
         recovered_parsing_failures = concat_ast.parsing_failures
         for failure in recovered_parsing_failures:
@@ -121,3 +137,26 @@ else:
             sys.exit(1)
     finally:
         args.file.close()
+
+
+def main():
+    # interactive mode
+    if args.file.isatty():
+        concat.stdlib.repl.repl([], [], args.debug)
+    else:
+        batch_main()
+
+
+# We should pass any unknown args onto the program we're about to run.
+# FIXME: There might be a better way to go about this, but I think this is fine
+# for now.
+args, rest = arg_parser.parse_known_args()
+sys.argv = [sys.argv[0], *rest]
+
+if args.tokenize:
+    code = args.file.read()
+    tokens = concat.lex.tokenize(code, should_preserve_comments=True)
+    json.dump(tokens, sys.stdout, cls=concat.lex.TokenEncoder)
+    sys.exit()
+
+main()

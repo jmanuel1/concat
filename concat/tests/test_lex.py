@@ -1,5 +1,6 @@
 import concat.lex as lex
 from concat.tests.small_example_programs import examples
+import textwrap
 import unittest
 
 
@@ -32,6 +33,23 @@ class TestSmallExamples(unittest.TestCase):
                     tokens.append(token)
 
                 self.assertEqual(len(tokens), len(expected_tokens))
-                expectationPairs = zip(tokens, expected_tokens)
+                expectationPairs = zip(
+                    tokens, map(lex.TokenResult, expected_tokens)
+                )
                 for actual_token, expected_token in expectationPairs:
                     self.assertEqual(actual_token, expected_token)
+
+    @staticmethod
+    def test_indentation_error() -> None:
+        code = textwrap.dedent("""\
+            def remove_stack_polymorphism(
+                f:forall `t *s. (*s i:`t -- *s) -- g:forall `t. (i:`t -- )
+            ):
+              ()
+             dfbfdbff""")
+        lexer = lex.Lexer()
+        lexer.input(code)
+        while True:
+            token = lexer.token()
+            if token is None:
+                break

@@ -1,8 +1,8 @@
 from concat.astutils import Location
 import concat.jsonrpc
-from concat.lex import tokenize
+from concat.lex import Token, tokenize
 from concat.logging import ConcatLogger
-from concat.parse import ParseError
+from concat.parser_combinators import ParseError
 from concat.transpile import parse, typecheck
 from concat.typecheck import StaticAnalysisError
 from enum import Enum, IntEnum
@@ -10,7 +10,6 @@ from io import TextIOWrapper
 import logging
 from pathlib import Path
 import re
-import tokenize as py_tokenize
 from typing import (
     BinaryIO,
     Callable,
@@ -411,14 +410,26 @@ class _TextDocumentItem:
 
     def _diagnose(self) -> List[_Diagnostic]:
         text_lines = self._text.splitlines(keepends=True)
-        try:
-            tokens = tokenize(self._text)
-        except py_tokenize.TokenError as e:
-            message = e.args[0]
-            position = _Position.from_tokenizer_location(text_lines, e.args[1])
-            range_ = _Range(position, position)
-            return [_Diagnostic(range_, message)]
+        token_results = tokenize(self._text)
         diagnostics = []
+        tokens = list[Token]()
+        for r in token_results:
+            if r.type == 'token':
+                tokens.append(r.token)
+            elif r.type == 'indent-err':
+                position = _Position.from_tokenizer_location(
+                    text_lines, (r.err.lineno or 1, r.err.offset or 0)
+                )
+                range_ = _Range(position, position)
+                message = r.err.msg
+                diagnostics.append(_Diagnostic(range_, message))
+            elif r.type == 'token-err':
+                position = _Position.from_tokenizer_location(
+                    text_lines, r.location
+                )
+                range_ = _Range(position, position)
+                message = str(r.err)
+                diagnostics.append(_Diagnostic(range_, message))
         for token in tokens:
             if token.type == 'ERRORTOKEN':
                 _logger.debug('error token: {token!r}', token=token)
@@ -436,19 +447,21 @@ class _TextDocumentItem:
                 diagnostics.append(_Diagnostic(range_, message))
         try:
             ast = parse(tokens)
+            ast.assert_no_parse_errors()
         except ParseError as e:
-            parser_start_position = e.get_start_position()
-            parser_end_position = e.get_end_position()
-            range_ = _Range(
-                _Position.from_tokenizer_location(
-                    text_lines, parser_start_position
-                ),
-                _Position.from_tokenizer_location(
-                    text_lines, parser_end_position
-                ),
-            )
-            message = f'Expected one of: {", ".join(e.expected)}'
-            diagnostics.append(_Diagnostic(range_, message))
+            for failure in e.args[0].failures:
+                parser_start_position = tokens[failure.furthest_index].start
+                parser_end_position = parser_start_position
+                range_ = _Range(
+                    _Position.from_tokenizer_location(
+                        text_lines, parser_start_position
+                    ),
+                    _Position.from_tokenizer_location(
+                        text_lines, parser_end_position
+                    ),
+                )
+                message = f'Expected one of: {failure.expected}'
+                diagnostics.append(_Diagnostic(range_, message))
             return diagnostics
         try:
             # https://stackoverflow.com/questions/5977576/is-there-a-convenient-way-to-map-a-file-uri-to-os-path
