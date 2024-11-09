@@ -35,7 +35,12 @@ def create_lexical_error_message(
     file: TextIO, location: concat.astutils.Location, message: str
 ) -> str:
     line = get_line_at(file, location)
-    message = f'Cannot tokenize file at line {location[0]}, column {location[1] + 1}:\n{line.rstrip()}\n{' ' * location[1] + '^'}\n'
+    message = (
+        f'Cannot tokenize file at line {location[0]}, '
+        f'column {location[1] + 1}:\n'
+        f'{line.rstrip()}\n'
+        f'{' ' * location[1] + '^'}\n'
+    )
     return message
 
 
@@ -43,5 +48,9 @@ def create_indentation_error_message(
     file: TextIO, location: concat.astutils.Location, message: str
 ) -> str:
     line = get_line_at(file, location)
-    message = f'Malformed indentation at line {location[0]}, column {location[1] + 1}:\n{line.rstrip()}\n'
+    message = (
+        f'Malformed indentation at line {location[0]}, '
+        f'column {location[1] + 1}:\n'
+        f'{line.rstrip()}\n'
+    )
     return message

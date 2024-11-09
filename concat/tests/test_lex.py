@@ -34,7 +34,7 @@ class TestSmallExamples(unittest.TestCase):
 
                 self.assertEqual(len(tokens), len(expected_tokens))
                 expectationPairs = zip(
-                    tokens, map(lambda t: lex.TokenResult(t), expected_tokens)
+                    tokens, map(lex.TokenResult, expected_tokens)
                 )
                 for actual_token, expected_token in expectationPairs:
                     self.assertEqual(actual_token, expected_token)

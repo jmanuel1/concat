@@ -4,6 +4,7 @@ import dataclasses
 import io
 import json
 import tokenize as py_tokenize
+import token
 from typing import Iterator, List, Literal, Optional, Tuple, Union
 
 
@@ -63,7 +64,9 @@ class Lexer:
 
     def __init__(self) -> None:
         self.data: str
-        self.tokens: Optional[Iterator[py_tokenize.TokenInfo]]
+        self.tokens: Iterator[
+            py_tokenize.TokenInfo | IndentationErrorResult | TokenErrorResult
+        ]
         self.lineno: int
         self.lexpos: int
         self._concat_token_iterator: Iterator[Result]
@@ -72,127 +75,129 @@ class Lexer:
     def input(self, data: str, should_preserve_comments: bool = False) -> None:
         """Initialize the Lexer object with the data to tokenize."""
         self.data = data
-        self.tokens = None
+        self.tokens = self._py_tokens_handling_errors(
+            py_tokenize.tokenize(
+                io.BytesIO(self.data.encode('utf-8')).readline
+            )
+        )
         self.lineno = 1
         self.lexpos = 0
-        self._concat_token_iterator = self._tokens()
+        self._concat_token_iterator = self._tokens_glued(self._tokens())
         self._should_preserve_comments = should_preserve_comments
 
     def token(self) -> Optional[Result]:
         """Return the next token as a Token object."""
         return next(self._concat_token_iterator, None)
 
-    def _tokens(self) -> Iterator[Result]:
-        import token
-
-        if self.tokens is None:
-            self.tokens = py_tokenize.tokenize(
-                io.BytesIO(self.data.encode('utf-8')).readline
-            )
-
-        glued_token_prefix: Token | None = None
+    def _py_tokens_handling_errors(
+        self, tokens: Iterator[py_tokenize.TokenInfo]
+    ) -> Iterator[
+        py_tokenize.TokenInfo | IndentationErrorResult | TokenErrorResult
+    ]:
         while True:
             try:
-                token_ = next(self.tokens)
+                tok = next(tokens)
+                yield tok
             except StopIteration:
                 return
             except IndentationError as e:
                 yield IndentationErrorResult(e)
             except py_tokenize.TokenError as e:
                 yield TokenErrorResult(e, (self.lineno, self.lexpos))
-            tok = Token()
-            _, tok.value, tok.start, tok.end, _ = token_
-            tok.type = token.tok_name[token_.exact_type]
-            tokens_to_massage = [tok]
-            if glued_token_prefix:
-                if (
-                    glued_token_prefix.value == '-'
-                    and tok.value == '-'
-                    and are_on_same_line_and_offset_by(
-                        glued_token_prefix.start, tok.start, 1
-                    )
-                ):
-                    glued_token_prefix.value = '--'
-                    glued_token_prefix.type = 'MINUSMINUS'
-                    glued_token_prefix.end = tok.end
+
+    def _tokens_glued(self, tokens: Iterator[Result]) -> Iterator[Result]:
+        glued_token_prefix: Token | None = None
+        for r in tokens:
+            if r.type == 'token':
+                tok = r.token
+                if glued_token_prefix:
                     self._update_position(glued_token_prefix)
+                    if tok.value == '-' and are_on_same_line_and_offset_by(
+                        glued_token_prefix.start, tok.start, 1
+                    ):
+                        glued_token_prefix.value = '--'
+                        glued_token_prefix.type = 'MINUSMINUS'
+                        glued_token_prefix.end = tok.end
+                        yield TokenResult(glued_token_prefix)
+                        glued_token_prefix = None
+                        continue
                     yield TokenResult(glued_token_prefix)
                     glued_token_prefix = None
-                    continue
+                if tok.value == '-':
+                    glued_token_prefix = tok
                 else:
-                    tokens_to_massage[:0] = [glued_token_prefix]
-                    glued_token_prefix = None
-            for tok in tokens_to_massage:
-                if tok.type in {'NL', 'COMMENT'}:
                     self._update_position(tok)
-                    if (
-                        self._should_preserve_comments
-                        and tok.type == 'COMMENT'
-                    ):
-                        yield TokenResult(tok)
-                    continue
-                elif tok.type == 'ERRORTOKEN':
-                    if tok.value == ' ':
-                        self._update_position(tok)
-                        continue
-                    elif tok.value == '!':
-                        tok.type = 'EXCLAMATIONMARK'
-                elif tok.value in {'def', 'import', 'from'}:
-                    tok.type = tok.value.upper()
-                    tok.is_keyword = True
-                elif tok.value == '$':
-                    tok.type = 'DOLLARSIGN'
-                elif tok.type != 'NAME' and tok.value in {
-                    '...',
-                    '-',
-                    '**',
-                    '~',
-                    '*',
-                    '*=',
-                    '//',
-                    '/',
-                    '%',
-                    '+',
-                    '<<',
-                    '>>',
-                    '&',
-                    '^',
-                    '|',
-                    '<',
-                    '>',
-                    '==',
-                    '>=',
-                    '<=',
-                    '!=',
-                    'is',
-                    'in',
-                    'or',
-                    'and',
-                    'not',
-                    '@',
-                }:
-                    tok.type = 'NAME'
-                    if tok.value == '-':
-                        glued_token_prefix = tok
-                        continue
+                    yield r
+            else:
+                yield r
+        if glued_token_prefix:
+            self._update_position(glued_token_prefix)
+            yield TokenResult(glued_token_prefix)
 
+    def _tokens(self) -> Iterator[Result]:
+        for token_or_error in self.tokens:
+            if isinstance(
+                token_or_error, (IndentationErrorResult, TokenErrorResult)
+            ):
+                yield token_or_error
+                continue
+            tok = Token()
+            _, tok.value, tok.start, tok.end, _ = token_or_error
+            tok.type = token.tok_name[token_or_error.exact_type]
+            if tok.type in {'NL', 'COMMENT'}:
                 self._update_position(tok)
+                if self._should_preserve_comments and tok.type == 'COMMENT':
+                    yield TokenResult(tok)
+                continue
+            elif tok.type == 'ERRORTOKEN' and tok.value == ' ':
+                self._update_position(tok)
+                continue
+            elif tok.value in {'def', 'import', 'from', 'as', 'class', 'cast'}:
+                tok.type = tok.value.upper()
+                tok.is_keyword = True
+            elif tok.value == '$':
+                tok.type = 'DOLLARSIGN'
+            elif tok.type != 'NAME' and tok.value in {
+                '...',
+                '-',
+                '**',
+                '~',
+                '*',
+                '*=',
+                '//',
+                '/',
+                '%',
+                '+',
+                '<<',
+                '>>',
+                '&',
+                '^',
+                '|',
+                '<',
+                '>',
+                '==',
+                '>=',
+                '<=',
+                '!=',
+                'is',
+                'in',
+                'or',
+                'and',
+                'not',
+                '@',
+            }:
+                tok.type = 'NAME'
 
-                if tok.type == 'NAME':
-                    type_map = {'as': 'AS', 'class': 'CLASS', 'cast': 'CAST'}
-                    if tok.value in type_map:
-                        tok.type = type_map[tok.value]
-                        tok.is_keyword = True
-                elif tok.type == 'STRING' and self.__is_bytes_literal(
-                    tok.value
-                ):
-                    tok.type = 'BYTES'
-                elif tok.value == '`':
-                    tok.type = 'BACKTICK'
-                elif tok.type == 'EXCLAMATION':
-                    tok.type = 'EXCLAMATIONMARK'
+            self._update_position(tok)
 
-                yield TokenResult(tok)
+            if tok.type == 'STRING' and self.__is_bytes_literal(tok.value):
+                tok.type = 'BYTES'
+            elif tok.value == '`':
+                tok.type = 'BACKTICK'
+            elif tok.value == '!':
+                tok.type = 'EXCLAMATIONMARK'
+
+            yield TokenResult(tok)
 
     def _update_position(self, tok: 'Token') -> None:
         self.lineno, self.lexpos = tok.start

@@ -57,8 +57,86 @@ arg_parser.add_argument(
     '--tokenize',
     action='store_true',
     default=False,
-    help='tokenize input from the given file and print the tokens as a JSON array',
+    help=(
+        'tokenize input from the given file and print the tokens as a JSON '
+        'array'
+    ),
 )
+
+
+def tokenize_printing_errors() -> list[concat.lex.Token]:
+    token_results = concat.lex.tokenize(args.file.read())
+    tokens = list[concat.lex.Token]()
+    for r in token_results:
+        if r.type == 'token':
+            tokens.append(r.token)
+        elif r.type == 'indent-err':
+            position = (r.err.lineno or 1, r.err.offset or 0)
+            message = r.err.msg
+            print('Indentation error:')
+            print(
+                create_indentation_error_message(args.file, position, message)
+            )
+        elif r.type == 'token-err':
+            position = r.location
+            message = str(r.err)
+            print('Lexical error:')
+            print(create_lexical_error_message(args.file, position, message))
+        else:
+            assert_never(r)
+    return tokens
+
+
+def batch_main():
+    try:
+        tokens = tokenize_printing_errors()
+        concat_ast = parse(tokens)
+        recovered_parsing_failures = concat_ast.parsing_failures
+        for failure in recovered_parsing_failures:
+            print('Parse Error:')
+            print(create_parsing_failure_message(args.file, tokens, failure))
+        source_dir = os.path.dirname(filename)
+        typecheck(concat_ast, source_dir)
+        python_ast = transpile_ast(concat_ast)
+    except concat.typecheck.StaticAnalysisError as e:
+        if e.path is None:
+            in_path = ''
+        else:
+            in_path = ' in file ' + str(e.path)
+        print(f'Static Analysis Error{in_path}:\n')
+        print(e, 'in line:')
+        if e.location:
+            if e.path is not None:
+                with e.path.open() as f:
+                    print(get_line_at(f, e.location), end='')
+            else:
+                print(get_line_at(args.file, e.location), end='')
+            print(' ' * e.location[1] + '^')
+        if args.verbose:
+            raise
+    except concat.parser_combinators.ParseError as e:
+        print('Parse Error:')
+        print(
+            create_parsing_failure_message(
+                args.file, tokens, e.args[0].failures
+            )
+        )
+    except Exception:
+        print('An internal error has occurred.')
+        print('This is a bug in Concat.')
+        raise
+    else:
+        concat.execute.execute(
+            filename,
+            python_ast,
+            {},
+            should_log_stacks=args.debug,
+            import_resolution_start_directory=source_dir,
+        )
+        if list(concat_ast.parsing_failures):
+            sys.exit(1)
+    finally:
+        args.file.close()
 
 
 def main():
@@ -66,81 +144,7 @@ def main():
     if args.file.isatty():
         concat.stdlib.repl.repl([], [], args.debug)
     else:
-        try:
-            token_results = concat.lex.tokenize(args.file.read())
-            tokens = list[concat.lex.Token]()
-            for r in token_results:
-                if r.type == 'token':
-                    tokens.append(r.token)
-                elif r.type == 'indent-err':
-                    position = (r.err.lineno or 1, r.err.offset or 0)
-                    message = r.err.msg
-                    print('Indentation error:')
-                    print(
-                        create_indentation_error_message(
-                            args.file, position, message
-                        )
-                    )
-                elif r.type == 'token-err':
-                    position = r.location
-                    message = str(r.err)
-                    print('Lexical error:')
-                    print(
-                        create_lexical_error_message(
-                            args.file, position, message
-                        )
-                    )
-                else:
-                    assert_never(r)
-            concat_ast = parse(tokens)
-            recovered_parsing_failures = concat_ast.parsing_failures
-            for failure in recovered_parsing_failures:
-                print('Parse Error:')
-                print(
-                    create_parsing_failure_message(args.file, tokens, failure)
-                )
-            source_dir = os.path.dirname(filename)
-            typecheck(concat_ast, source_dir)
-            python_ast = transpile_ast(concat_ast)
-        except concat.typecheck.StaticAnalysisError as e:
-            if e.path is None:
-                in_path = ''
-            else:
-                in_path = ' in file ' + str(e.path)
-            print(f'Static Analysis Error{in_path}:\n')
-            print(e, 'in line:')
-            if e.location:
-                if e.path is not None:
-                    with e.path.open() as f:
-                        print(get_line_at(f, e.location), end='')
-                else:
-                    print(get_line_at(args.file, e.location), end='')
-                print(' ' * e.location[1] + '^')
-            if args.verbose:
-                raise
-        except concat.parser_combinators.ParseError as e:
-            print('Parse Error:')
-            print(
-                create_parsing_failure_message(
-                    args.file, tokens, e.args[0].failures
-                )
-            )
-        except Exception:
-            print('An internal error has occurred.')
-            print('This is a bug in Concat.')
-            raise
-        else:
-            concat.execute.execute(
-                filename,
-                python_ast,
-                {},
-                should_log_stacks=args.debug,
-                import_resolution_start_directory=source_dir,
-            )
-            if list(concat_ast.parsing_failures):
-                sys.exit(1)
-        finally:
-            args.file.close()
+        batch_main()
 
 
 # We should pass any unknown args onto the program we're about to run.
