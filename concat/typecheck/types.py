@@ -1341,8 +1341,10 @@ class PythonFunctionType(IndividualType):
         return IndividualKind
 
     def __repr__(self) -> str:
-        # QUESTION: Is it worth using type(self)?
-        return f'PythonFunctionType(inputs={self.input!r}, output={self.output!r}, _overloads={self._overloads!r})'
+        return (
+            f'PythonFunctionType(inputs={self.input!r}, '
+            f'output={self.output!r}, _overloads={self._overloads!r})'
+        )
 
     def __str__(self) -> str:
         return f'py_function_type[{self.input}, {self.output}]'
@@ -1491,8 +1493,10 @@ class PythonFunctionType(IndividualType):
                 finally:
                     subtyping_assumptions[:] = subtyping_assumptions_copy
             raise ConcatTypeError(
-                'no overload of {} is a subtype of {}'.format(self, supertype)
-            ) from exceptions[0]
+                f'no overload of {self} is a subtype of {supertype}'
+            ) from ExceptionGroup(
+                f'{self} is not compatible with {supertype}', exceptions
+            )
         raise ConcatTypeError(f'{self} is not a subtype of {supertype}')
 
 
