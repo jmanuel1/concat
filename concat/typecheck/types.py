@@ -1295,79 +1295,58 @@ class ClassType(ObjectType):
 class PythonFunctionType(IndividualType):
     def __init__(
         self,
+        inputs: Type,
+        output: Type,
         _overloads: Sequence[Tuple[Type, Type]] = (),
-        type_parameters: Sequence[Variable] = (),
-        _type_arguments: Sequence[Type] = (),
     ) -> None:
         super().__init__()
-        self._arity = len(type_parameters)
-        self._type_parameters = type_parameters
-        self._type_arguments: Sequence[Type] = []
+        self._type_arguments: Sequence[Type] = [inputs, output]
         self._overloads: Sequence[Tuple[Type, Type]] = []
-        if not (
-            self._arity == 0
-            and len(_type_arguments) == 2
-            or self._arity == 2
-            and len(_type_arguments) == 0
-        ):
+        i, o = inputs, output
+        if i.kind != SequenceKind:
             raise ConcatTypeError(
-                f'Ill-formed Python function type with arguments {_type_arguments}'
+                f'{i} must be a sequence type, but has kind {i.kind}'
             )
-        if self._arity == 0:
-            i, o = _type_arguments
+        # HACK: Sequence variables are introduced by the type sequence AST nodes
+        if isinstance(i, TypeSequence) and i and i[0].kind == SequenceKind:
+            i = TypeSequence(i.as_sequence()[1:])
+        _type_arguments = i, o
+        if not (o.kind <= ItemKind):
+            raise ConcatTypeError(
+                f'{o} must be an item type, but has kind {o.kind}'
+            )
+        _fixed_overloads: List[Tuple[Type, Type]] = []
+        for i, o in _overloads:
             if i.kind != SequenceKind:
                 raise ConcatTypeError(
                     f'{i} must be a sequence type, but has kind {i.kind}'
                 )
-            # HACK: Sequence variables are introduced by the type sequence AST nodes
             if isinstance(i, TypeSequence) and i and i[0].kind == SequenceKind:
                 i = TypeSequence(i.as_sequence()[1:])
-            _type_arguments = i, o
             if not (o.kind <= ItemKind):
                 raise ConcatTypeError(
                     f'{o} must be an item type, but has kind {o.kind}'
                 )
-            _fixed_overloads: List[Tuple[Type, Type]] = []
-            for i, o in _overloads:
-                if i.kind != SequenceKind:
-                    raise ConcatTypeError(
-                        f'{i} must be a sequence type, but has kind {i.kind}'
-                    )
-                if (
-                    isinstance(i, TypeSequence)
-                    and i
-                    and i[0].kind == SequenceKind
-                ):
-                    i = TypeSequence(i.as_sequence()[1:])
-                if not (o.kind <= ItemKind):
-                    raise ConcatTypeError(
-                        f'{o} must be an item type, but has kind {o.kind}'
-                    )
-                _fixed_overloads.append((i, o))
-            self._overloads = _fixed_overloads
-            self._type_arguments = _type_arguments
+            _fixed_overloads.append((i, o))
+        self._overloads = _fixed_overloads
+        self._type_arguments = _type_arguments
 
     def _free_type_variables(self) -> InsertionOrderedSet[Variable]:
-        if self._arity == 0:
-            ftv = self.input.free_type_variables()
-            ftv |= self.output.free_type_variables()
-            return ftv
-        else:
-            return InsertionOrderedSet([])
+        ftv = self.input.free_type_variables()
+        ftv |= self.output.free_type_variables()
+        return ftv
 
     @property
     def kind(self) -> 'Kind':
-        if self._arity == 0:
-            return IndividualKind
-        return GenericTypeKind([SequenceKind, IndividualKind], IndividualKind)
+        return IndividualKind
 
     def __repr__(self) -> str:
-        # QUESTION: Is it worth using type(self)?
-        return f'{type(self).__qualname__}(_overloads={self._overloads!r}, type_parameters={self._type_parameters!r}, _type_arguments={self._type_arguments})'
+        return (
+            f'PythonFunctionType(inputs={self.input!r}, '
+            f'output={self.output!r}, _overloads={self._overloads!r})'
+        )
 
     def __str__(self) -> str:
-        if not self._type_arguments:
-            return 'py_function_type'
         return f'py_function_type[{self.input}, {self.output}]'
 
     @property
@@ -1377,51 +1356,25 @@ class PythonFunctionType(IndividualType):
     def __getitem__(
         self, arguments: Tuple[Type, Type]
     ) -> 'PythonFunctionType':
-        if self._arity != 2:
-            raise ConcatTypeError(f'{self} is not a generic type')
-        if len(arguments) != 2:
-            raise ConcatTypeError(
-                f'{self} takes two arguments, got {len(arguments)}'
-            )
-        input = arguments[0]
-        output = arguments[1]
-        if input.kind != SequenceKind:
-            raise ConcatTypeError(
-                f'First argument to {self} must be a sequence type of function arguments'
-            )
-        if not (output.kind <= ItemKind):
-            raise ConcatTypeError(
-                f'Second argument to {self} (the return type) must be an item type'
-            )
-        return PythonFunctionType(
-            _type_arguments=(input, output),
-            type_parameters=(),
-            _overloads=[],
-        )
+        raise ConcatTypeError(f'{self} is not a generic type')
 
     @_sub_cache
     def apply_substitution(
         self, sub: 'concat.typecheck.Substitutions'
     ) -> 'PythonFunctionType':
-        if self._arity == 0:
-            inp = sub(self.input)
-            out = sub(self.output)
-            overloads: Sequence[Tuple[Type, Type]] = [
-                (sub(i), sub(o)) for i, o in self._overloads
-            ]
-            return PythonFunctionType(
-                _type_arguments=(inp, out), _overloads=overloads
-            )
-        return self
+        inp = sub(self.input)
+        out = sub(self.output)
+        overloads: Sequence[Tuple[Type, Type]] = [
+            (sub(i), sub(o)) for i, o in self._overloads
+        ]
+        return PythonFunctionType(inputs=inp, output=out, _overloads=overloads)
 
     @property
     def input(self) -> Type:
-        assert self._arity == 0
         return self._type_arguments[0]
 
     @property
     def output(self) -> Type:
-        assert self._arity == 0
         return self._type_arguments[1]
 
     def select_overload(
@@ -1444,17 +1397,18 @@ class PythonFunctionType(IndividualType):
 
     def with_overload(self, input: Type, output: Type) -> 'PythonFunctionType':
         return PythonFunctionType(
-            _type_arguments=self._type_arguments,
+            inputs=self.input,
+            output=self.output,
             _overloads=[*self._overloads, (input, output)],
         )
 
     def bind(self) -> 'PythonFunctionType':
-        assert self._arity == 0
         inputs = self.input[1:]
         output = self.output
         overloads = [(i[1:], o) for i, o in self._overloads]
         return PythonFunctionType(
-            _type_arguments=[TypeSequence(inputs), output],
+            inputs=TypeSequence(inputs),
+            output=output,
             _overloads=overloads,
         )
 
@@ -1474,86 +1428,75 @@ class PythonFunctionType(IndividualType):
             raise ConcatTypeError(
                 f'{self} has kind {self.kind} but {supertype} has kind {supertype.kind}'
             )
-        if self.kind is IndividualKind:
-            if supertype is get_object_type():
-                sub = Substitutions()
-                sub.add_subtyping_provenance((self, supertype))
-                return sub
-            if (
-                isinstance(supertype, ItemVariable)
-                and supertype.kind is IndividualKind
-                and supertype not in rigid_variables
-            ):
-                sub = Substitutions([(supertype, self)])
-                sub.add_subtyping_provenance((self, supertype))
-                return sub
-            if isinstance(supertype, _OptionalType):
-                sub = self.constrain_and_bind_variables(
-                    supertype.type_arguments[0],
-                    rigid_variables,
-                    subtyping_assumptions,
-                )
-                sub.add_subtyping_provenance((self, supertype))
-                return sub
-            if isinstance(supertype, ObjectType):
-                sub = Substitutions()
-                for attr in supertype.attributes:
-                    self_attr_type = sub(self.get_type_of_attribute(attr))
-                    supertype_attr_type = sub(
-                        supertype.get_type_of_attribute(attr)
-                    )
-                    sub = self_attr_type.constrain_and_bind_variables(
-                        supertype_attr_type,
-                        rigid_variables,
-                        subtyping_assumptions,
-                    )
-                sub.add_subtyping_provenance((self, supertype))
-                return sub
-            if isinstance(supertype, PythonFunctionType):
-                # No need to extend the rigid variables, we know both types have no
-                # parameters at this point.
-
-                # Support overloading the subtype.
-                exceptions = []
-                for overload in [
-                    (self.input, self.output),
-                    *self._overloads,
-                ]:
-                    try:
-                        subtyping_assumptions_copy = subtyping_assumptions[:]
-                        self_input_types = overload[0]
-                        supertype_input_types = supertype.input
-                        sub = (
-                            supertype_input_types.constrain_and_bind_variables(
-                                self_input_types,
-                                rigid_variables,
-                                subtyping_assumptions_copy,
-                            )
-                        )
-                        sub = sub(self.output).constrain_and_bind_variables(
-                            sub(supertype.output),
-                            rigid_variables,
-                            subtyping_assumptions_copy,
-                        )(sub)
-                        sub.add_subtyping_provenance((self, supertype))
-                        return sub
-                    except ConcatTypeError as e:
-                        exceptions.append(e)
-                    finally:
-                        subtyping_assumptions[:] = subtyping_assumptions_copy
-                raise ConcatTypeError(
-                    'no overload of {} is a subtype of {}'.format(
-                        self, supertype
-                    )
-                ) from exceptions[0]
-            raise ConcatTypeError(f'{self} is not a subtype of {supertype}')
-        # TODO: Remove generic type responsibility from this class
-        if isinstance(supertype, PythonFunctionType) and isinstance(
-            supertype.kind, GenericTypeKind
-        ):
+        if supertype is get_object_type():
             sub = Substitutions()
             sub.add_subtyping_provenance((self, supertype))
             return sub
+        if (
+            isinstance(supertype, ItemVariable)
+            and supertype.kind is IndividualKind
+            and supertype not in rigid_variables
+        ):
+            sub = Substitutions([(supertype, self)])
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
+        if isinstance(supertype, _OptionalType):
+            sub = self.constrain_and_bind_variables(
+                supertype.type_arguments[0],
+                rigid_variables,
+                subtyping_assumptions,
+            )
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
+        if isinstance(supertype, ObjectType):
+            sub = Substitutions()
+            for attr in supertype.attributes:
+                self_attr_type = sub(self.get_type_of_attribute(attr))
+                supertype_attr_type = sub(
+                    supertype.get_type_of_attribute(attr)
+                )
+                sub = self_attr_type.constrain_and_bind_variables(
+                    supertype_attr_type,
+                    rigid_variables,
+                    subtyping_assumptions,
+                )
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
+        if isinstance(supertype, PythonFunctionType):
+            # No need to extend the rigid variables, we know both types have no
+            # parameters at this point.
+
+            # Support overloading the subtype.
+            exceptions = []
+            for overload in [
+                (self.input, self.output),
+                *self._overloads,
+            ]:
+                try:
+                    subtyping_assumptions_copy = subtyping_assumptions[:]
+                    self_input_types = overload[0]
+                    supertype_input_types = supertype.input
+                    sub = supertype_input_types.constrain_and_bind_variables(
+                        self_input_types,
+                        rigid_variables,
+                        subtyping_assumptions_copy,
+                    )
+                    sub = sub(self.output).constrain_and_bind_variables(
+                        sub(supertype.output),
+                        rigid_variables,
+                        subtyping_assumptions_copy,
+                    )(sub)
+                    sub.add_subtyping_provenance((self, supertype))
+                    return sub
+                except ConcatTypeError as e:
+                    exceptions.append(e)
+                finally:
+                    subtyping_assumptions[:] = subtyping_assumptions_copy
+            raise ConcatTypeError(
+                f'no overload of {self} is a subtype of {supertype}'
+            ) from ExceptionGroup(
+                f'{self} is not compatible with {supertype}', exceptions
+            )
         raise ConcatTypeError(f'{self} is not a subtype of {supertype}')
 
 
@@ -2126,13 +2069,14 @@ def set_module_type(ty: Type) -> None:
 
 
 _arg_type_var = SequenceVariable()
-_return_type_var = ItemVariable(IndividualKind)
-py_function_type = PythonFunctionType(
-    type_parameters=[_arg_type_var, _return_type_var]
+_return_type_var = ItemVariable(ItemKind)
+py_function_type = GenericType(
+    [_arg_type_var, _return_type_var],
+    PythonFunctionType(inputs=_arg_type_var, output=_return_type_var),
 )
 py_function_type.set_internal_name('py_function_type')
 
-_invert_result_var = ItemVariable(IndividualKind)
+_invert_result_var = ItemVariable(ItemKind)
 invertible_type = GenericType(
     [_invert_result_var],
     ObjectType(
