@@ -148,15 +148,15 @@ def repl(
     print_exit_message()
 
 
-def _create_show_var_function(globals: Dict[str, object]) -> ConcatFunction:
+def _create_show_var_function(global_env: Dict[str, object]) -> ConcatFunction:
     def show_var(stack: List[object], stash: List[object]):
-        cast(Set[str], globals['visible_vars']).add(cast(str, stack.pop()))
+        cast(Set[str], global_env['visible_vars']).add(cast(str, stack.pop()))
 
     return show_var
 
 
 def _exec_init_file(
-    globals: Dict[str, object], locals: Dict[str, object]
+    global_env: Dict[str, object], local_env: Dict[str, object]
 ) -> None:
     print('Running startup initialization file...')
     init_file_name = '.concat-rc.cat'  # TODO: should be configurable
@@ -166,23 +166,25 @@ def _exec_init_file(
     except FileNotFoundError:
         print('No startup initialization file found.')
     else:
-        concat.execute.execute(init_file_name, python_ast, globals, locals)
+        concat.execute.execute(
+            init_file_name, python_ast, global_env, local_env
+        )
 
 
 def _do_repl_loop(
     prompt: str,
     debug: bool,
-    globals: Dict[str, object],
-    locals: Dict[str, object],
+    global_env: Dict[str, object],
+    local_env: Dict[str, object],
 ) -> None:
     while True:
         print(prompt, end='', flush=True)
         try:
-            # FIXME: `stack` might not exist yet if there was no init file.
+            # noqa: PYL-W0123
             eval(
                 'concat.stdlib.repl.read_form(stack, [])',
-                globals,
-                locals,
+                global_env,
+                local_env,
             )
         except concat.parser_combinators.ParseError as e:
             print('Syntax error:\n')
@@ -196,12 +198,12 @@ def _do_repl_loop(
         except EOFError:
             break
         else:
-            stack = cast(List[object], globals['stack'])
+            stack = cast(List[object], global_env['stack'])
             quotation = cast(
                 Callable[[List[object], List[object]], None], stack.pop()
             )
             try:
-                quotation(stack, cast(List[object], globals['stash']))
+                quotation(stack, cast(List[object], global_env['stash']))
             except concat.execute.ConcatRuntimeError as e:
                 value = e.__cause__
                 if value is None or value.__traceback__ is None:
@@ -211,15 +213,15 @@ def _do_repl_loop(
                 traceback.print_exception(None, value, tb)
             except KeyboardInterrupt:
                 # a ctrl-c during execution just cancels that execution
-                if globals.get('handle_ctrl_c', False):
+                if global_env.get('handle_ctrl_c', False):
                     print('Concat was interrupted.')
                 else:
                     raise
-            print('Stack:', globals['stack'])
+            print('Stack:', global_env['stack'])
             if debug:
-                print('Stash:', globals['stash'])
-            for var in cast(Set[str], globals['visible_vars']):
-                print(var, '=', globals[var])
+                print('Stash:', global_env['stash'])
+            for var in cast(Set[str], global_env['visible_vars']):
+                print(var, '=', global_env[var])
 
 
 def _repl_impl(
@@ -229,9 +231,11 @@ def _repl_impl(
         initial_globals = {}
     globals: Dict[str, object] = {
         'visible_vars': set(),
+        **initial_globals,
         'concat': concat,
         '@@extra_env': concat.typecheck.load_builtins_and_preamble(),
-        **initial_globals,
+        'stack': stack,
+        'stash': stash,
     }
     locals: Dict[str, object] = {}
 
