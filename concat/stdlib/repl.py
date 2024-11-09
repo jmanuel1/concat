@@ -180,7 +180,7 @@ def _do_repl_loop(
     while True:
         print(prompt, end='', flush=True)
         try:
-            # noqa: PYL-W0123
+            # skipcq: PYL-W0123
             eval(
                 'concat.stdlib.repl.read_form(stack, [])',
                 global_env,
