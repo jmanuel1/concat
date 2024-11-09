@@ -18,8 +18,10 @@ def create_parsing_failure_message(
 ) -> str:
     if failure.furthest_index < len(stream):
         location = stream[failure.furthest_index].start
-    else:
+    elif stream:
         location = stream[-1].start
+    else:
+        location = (1, 0)
     line = get_line_at(file, location)
     message = f'Expected {failure.expected} at line {location[0]}, column {location[1] + 1}:\n{line.rstrip()}\n{" " * location[1] + "^"}'
     if failure.children:

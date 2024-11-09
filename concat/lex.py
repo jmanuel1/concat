@@ -82,7 +82,9 @@ class Lexer:
         )
         self.lineno = 1
         self.lexpos = 0
-        self._concat_token_iterator = self._tokens_glued(self._tokens())
+        self._concat_token_iterator = self._tokens_filtering_nl_and_comments(
+            self._tokens_glued(self._tokens())
+        )
         self._should_preserve_comments = should_preserve_comments
 
     def token(self) -> Optional[Result]:
@@ -134,6 +136,18 @@ class Lexer:
             self._update_position(glued_token_prefix)
             yield TokenResult(glued_token_prefix)
 
+    def _tokens_filtering_nl_and_comments(
+        self, tokens: Iterator[Result]
+    ) -> Iterator[Result]:
+        for r in tokens:
+            if r.type != 'token' or r.token.type not in ['NL', 'COMMENT']:
+                yield r
+                continue
+            tok = r.token
+            self._update_position(tok)
+            if self._should_preserve_comments and tok.type == 'COMMENT':
+                yield r
+
     def _tokens(self) -> Iterator[Result]:
         for token_or_error in self.tokens:
             if isinstance(
@@ -144,15 +158,10 @@ class Lexer:
             tok = Token()
             _, tok.value, tok.start, tok.end, _ = token_or_error
             tok.type = token.tok_name[token_or_error.exact_type]
-            if tok.type in {'NL', 'COMMENT'}:
-                self._update_position(tok)
-                if self._should_preserve_comments and tok.type == 'COMMENT':
-                    yield TokenResult(tok)
-                continue
-            elif tok.type == 'ERRORTOKEN' and tok.value == ' ':
+            if tok.type == 'ERRORTOKEN' and tok.value == ' ':
                 self._update_position(tok)
                 continue
-            elif tok.value in {'def', 'import', 'from', 'as', 'class', 'cast'}:
+            if tok.value in {'def', 'import', 'from', 'as', 'class', 'cast'}:
                 tok.type = tok.value.upper()
                 tok.is_keyword = True
             elif tok.value == '$':
@@ -208,6 +217,8 @@ class Lexer:
 
 @dataclasses.dataclass
 class TokenResult:
+    """Result class for successfully generated tokens."""
+
     type: Literal['token']
     token: Token
 
@@ -218,6 +229,8 @@ class TokenResult:
 
 @dataclasses.dataclass
 class IndentationErrorResult:
+    """Result class for IndentationErrors raised by the Python tokenizer."""
+
     type: Literal['indent-err']
     err: IndentationError
 
@@ -228,6 +241,8 @@ class IndentationErrorResult:
 
 @dataclasses.dataclass
 class TokenErrorResult:
+    """Result class for TokenErrors raised by the Python tokenizer."""
+
     type: Literal['token-err']
     err: py_tokenize.TokenError
     location: Location

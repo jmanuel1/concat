@@ -39,7 +39,8 @@ class TestSmallExamples(unittest.TestCase):
                 for actual_token, expected_token in expectationPairs:
                     self.assertEqual(actual_token, expected_token)
 
-    def test_indentation_error(self) -> None:
+    @staticmethod
+    def test_indentation_error() -> None:
         code = textwrap.dedent("""\
             def remove_stack_polymorphism(
                 f:forall `t *s. (*s i:`t -- *s) -- g:forall `t. (i:`t -- )
