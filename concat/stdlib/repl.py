@@ -223,8 +223,10 @@ def _do_repl_loop(
 
 
 def _repl_impl(
-    stack: List[object], stash: List[object], debug=False, initial_globals={}
+    stack: List[object], stash: List[object], debug=False, initial_globals=None
 ) -> None:
+    if initial_globals is None:
+        initial_globals = {}
     globals: Dict[str, object] = {
         'visible_vars': set(),
         'concat': concat,
