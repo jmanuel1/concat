@@ -4,6 +4,7 @@ It is like Factor's listener vocabulary."""
 
 import concat
 import concat.astutils
+from concat.common_types import ConcatFunction
 import concat.typecheck
 import concat.stdlib.importlib
 import concat.parse
@@ -43,11 +44,7 @@ def _tokenize(code: str) -> List[concat.lex.Token]:
 
 def _parse(code: str) -> concat.parse.TopLevelNode:
     tokens = _tokenize(code)
-    parser = concat.parse.ParserDict()
-    parser.extend_with(concat.parse.extension)
-    # FIXME: Typechecker extensions should be here.
-    concat_ast = parser.parse(tokens)
-    return concat_ast
+    return concat.transpile.parse(tokens)
 
 
 def _transpile(code: concat.parse.TopLevelNode) -> ast.Module:
@@ -151,27 +148,16 @@ def repl(
     print_exit_message()
 
 
-def _repl_impl(
-    stack: List[object], stash: List[object], debug=False, initial_globals={}
-) -> None:
+def _create_show_var_function(globals: Dict[str, object]) -> ConcatFunction:
     def show_var(stack: List[object], stash: List[object]):
         cast(Set[str], globals['visible_vars']).add(cast(str, stack.pop()))
 
-    globals: Dict[str, object] = {
-        'visible_vars': set(),
-        'show_var': show_var,
-        'concat': concat,
-        '@@extra_env': concat.typecheck.load_builtins_and_preamble(),
-        **initial_globals,
-    }
-    locals: Dict[str, object] = {}
+    return show_var
 
-    intro_message = 'Concat REPL (version {} on Python {}).'.format(
-        concat.version, sys.version
-    )
 
-    print(intro_message)
-
+def _exec_init_file(
+    globals: Dict[str, object], locals: Dict[str, object]
+) -> None:
     print('Running startup initialization file...')
     init_file_name = '.concat-rc.cat'  # TODO: should be configurable
     try:
@@ -181,53 +167,86 @@ def _repl_impl(
         print('No startup initialization file found.')
     else:
         concat.execute.execute(init_file_name, python_ast, globals, locals)
+
+
+def _do_repl_loop(
+    prompt: str,
+    debug: bool,
+    globals: Dict[str, object],
+    locals: Dict[str, object],
+) -> None:
+    while True:
+        print(prompt, end='', flush=True)
+        try:
+            # FIXME: `stack` might not exist yet if there was no init file.
+            eval(
+                'concat.stdlib.repl.read_form(stack, [])',
+                globals,
+                locals,
+            )
+        except concat.parser_combinators.ParseError as e:
+            print('Syntax error:\n')
+            print(e)
+        except concat.execute.ConcatRuntimeError as e:
+            print('Runtime error:\n')
+            print(e)
+        except _REPLTokenizeError as e:
+            print('Lexical error:\n')
+            print(e)
+        except EOFError:
+            break
+        else:
+            stack = cast(List[object], globals['stack'])
+            quotation = cast(
+                Callable[[List[object], List[object]], None], stack.pop()
+            )
+            try:
+                quotation(stack, cast(List[object], globals['stash']))
+            except concat.execute.ConcatRuntimeError as e:
+                value = e.__cause__
+                if value is None or value.__traceback__ is None:
+                    tb = None
+                else:
+                    tb = value.__traceback__.tb_next
+                traceback.print_exception(None, value, tb)
+            except KeyboardInterrupt:
+                # a ctrl-c during execution just cancels that execution
+                if globals.get('handle_ctrl_c', False):
+                    print('Concat was interrupted.')
+                else:
+                    raise
+            print('Stack:', globals['stack'])
+            if debug:
+                print('Stash:', globals['stash'])
+            for var in cast(Set[str], globals['visible_vars']):
+                print(var, '=', globals[var])
+
+
+def _repl_impl(
+    stack: List[object], stash: List[object], debug=False, initial_globals={}
+) -> None:
+    globals: Dict[str, object] = {
+        'visible_vars': set(),
+        'concat': concat,
+        '@@extra_env': concat.typecheck.load_builtins_and_preamble(),
+        **initial_globals,
+    }
+    locals: Dict[str, object] = {}
+
+    show_var = _create_show_var_function(globals)
+    globals['show_var'] = show_var
+
+    intro_message = 'Concat REPL (version {} on Python {}).'.format(
+        concat.version, sys.version
+    )
+
+    print(intro_message)
+
+    _exec_init_file(globals, locals)
+
     prompt = '>>> '
     try:
-        while True:
-            print(prompt, end='', flush=True)
-            try:
-                # FIXME: `stack` might not exist yet if there was no init file.
-                eval(
-                    'concat.stdlib.repl.read_form(stack, [])',
-                    globals,
-                    locals,
-                )
-            except concat.parser_combinators.ParseError as e:
-                print('Syntax error:\n')
-                print(e)
-            except concat.execute.ConcatRuntimeError as e:
-                print('Runtime error:\n')
-                print(e)
-            except _REPLTokenizeError as e:
-                print('Lexical error:\n')
-                print(e)
-            except EOFError:
-                break
-            else:
-                stack = cast(List[object], globals['stack'])
-                quotation = cast(
-                    Callable[[List[object], List[object]], None], stack.pop()
-                )
-                try:
-                    quotation(stack, cast(List[object], globals['stash']))
-                except concat.execute.ConcatRuntimeError as e:
-                    value = e.__cause__
-                    if value is None or value.__traceback__ is None:
-                        tb = None
-                    else:
-                        tb = value.__traceback__.tb_next
-                    traceback.print_exception(None, value, tb)
-                except KeyboardInterrupt:
-                    # a ctrl-c during execution just cancels that execution
-                    if globals.get('handle_ctrl_c', False):
-                        print('Concat was interrupted.')
-                    else:
-                        raise
-                print('Stack:', globals['stack'])
-                if debug:
-                    print('Stash:', globals['stash'])
-                for var in cast(Set[str], globals['visible_vars']):
-                    print(var, '=', globals[var])
+        _do_repl_loop(prompt, debug, globals, locals)
     except KeyboardInterrupt:
         # catch ctrl-c to cleanly exit
         _exit_repl()
