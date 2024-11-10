@@ -17,16 +17,16 @@ Development
 
 ### Code formatting
 
-Python code is formatted using [Axblack](https://github.com/axiros/axblack)
-through a [pre-commit](https://github.com/pre-commit/pre-commit) Git hook. To
-set this up in your clone of the repository, install the `dev` dependencies of
-the project (by running `pip install -e .[dev]`, for example), and then run:
+Python code is formatted using [Ruff](https://docs.astral.sh/ruff/) through a
+[pre-commit](https://github.com/pre-commit/pre-commit) Git hook. To set this up
+in your clone of the repository, install the `dev` dependencies of the project
+(by running `pip install -e .[dev]`, for example), and then run:
 
     pre-commit install
 
-Now Axblack and pre-commit should be working! Whenever you commit a Python file,
-Axblack will be ran on that file. If Axblack makes formatting changes, you might
-need to try restaging and recommiting.
+Now Ruff and pre-commit should be working! Whenever you commit a Python file,
+Ruff will be ran on that file. If Ruff makes formatting changes, you might need
+to try restaging and recommiting.
 
 ### Testing
 
