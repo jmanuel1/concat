@@ -447,9 +447,9 @@ def infer(
                         f'Decorators produce too many stack items: only 1 should be left. Stack: {final_type_stack.output}'
                     )
                 final_type = final_type_stack_output[0]
-                if not isinstance(final_type, IndividualType):
+                if not (final_type.kind <= ItemKind):
                     raise TypeError(
-                        f'Decorators should produce something of individual type, got {final_type}'
+                        f'Decorators should produce something of item kind, got {final_type}'
                     )
                 gamma |= {
                     name: (

@@ -8,6 +8,10 @@ from concat.typecheck.errors import (
     StackMismatchError,
     StaticAnalysisError,
     TypeError as ConcatTypeError,
+    format_not_generic_type_error,
+    format_not_allowed_as_overload_error,
+    format_sequence_var_must_be_only_arg_of_py_overloaded,
+    format_rigid_variable_error,
 )
 from concat.typecheck.substitutions import Substitutions
 import functools
@@ -766,6 +770,9 @@ class TypeSequence(Type, Iterable[Type]):
     def __bool__(self) -> bool:
         return not self._is_empty()
 
+    def __len__(self) -> int:
+        return len(self.as_sequence())
+
     def _is_empty(self) -> bool:
         return self._rest is None and not self._individual_types
 
@@ -1297,11 +1304,9 @@ class PythonFunctionType(IndividualType):
         self,
         inputs: Type,
         output: Type,
-        _overloads: Sequence[Tuple[Type, Type]] = (),
     ) -> None:
         super().__init__()
         self._type_arguments: Sequence[Type] = [inputs, output]
-        self._overloads: Sequence[Tuple[Type, Type]] = []
         i, o = inputs, output
         if i.kind != SequenceKind:
             raise ConcatTypeError(
@@ -1315,20 +1320,6 @@ class PythonFunctionType(IndividualType):
             raise ConcatTypeError(
                 f'{o} must be an item type, but has kind {o.kind}'
             )
-        _fixed_overloads: List[Tuple[Type, Type]] = []
-        for i, o in _overloads:
-            if i.kind != SequenceKind:
-                raise ConcatTypeError(
-                    f'{i} must be a sequence type, but has kind {i.kind}'
-                )
-            if isinstance(i, TypeSequence) and i and i[0].kind == SequenceKind:
-                i = TypeSequence(i.as_sequence()[1:])
-            if not (o.kind <= ItemKind):
-                raise ConcatTypeError(
-                    f'{o} must be an item type, but has kind {o.kind}'
-                )
-            _fixed_overloads.append((i, o))
-        self._overloads = _fixed_overloads
         self._type_arguments = _type_arguments
 
     def _free_type_variables(self) -> InsertionOrderedSet[Variable]:
@@ -1343,7 +1334,7 @@ class PythonFunctionType(IndividualType):
     def __repr__(self) -> str:
         return (
             f'PythonFunctionType(inputs={self.input!r}, '
-            f'output={self.output!r}, _overloads={self._overloads!r})'
+            f'output={self.output!r})'
         )
 
     def __str__(self) -> str:
@@ -1364,10 +1355,7 @@ class PythonFunctionType(IndividualType):
     ) -> 'PythonFunctionType':
         inp = sub(self.input)
         out = sub(self.output)
-        overloads: Sequence[Tuple[Type, Type]] = [
-            (sub(i), sub(o)) for i, o in self._overloads
-        ]
-        return PythonFunctionType(inputs=inp, output=out, _overloads=overloads)
+        return PythonFunctionType(inputs=inp, output=out)
 
     @property
     def input(self) -> Type:
@@ -1377,39 +1365,12 @@ class PythonFunctionType(IndividualType):
     def output(self) -> Type:
         return self._type_arguments[1]
 
-    def select_overload(
-        self, input_types: Sequence[StackItemType]
-    ) -> Tuple['PythonFunctionType', 'Substitutions']:
-        for overload in [(self.input, self.output), *self._overloads]:
-            try:
-                sub = TypeSequence(input_types).constrain_and_bind_variables(
-                    overload[0], set(), []
-                )
-            except TypeError:
-                continue
-            return (
-                sub(py_function_type[overload]),
-                sub,
-            )
-        raise ConcatTypeError(
-            'no overload of {} matches types {}'.format(self, input_types)
-        )
-
-    def with_overload(self, input: Type, output: Type) -> 'PythonFunctionType':
-        return PythonFunctionType(
-            inputs=self.input,
-            output=self.output,
-            _overloads=[*self._overloads, (input, output)],
-        )
-
     def bind(self) -> 'PythonFunctionType':
         inputs = self.input[1:]
         output = self.output
-        overloads = [(i[1:], o) for i, o in self._overloads]
         return PythonFunctionType(
             inputs=TypeSequence(inputs),
             output=output,
-            _overloads=overloads,
         )
 
     def constrain_and_bind_variables(
@@ -1463,29 +1424,159 @@ class PythonFunctionType(IndividualType):
             sub.add_subtyping_provenance((self, supertype))
             return sub
         if isinstance(supertype, PythonFunctionType):
-            # No need to extend the rigid variables, we know both types have no
-            # parameters at this point.
+            self_input_types = self.input
+            supertype_input_types = supertype.input
+            sub = supertype_input_types.constrain_and_bind_variables(
+                self_input_types,
+                rigid_variables,
+                subtyping_assumptions,
+            )
+            sub = sub(self.output).constrain_and_bind_variables(
+                sub(supertype.output),
+                rigid_variables,
+                subtyping_assumptions,
+            )(sub)
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
+        raise ConcatTypeError(f'{self} is not a subtype of {supertype}')
+
+
+class _PythonOverloadedType(IndividualType):
+    def __init__(self, overloads: TypeSequence) -> None:
+        super().__init__()
+        _fixed_overloads: List[Type] = []
+        self._overloads: TypeSequence
+        for overload in overloads:
+            if isinstance(overload, Variable):
+                if overload.kind <= IndividualKind:
+                    _fixed_overloads.append(overload)
+                    continue
+                if overload.kind <= SequenceKind:
+                    if len(overloads) != 1:
+                        raise ConcatTypeError(
+                            format_sequence_var_must_be_only_arg_of_py_overloaded(
+                                overload
+                            )
+                        )
+                    _fixed_overloads.append(overload)
+                    continue
+            if isinstance(overload, _PythonOverloadedType):
+                _fixed_overloads += overload._overloads
+                continue
+            if not isinstance(overload, PythonFunctionType):
+                raise ConcatTypeError(
+                    format_not_allowed_as_overload_error(overload)
+                )
+            i, o = overload.input, overload.output
+            # HACK: Sequence variables are introduced by the type sequence AST nodes
+            if isinstance(i, TypeSequence) and i and i[0].kind == SequenceKind:
+                i = TypeSequence(i.as_sequence()[1:])
+            _fixed_overloads.append(PythonFunctionType(i, o))
+        self._overloads = TypeSequence(_fixed_overloads)
+
+    def __getitem__(self, args: Sequence[Type]) -> NoReturn:
+        raise ConcatTypeError(format_not_generic_type_error(self))
+
+    @property
+    def attributes(self) -> Mapping[str, 'Type']:
+        raise {'__call__': self}
+
+    def _free_type_variables(self) -> InsertionOrderedSet['Variable']:
+        return InsertionOrderedSet([])
+
+    def bind(self) -> _PythonOverloadedType:
+        return _PythonOverloadedType(
+            TypeSequence(
+                [
+                    f.bind()
+                    for f in self._overloads
+                    if isinstance(f, PythonFunctionType)
+                ]
+            )
+        )
+
+    @_sub_cache
+    def apply_substitution(
+        self, sub: 'concat.typecheck.Substitutions'
+    ) -> '_PythonOverloadedType':
+        return _PythonOverloadedType(sub(self._overloads))
+
+    def constrain_and_bind_variables(
+        self,
+        supertype: 'Type',
+        rigid_variables: AbstractSet['Variable'],
+        subtyping_assumptions: List[Tuple['Type', 'Type']],
+    ) -> 'Substitutions':
+        if self is supertype or _contains_assumption(
+            subtyping_assumptions, self, supertype
+        ):
+            sub = Substitutions()
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
+        if not (self.kind <= supertype.kind):
+            raise ConcatTypeError(
+                f'{self} has kind {self.kind} but {supertype} has kind {supertype.kind}'
+            )
+        if supertype is get_object_type():
+            sub = Substitutions()
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
+        if (
+            isinstance(supertype, ItemVariable)
+            and supertype.kind is IndividualKind
+            and supertype not in rigid_variables
+        ):
+            sub = Substitutions([(supertype, self)])
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
+        if isinstance(supertype, _OptionalType):
+            sub = self.constrain_and_bind_variables(
+                supertype.type_arguments[0],
+                rigid_variables,
+                subtyping_assumptions,
+            )
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
+        if isinstance(supertype, ObjectType):
+            sub = Substitutions()
+            for attr in supertype.attributes:
+                self_attr_type = sub(self.get_type_of_attribute(attr))
+                supertype_attr_type = sub(
+                    supertype.get_type_of_attribute(attr)
+                )
+                sub = self_attr_type.constrain_and_bind_variables(
+                    supertype_attr_type,
+                    rigid_variables,
+                    subtyping_assumptions,
+                )
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
+        if isinstance(supertype, PythonFunctionType):
+            if (
+                self._overloads
+                and isinstance(self._overloads[0], Variable)
+                and self._overloads[0].kind <= SequenceKind
+            ):
+                if self._overloads[0] in rigid_variables:
+                    raise ConcatTypeError(
+                        format_rigid_variable_error(
+                            self._overloads[0], supertype
+                        )
+                    )
+                sub = Substitutions(
+                    [(self._overloads[0], TypeSequence([supertype]))]
+                )
+                sub.add_subtyping_provenance((self, supertype))
+                return sub
 
             # Support overloading the subtype.
             exceptions = []
-            for overload in [
-                (self.input, self.output),
-                *self._overloads,
-            ]:
+            for overload in self._overloads:
+                subtyping_assumptions_copy = subtyping_assumptions[:]
                 try:
-                    subtyping_assumptions_copy = subtyping_assumptions[:]
-                    self_input_types = overload[0]
-                    supertype_input_types = supertype.input
-                    sub = supertype_input_types.constrain_and_bind_variables(
-                        self_input_types,
-                        rigid_variables,
-                        subtyping_assumptions_copy,
+                    sub = overload.constrain_and_bind_variables(
+                        supertype, rigid_variables, subtyping_assumptions
                     )
-                    sub = sub(self.output).constrain_and_bind_variables(
-                        sub(supertype.output),
-                        rigid_variables,
-                        subtyping_assumptions_copy,
-                    )(sub)
                     sub.add_subtyping_provenance((self, supertype))
                     return sub
                 except ConcatTypeError as e:
@@ -1497,64 +1588,10 @@ class PythonFunctionType(IndividualType):
             ) from ExceptionGroup(
                 f'{self} is not compatible with {supertype}', exceptions
             )
+        if isinstance(supertype, _PythonOverloadedType):
+            # TODO: unsure what to do here
+            raise NotImplementedError
         raise ConcatTypeError(f'{self} is not a subtype of {supertype}')
-
-
-class _PythonOverloadedType(Type):
-    def __init__(self) -> None:
-        super().__init__()
-
-    def __getitem__(self, args: Sequence[Type]) -> 'PythonFunctionType':
-        if len(args) == 0:
-            raise ConcatTypeError(
-                'py_overloaded must be applied to at least one argument'
-            )
-        fun_type = args[0]
-        if not isinstance(fun_type, PythonFunctionType):
-            raise ConcatTypeError(
-                'Arguments to py_overloaded must be Python function types'
-            )
-        for arg in args[1:]:
-            if not isinstance(arg, PythonFunctionType):
-                raise ConcatTypeError(
-                    'Arguments to py_overloaded must be Python function types'
-                )
-            fun_type = fun_type.with_overload(arg.input, arg.output)
-        return fun_type
-
-    @property
-    def attributes(self) -> Mapping[str, 'Type']:
-        raise ConcatTypeError('py_overloaded does not have attributes')
-
-    def _free_type_variables(self) -> InsertionOrderedSet['Variable']:
-        return InsertionOrderedSet([])
-
-    @_sub_cache
-    def apply_substitution(
-        self, _: 'concat.typecheck.Substitutions'
-    ) -> '_PythonOverloadedType':
-        return self
-
-    def instantiate(self) -> PythonFunctionType:
-        return self[py_function_type.instantiate(),]
-
-    def constrain_and_bind_variables(
-        self,
-        supertype: 'Type',
-        rigid_variables: AbstractSet['Variable'],
-        subtyping_assumptions: List[Tuple['Type', 'Type']],
-    ) -> 'Substitutions':
-        raise ConcatTypeError('py_overloaded is a generic type')
-
-    @property
-    def kind(self) -> 'Kind':
-        return GenericTypeKind([SequenceKind], IndividualKind)
-
-    def __eq__(self, other: object) -> bool:
-        return isinstance(other, type(self))
-
-
-py_overloaded_type = _PythonOverloadedType()
 
 
 class _NoReturnType(IndividualType):
@@ -1956,6 +1993,13 @@ def _mapping_to_str(mapping: Mapping) -> str:
 
 # expose _Function as StackEffect
 StackEffect = _Function
+
+_overloads_var = BoundVariable(SequenceKind)
+py_overloaded_type = GenericType(
+    [_overloads_var],
+    _PythonOverloadedType(TypeSequence([_overloads_var])),
+    is_variadic=True,
+)
 
 _x = BoundVariable(kind=IndividualKind)
 

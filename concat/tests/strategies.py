@@ -11,6 +11,7 @@ from concat.typecheck.types import (
     no_return_type,
     optional_type,
     py_function_type,
+    py_overloaded_type,
 )
 from hypothesis.strategies import (  # type: ignore
     SearchStrategy,
@@ -57,6 +58,20 @@ def _object_type_strategy(
     )
 
 
+def _py_function_strategy(
+    individual_type_strategy: SearchStrategy[IndividualType],
+) -> SearchStrategy[PythonFunctionType]:
+    return builds(
+        lambda args: py_function_type[args],
+        tuples(
+            _type_sequence_strategy(
+                individual_type_strategy, no_rest_var=True
+            ),
+            individual_type_strategy,
+        ),
+    )
+
+
 _individual_type_subclasses = IndividualType.__subclasses__()
 _individual_type_strategies = {}
 
@@ -87,13 +102,17 @@ _individual_type_strategy = recursive(
         _object_type_strategy(children), ObjectType
     )
     | _mark_individual_type_strategy(
+        _py_function_strategy(children),
+        PythonFunctionType,
+    )
+    | _mark_individual_type_strategy(
         builds(
-            lambda args: py_function_type[args],
-            tuples(
-                _type_sequence_strategy(children, no_rest_var=True), children
+            lambda arg: py_overloaded_type[arg],
+            _type_sequence_strategy(
+                _py_function_strategy(children), no_rest_var=True
             ),
         ),
-        PythonFunctionType,
+        type(py_overloaded_type[()]),
     )
     | _mark_individual_type_strategy(
         builds(

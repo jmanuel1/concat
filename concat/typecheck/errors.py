@@ -103,3 +103,21 @@ def format_substitution_kind_error(variable: Variable, ty: Type) -> str:
         f'{variable} is being substituted by {ty}, which has the wrong kind '
         f'({variable.kind} vs {ty.kind})'
     )
+
+
+def format_not_generic_type_error(ty: Type) -> str:
+    return f'{ty} is not a generic type (has kind {ty.kind})'
+
+
+def format_not_allowed_as_overload_error(ty: Type) -> str:
+    return f'{ty} cannot be the type of an overload of a Python function'
+
+
+def format_sequence_var_must_be_only_arg_of_py_overloaded(
+    var: Variable,
+) -> str:
+    return f'{var} must be the only argument of py_overloaded'
+
+
+def format_rigid_variable_error(var: Variable, ty: Type) -> str:
+    return f'{var} is rigid and cannot be unified with {ty}'
