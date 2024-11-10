@@ -15,6 +15,7 @@ from concat.typecheck.errors import (
     format_item_type_expected_in_type_sequence_error,
     format_name_reassigned_in_type_sequence_error,
     format_not_a_variable_error,
+    format_decorator_result_kind_error,
 )
 import concat.typecheck.preamble_types
 from concat.typecheck.substitutions import Substitutions
@@ -449,7 +450,7 @@ def infer(
                 final_type = final_type_stack_output[0]
                 if not (final_type.kind <= ItemKind):
                     raise TypeError(
-                        f'Decorators should produce something of item kind, got {final_type}'
+                        format_decorator_result_kind_error(final_type)
                     )
                 gamma |= {
                     name: (

@@ -121,3 +121,7 @@ def format_sequence_var_must_be_only_arg_of_py_overloaded(
 
 def format_rigid_variable_error(var: Variable, ty: Type) -> str:
     return f'{var} is rigid and cannot be unified with {ty}'
+
+
+def format_decorator_result_kind_error(ty: Type) -> str:
+    return f'Decorators should produce something of item kind, got {ty}'

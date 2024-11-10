@@ -1479,7 +1479,7 @@ class _PythonOverloadedType(IndividualType):
 
     @property
     def attributes(self) -> Mapping[str, 'Type']:
-        raise {'__call__': self}
+        return {'__call__': self}
 
     def _free_type_variables(self) -> InsertionOrderedSet['Variable']:
         return InsertionOrderedSet([])
@@ -1507,8 +1507,10 @@ class _PythonOverloadedType(IndividualType):
         rigid_variables: AbstractSet['Variable'],
         subtyping_assumptions: List[Tuple['Type', 'Type']],
     ) -> 'Substitutions':
-        if self is supertype or _contains_assumption(
-            subtyping_assumptions, self, supertype
+        if (
+            self is supertype
+            or _contains_assumption(subtyping_assumptions, self, supertype)
+            or supertype is get_object_type()
         ):
             sub = Substitutions()
             sub.add_subtyping_provenance((self, supertype))
@@ -1517,13 +1519,8 @@ class _PythonOverloadedType(IndividualType):
             raise ConcatTypeError(
                 f'{self} has kind {self.kind} but {supertype} has kind {supertype.kind}'
             )
-        if supertype is get_object_type():
-            sub = Substitutions()
-            sub.add_subtyping_provenance((self, supertype))
-            return sub
         if (
             isinstance(supertype, ItemVariable)
-            and supertype.kind is IndividualKind
             and supertype not in rigid_variables
         ):
             sub = Substitutions([(supertype, self)])
