@@ -14,7 +14,6 @@ from concat.typecheck.errors import (
     format_rigid_variable_error,
 )
 from concat.typecheck.substitutions import Substitutions
-import functools
 from typing import (
     AbstractSet,
     Any,
@@ -526,9 +525,9 @@ class GenericType(Type):
         ):
             return Substitutions([(supertype, self)])
         if not isinstance(supertype, GenericType):
-            supertype_parameter_kinds: Sequence[Kind]
+            supertype_parameter_kinds: list[Kind]
             if isinstance(supertype.kind, GenericTypeKind):
-                supertype_parameter_kinds = supertype.kind.parameter_kinds
+                supertype_parameter_kinds = [*supertype.kind.parameter_kinds]
             elif self.kind.result_kind <= supertype.kind:
                 supertype_parameter_kinds = []
             else:
@@ -538,8 +537,8 @@ class GenericType(Type):
             params_to_inst = len(self.kind.parameter_kinds) - len(
                 supertype_parameter_kinds
             )
-            param_kinds_left = self.kind.parameter_kinds[
-                -len(supertype_parameter_kinds) :
+            param_kinds_left = [
+                *self.kind.parameter_kinds[-len(supertype_parameter_kinds) :]
             ]
             if params_to_inst < 0 or not (
                 param_kinds_left >= supertype_parameter_kinds
@@ -1681,8 +1680,6 @@ class _OptionalType(IndividualType):
         return [self._type_argument]
 
 
-# FIXME: Not a total order, using total_ordering might be very unsound.
-@functools.total_ordering
 class Kind(abc.ABC):
     @abc.abstractmethod
     def __eq__(self, other: object) -> bool:
@@ -1691,6 +1688,12 @@ class Kind(abc.ABC):
     @abc.abstractmethod
     def __lt__(self, other: 'Kind') -> bool:
         pass
+
+    def __le__(self, other: Kind) -> bool:
+        return self == other or self < other
+
+    def __ge__(self, other: Kind) -> bool:
+        return other <= self
 
     @abc.abstractmethod
     def __str__(self) -> str:
