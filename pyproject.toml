@@ -26,12 +26,12 @@ readme = "README.md"
 
 [project.optional-dependencies]
 dev = [
-  "ruff",
   "flake8>=7.1.0,<8",
   "mypy>=1.12.0,<2",
   "pre-commit>=2.6.0,<3",
   "pylsp-mypy",
   "python-lsp-server[all]>=1.12.0,<2",
+  "ruff",
   "snakeviz",
 ]
 test = [
@@ -65,3 +65,9 @@ target-version = "py312"
 
 [tool.ruff.format]
 quote-style = "single"
+
+[tool.ruff.lint]
+select = ["E", "F", "C90"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 14 # max allowed, mccabe equivalent setting would be 15 for warrning *at* 15
