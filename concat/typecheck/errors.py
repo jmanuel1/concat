@@ -125,3 +125,18 @@ def format_rigid_variable_error(var: Variable, ty: Type) -> str:
 
 def format_decorator_result_kind_error(ty: Type) -> str:
     return f'Decorators should produce something of item kind, got {ty}'
+
+
+def format_subkinding_error(sub: Type, sup: Type) -> str:
+    return (
+        f'The kind of {sub} ({sub.kind}) is incompatible with the kind of '
+        f'{sup} ({sup.kind})'
+    )
+
+
+def format_cannot_have_attributes_error(ty: Type) -> str:
+    return f'{ty} cannot have attributes'
+
+
+def format_type_tuple_index_out_of_range_error(ty: Type, index: int) -> str:
+    return f'Tuple type {ty} does not support index {index}'

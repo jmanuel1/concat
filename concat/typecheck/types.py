@@ -8,12 +8,17 @@ from concat.typecheck.errors import (
     StackMismatchError,
     StaticAnalysisError,
     TypeError as ConcatTypeError,
+    format_cannot_have_attributes_error,
     format_not_generic_type_error,
     format_not_allowed_as_overload_error,
-    format_sequence_var_must_be_only_arg_of_py_overloaded,
     format_rigid_variable_error,
+    format_sequence_var_must_be_only_arg_of_py_overloaded,
+    format_subkinding_error,
+    format_type_tuple_index_out_of_range_error,
 )
 from concat.typecheck.substitutions import Substitutions
+import functools
+import operator
 from typing import (
     AbstractSet,
     Any,
@@ -1269,6 +1274,62 @@ class ObjectType(IndividualType):
         return self._head
 
 
+class TypeTuple(Type):
+    """Type-level tuples (products)."""
+
+    def __init__(self, types: Sequence[Type]) -> None:
+        super().__init__()
+        self._types = types
+
+    def constrain_and_bind_variables(
+        self, supertype, rigid_variables, subtyping_assumptions
+    ) -> Substitutions:
+        if self._type_id == supertype._type_id or _contains_assumption(
+            subtyping_assumptions, self, supertype
+        ):
+            return Substitutions()
+        if not (self.kind <= supertype.kind):
+            # QUESTION: Should I raise normal errors? Tuple types shouldn't be
+            # exposed to the user.
+            raise ConcatTypeError(format_subkinding_error(self, supertype))
+        # TODO: Support Fix
+        if not isinstance(supertype, TypeTuple):
+            raise NotImplementedError
+        sub = Substitutions()
+        for subty, superty in zip(self._types, supertype._types):
+            sub = sub(subty).constrain_and_bind_variables(
+                sub(superty), rigid_variables, subtyping_assumptions
+            )(sub)
+        sub.add_subtyping_provenance((self, supertype))
+        return sub
+
+    def _free_type_variables(self) -> InsertionOrderedSet[Variable]:
+        return functools.reduce(
+            operator.or_,
+            (t.free_type_variables() for t in self._types),
+            InsertionOrderedSet([]),
+        )
+
+    @_sub_cache
+    def apply_substitution(self, sub) -> TypeTuple:
+        return TypeTuple([sub(t) for t in self._types])
+
+    @property
+    def attributes(self) -> NoReturn:
+        raise ConcatTypeError(format_cannot_have_attributes_error(self))
+
+    @property
+    def kind(self) -> TupleKind:
+        return TupleKind([t.kind for t in self._types])
+
+    def project(self, n: int) -> Type:
+        if n >= len(self._types):
+            raise ConcatTypeError(
+                format_type_tuple_index_out_of_range_error(self, n)
+            )
+        return self._types[n]
+
+
 # QUESTION: Should this exist, or should I use ObjectType?
 class ClassType(ObjectType):
     """The representation of types of classes, like in "Design and Evaluation of Gradual Typing for Python" (Vitousek et al. 2014)."""
@@ -1698,6 +1759,26 @@ class Kind(abc.ABC):
     @abc.abstractmethod
     def __str__(self) -> str:
         pass
+
+
+class TupleKind(Kind):
+    def __init__(self, kinds: Sequence[Kind]) -> None:
+        self._kinds = [*kinds]
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, Kind):
+            return NotImplemented
+        return isinstance(other, TupleKind) and self._kinds == other._kinds
+
+    def __lt__(self, other) -> bool:
+        return (
+            isinstance(other, TupleKind)
+            and len(self._kinds) == len(other._kinds)
+            and self._kinds < other._kinds
+        )
+
+    def __str__(self) -> str:
+        return f'Tuple[{', '.join(str(k) for k in self._kinds)}]'
 
 
 class _ItemKind(Kind):

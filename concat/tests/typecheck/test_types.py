@@ -15,13 +15,16 @@ from concat.typecheck.types import (
     ObjectType,
     SequenceVariable,
     StackEffect,
+    TupleKind,
     TypeSequence,
+    TypeTuple,
     addable_type,
     get_int_type,
     get_object_type,
     optional_type,
     py_function_type,
     get_tuple_type,
+    no_return_type,
 )
 import unittest
 
@@ -201,3 +204,44 @@ class TestGeneric(unittest.TestCase):
         supertype = GenericType([item], item)
         with self.assertRaises(ConcatTypeError):
             subtype.constrain_and_bind_variables(supertype, set(), [])
+
+
+class TestTypeTuples(unittest.TestCase):
+    def test_empty_tuple(self) -> None:
+        self.assertEqual(TypeTuple([]), TypeTuple([]))
+
+    def test_equal(self) -> None:
+        self.assertEqual(
+            TypeTuple([get_int_type()]), TypeTuple([get_int_type()])
+        )
+
+    def test_unequal_lengths(self) -> None:
+        with self.assertRaises(ConcatTypeError):
+            TypeTuple([get_int_type()]).constrain_and_bind_variables(
+                TypeTuple([]), set(), []
+            )
+
+    def test_not_subtype(self) -> None:
+        with self.assertRaises(ConcatTypeError):
+            TypeTuple([get_int_type()]).constrain_and_bind_variables(
+                TypeTuple([no_return_type]), set(), []
+            )
+
+    def test_subtype(self) -> None:
+        TypeTuple([get_int_type()]).constrain_and_bind_variables(
+            TypeTuple([get_object_type()]), set(), []
+        )
+
+    def test_projection(self) -> None:
+        self.assertEqual(
+            TypeTuple([get_int_type()]).project(0), get_int_type()
+        )
+
+    def test_unsupported_projection(self) -> None:
+        with self.assertRaises(ConcatTypeError):
+            TypeTuple([get_int_type()]).project(1)
+
+    def test_kind(self) -> None:
+        self.assertEqual(
+            TypeTuple([get_int_type()]).kind, TupleKind([IndividualKind])
+        )
