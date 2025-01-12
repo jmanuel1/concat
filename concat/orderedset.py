@@ -98,6 +98,9 @@ class InsertionOrderedSet(AbstractSet[_T]):
     def __len__(self) -> int:
         return len(self._data)
 
+    def __str__(self) -> str:
+        return f'{{{', '.join(str(e) for e in self._order)}}}'
+
 
 def filter_duplicates(xs: LinkedList[_A]) -> LinkedList[_A]:
     found = set()
@@ -229,7 +232,6 @@ class _Tree23:
             return _Tree23(('up', _leaf_23_tree, key, _leaf_23_tree))
         if self.is_2_node():
             p, a, q = data
-            # print(key, a)
             if key < a:
                 p_ = p._insert(key)
                 return _Tree23((p_, a, q))._insert_upwards_phase()
