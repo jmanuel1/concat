@@ -29,6 +29,7 @@ class TestREPLFunctions(unittest.TestCase):
         some, words, here = object(), object(), object()
         with replace_stdin(io.StringIO('some words here')):
             concat.stdlib.repl.read_quot(
+                concat.typecheck.TypeChecker(),
                 stack,
                 [],
                 extra_env=concat.typecheck.Environment(

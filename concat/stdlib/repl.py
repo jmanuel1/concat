@@ -70,7 +70,11 @@ def _read_until_complete_line() -> str:
     return line
 
 
-def read_form(stack: List[object], stash: List[object]) -> None:
+def read_form(
+    tc_context: concat.typecheck.TypeChecker,
+    stack: List[object],
+    stash: List[object],
+) -> None:
     caller_frame = inspect.stack()[1].frame
     caller_globals: Dict[str, Any] = {**caller_frame.f_globals}
     caller_locals = caller_frame.f_locals
@@ -83,7 +87,7 @@ def read_form(stack: List[object], stash: List[object]) -> None:
     except concat.parser_combinators.ParseError:
         ast = _parse(string)
         ast.assert_no_parse_errors()
-        concat.typecheck.check(caller_globals['@@extra_env'], ast.children)
+        tc_context.check(caller_globals['@@extra_env'], ast.children)
         # I don't think it makes sense for us to get multiple children if what
         # we got was a statement, so we assert.
         assert len(ast.children) == 1
@@ -94,12 +98,13 @@ def read_form(stack: List[object], stash: List[object]) -> None:
 
         stack.append(statement_function)
     else:
-        concat.typecheck.check(caller_globals['@@extra_env'], ast.children)
+        tc_context.check(caller_globals['@@extra_env'], ast.children)
         py_ast = _transpile(ast)
         concat.execute.execute('<stdin>', py_ast, scope)
 
 
 def read_quot(
+    tc_context: concat.typecheck.TypeChecker,
     stack: List[object],
     stash: List[object],
     extra_env: Optional[concat.typecheck.Environment] = None,
@@ -111,11 +116,12 @@ def read_quot(
         **caller_frame.f_globals,
         'stack': stack,
         'stash': stash,
+        'tc_context': tc_context,
         '@@extra_env': extra_env,
     }
     caller_locals = caller_frame.f_locals
     exec(
-        'concat.stdlib.repl.read_form(stack, stash)',
+        'concat.stdlib.repl.read_form(tc_context, stack, stash)',
         caller_globals,
         caller_locals,
     )
@@ -174,6 +180,7 @@ def _exec_init_file(
 def _do_repl_loop(
     prompt: str,
     debug: bool,
+    tc_context: concat.typecheck.TypeChecker,
     global_env: Dict[str, object],
     local_env: Dict[str, object],
 ) -> None:
@@ -182,9 +189,9 @@ def _do_repl_loop(
         try:
             # skipcq: PYL-W0123
             eval(
-                'concat.stdlib.repl.read_form(stack, [])',
+                'concat.stdlib.repl.read_form(tc_context, stack, [])',
                 global_env,
-                local_env,
+                {**local_env, 'tc_context': tc_context},
             )
         except concat.parser_combinators.ParseError as e:
             print('Syntax error:\n')
@@ -229,11 +236,12 @@ def _repl_impl(
 ) -> None:
     if initial_globals is None:
         initial_globals = {}
+    tc_context = concat.typecheck.TypeChecker()
     globals: Dict[str, object] = {
         'visible_vars': set(),
         **initial_globals,
         'concat': concat,
-        '@@extra_env': concat.typecheck.load_builtins_and_preamble(),
+        '@@extra_env': tc_context.load_builtins_and_preamble(),
         'stack': stack,
         'stash': stash,
     }
@@ -252,7 +260,7 @@ def _repl_impl(
 
     prompt = '>>> '
     try:
-        _do_repl_loop(prompt, debug, globals, locals)
+        _do_repl_loop(prompt, debug, tc_context, globals, locals)
     except KeyboardInterrupt:
         # catch ctrl-c to cleanly exit
         _exit_repl()

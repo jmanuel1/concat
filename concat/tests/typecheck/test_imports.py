@@ -1,15 +1,17 @@
 from concat.parse import ImportStatementNode
-from concat.typecheck import Environment, infer
+from concat.typecheck import Environment, TypeChecker
 from concat.typecheck.types import (
     BoundVariable,
     GenericType,
     SequenceKind,
     StackEffect,
     TypeSequence,
-    get_module_type,
 )
 import pathlib
 from unittest import TestCase
+
+context = TypeChecker()
+infer = context.infer
 
 
 class TestImports(TestCase):
@@ -27,11 +29,12 @@ class TestImports(TestCase):
         ty = env['imported_module']
         seq_var = BoundVariable(kind=SequenceKind)
         ty.constrain_and_bind_variables(
+            context,
             GenericType(
                 [seq_var],
                 StackEffect(
                     TypeSequence([seq_var]),
-                    TypeSequence([seq_var, get_module_type()]),
+                    TypeSequence([seq_var, context.module_type]),
                 ),
             ),
             set(),
