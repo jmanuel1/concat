@@ -335,7 +335,12 @@ class FuncdefStatementNode(StatementNode):
         self.stack_effect = stack_effect
 
     def __repr__(self) -> str:
-        return f'FuncdefStatementNode(decorators={self.decorators!r}, name={self.name!r}, type_parameters={self.type_parameters!r}, annotation={self.annotation!r}, body={self.body!r}, stack_effect={self.stack_effect!r}, location={self.location!r})'
+        return (
+            f'FuncdefStatementNode(decorators={self.decorators!r}, '
+            f'name={self.name!r}, type_parameters={self.type_parameters!r}, '
+            f'annotation={self.annotation!r}, body={self.body!r}, '
+            f'stack_effect={self.stack_effect!r}, location={self.location!r})'
+        )
 
 
 class FromImportStatementNode(ImportStatementNode):
@@ -586,8 +591,8 @@ def extension(parsers: ParserDict) -> None:
     )
 
     # This parses a function definition.
-    # funcdef statement = DEF, NAME, [ type parameters ], stack effect, decorator*,
-    #   [ annotation ], COLON, suite ;
+    # funcdef statement = DEF, NAME, [ type parameters ], stack effect,
+    #   decorator*, [ annotation ], COLON, suite ;
     # decorator = AT, word ;
     # annotation = RARROW, word* ;
     # suite = NEWLINE, INDENT, (word | statement, NEWLINE)+, DEDENT | statement
@@ -718,7 +723,8 @@ def extension(parsers: ParserDict) -> None:
         """This parses a class definition statement.
 
         classdef statement = CLASS, NAME,
-            [ LSQB, ((type variable, (COMMA, type variable)*, [ COMMA ]) | (type variable, NAME=...)), RSQB) ],
+            [ LSQB, ((type variable, (COMMA, type variable)*, [ COMMA ]) |
+                (type variable, NAME=...)), RSQB) ],
             decorator*, [ bases ], keyword arg*,
             COLON, suite ;
         bases = tuple word ;
