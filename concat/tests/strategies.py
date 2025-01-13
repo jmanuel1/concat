@@ -6,7 +6,7 @@ from concat.typecheck.types import (
     PythonFunctionType,
     SequenceVariable,
     StackEffect,
-    StuckTypeApplication,
+    TypeApplication,
     TypeSequence,
     no_return_type,
     optional_type,
@@ -125,7 +125,7 @@ _individual_type_strategy = recursive(
 )
 
 for subclass in _individual_type_subclasses:
-    if subclass not in [StuckTypeApplication]:
+    if subclass not in [TypeApplication]:
         assert subclass in _individual_type_strategies, subclass
 
 register_type_strategy(IndividualType, _individual_type_strategy)

@@ -159,6 +159,12 @@ class Type(abc.ABC):
             f'{self} is neither a generic type nor a sequence type'
         )
 
+    def apply_is_redex(self) -> bool:
+        return False
+
+    def force_apply(self, args: Any) -> Any:
+        return self[args]
+
 
 def _sub_cache[T: Type, R](
     f: Callable[[T, Substitutions], R],
@@ -190,7 +196,7 @@ class IndividualType(Type):
         return {}
 
 
-class StuckTypeApplication(Type):
+class TypeApplication(Type):
     def __init__(self, head: Type, args: 'TypeArguments') -> None:
         super().__init__()
         if not isinstance(head.kind, GenericTypeKind):
@@ -229,18 +235,44 @@ class StuckTypeApplication(Type):
         return sub(self._head)[[sub(t) for t in self._args]]
 
     def constrain_and_bind_variables(
-        self, context: TypeChecker, supertype, rigid_variables, subtyping_assumptions
+        self,
+        context: TypeChecker,
+        supertype,
+        rigid_variables,
+        subtyping_assumptions,
     ) -> 'Substitutions':
-        if self._type_id == supertype._type_id or (self._result_kind <= IndividualKind and supertype._type_id == context.object_type._type_id) or _contains_assumption(subtyping_assumptions, self, supertype):
+        if (
+            self._type_id == supertype._type_id
+            or (
+                self._result_kind <= IndividualKind
+                and supertype._type_id == context.object_type._type_id
+            )
+            or _contains_assumption(subtyping_assumptions, self, supertype)
+        ):
             return Substitutions()
-        if isinstance(supertype, StuckTypeApplication):
+        if isinstance(supertype, TypeApplication):
             # TODO: Variance
             return self._head.constrain_and_bind_variables(
-                context, supertype._head, rigid_variables, subtyping_assumptions
+                context,
+                supertype._head,
+                rigid_variables,
+                subtyping_assumptions,
+            )
+        if self._head.apply_is_redex():
+            return self._head.force_apply(
+                self._args
+            ).constrain_and_bind_variables(
+                context, supertype, rigid_variables, subtyping_assumptions
             )
         raise ConcatTypeError(
             f'Cannot deduce that {self} is a subtype of {supertype} here'
         )
+
+    def is_redex(self) -> bool:
+        return self._head.apply_is_redex()
+
+    def force(self) -> Type:
+        return self._head.force_apply(self._args)
 
     def __str__(self) -> str:
         if self._internal_name is not None:
@@ -248,7 +280,7 @@ class StuckTypeApplication(Type):
         return f'{self._head}{_iterable_to_str(self._args)}'
 
     def __repr__(self) -> str:
-        return f'StuckTypeApplication({self._head!r}, {self._args!r})'
+        return f'TypeApplication({self._head!r}, {self._args!r})'
 
     def _free_type_variables(self) -> InsertionOrderedSet['Variable']:
         ftv = self._head.free_type_variables()
@@ -350,7 +382,7 @@ class BoundVariable(Variable):
                 raise ConcatTypeError(
                     f'{a} has kind {a.kind} but expected kind {p}'
                 )
-        return StuckTypeApplication(self, args)
+        return TypeApplication(self, args)
 
     def __repr__(self) -> str:
         return f'<bound variable {id(self)}>'
@@ -1151,6 +1183,17 @@ class NominalType(Type):
     def apply_substitution(self, sub: 'Substitutions') -> 'NominalType':
         return NominalType(self._brand, sub(self._ty))
 
+    def __getitem__(self, args: TypeArguments) -> Type:
+        # Since these types are compared by name, we don't need to perform
+        # substitution. Just remember the arguments.
+        return TypeApplication(self, args)
+
+    def apply_is_redex(self) -> bool:
+        return True
+
+    def force_apply(self, args: TypeArguments) -> Type:
+        return NominalType(self._brand, self._ty[args])
+
     @property
     def attributes(self) -> Mapping[str, Type]:
         return self._ty.attributes
@@ -1213,6 +1256,15 @@ class NominalType(Type):
                     f'{self} has kind {self.kind}, but {supertype} has kind {supertype.kind}'
                 )
             return concat.typecheck.Substitutions([(supertype, self)])
+        if isinstance(supertype, TypeApplication) and supertype.is_redex():
+            sub = self.constrain_and_bind_variables(
+                context,
+                supertype.force(),
+                rigid_variables,
+                subtyping_assumptions,
+            )
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
         return self._ty.constrain_and_bind_variables(
             context, supertype, rigid_variables, subtyping_assumptions
         )
@@ -1388,6 +1440,15 @@ class ObjectType(IndividualType):
             raise concat.typecheck.errors.TypeError(
                 f'structural type {self} cannot be a subtype of nominal type {supertype}'
             )
+        if isinstance(supertype, TypeApplication) and supertype.is_redex():
+            sub = self.constrain_and_bind_variables(
+                context,
+                supertype.force(),
+                rigid_variables,
+                subtyping_assumptions,
+            )
+            sub.add_subtyping_provenance((self, supertype))
+            return sub
         if not isinstance(supertype, ObjectType):
             raise NotImplementedError(repr(supertype))
 
@@ -2439,6 +2500,14 @@ class Fix(Type):
         return self._var.kind
 
     def __getitem__(self, args: Any) -> Any:
+        if isinstance(self._body, NominalType):
+            return TypeApplication(self, args)
+        return self.unroll()[args]
+
+    def apply_is_redex(self) -> bool:
+        return isinstance(self._body, NominalType)
+
+    def force_apply(self, args: Any) -> Any:
         return self.unroll()[args]
 
 
