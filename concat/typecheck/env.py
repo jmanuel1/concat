@@ -49,3 +49,6 @@ class Environment(Mapping[str, 'Type']):
 
     def __or__(self, other: Mapping[str, Type]) -> Environment:
         return Environment({**self, **other})
+
+    def __str__(self) -> str:
+        return f'{{{', '.join(f'{n}: {t}' for n, t in self.items())}}}'
