@@ -82,6 +82,7 @@ _builtins_stub_path = pathlib.Path(__file__) / '../builtin_stubs/builtins.cati'
 class TypeChecker:
     def __init__(self) -> None:
         self._module_namespaces: dict[pathlib.Path, Environment] = {}
+        self._is_in_forward_references_phase = False
 
     def load_builtins_and_preamble(self) -> Environment:
         env = self._check_stub(
@@ -197,30 +198,15 @@ class TypeChecker:
 
         # Prepare for forward references.
         # TODO: Do this in a more principled way with scope graphs.
-        for node in e:
-            if isinstance(node, concat.parse.ClassdefStatementNode):
-                type_name = node.class_name
-                kind: Kind = IndividualKind
-                type_parameters = []
-                parameter_kinds: Sequence[Kind]
-                if node.is_variadic:
-                    parameter_kinds = [SequenceKind]
-                else:
-                    for param in node.type_parameters:
-                        if isinstance(param, TypeNode):
-                            type_parameters.append(param.to_type(gamma)[0])
-                            continue
-                        raise UnhandledNodeTypeError(param)
-                if type_parameters:
-                    parameter_kinds = [
-                        variable.kind for variable in type_parameters
-                    ]
-                    kind = GenericTypeKind(parameter_kinds, IndividualKind)
-                gamma |= {
-                    type_name: ForwardTypeReference(
-                        kind, type_name, lambda: gamma
+        self._is_in_forward_references_phase = True
+        try:
+            for node in e:
+                if isinstance(node, concat.parse.ClassdefStatementNode):
+                    gamma = self._infer_class(
+                        node, gamma, extensions, source_dir
                     )
-                }
+        finally:
+            self._is_in_forward_references_phase = False
 
         for node in e:
             try:
@@ -635,61 +621,9 @@ class TypeChecker:
                 elif not check_bodies and isinstance(
                     node, concat.parse.ClassdefStatementNode
                 ):
-                    type_parameters: List[Variable] = []
-                    temp_gamma = gamma
-                    for param_node in node.type_parameters:
-                        if not isinstance(param_node, TypeNode):
-                            raise UnhandledNodeTypeError(param_node)
-                        param, temp_gamma = param_node.to_type(temp_gamma)
-                        type_parameters.append(param)
-                    if node.is_variadic:
-                        if len(type_parameters) > 1:
-                            raise TypeError(
-                                format_too_many_params_for_variadic_type_error()
-                            )
-                        underlying_kind = type_parameters[0].kind
-                        type_parameters = [
-                            BoundVariable(
-                                VariableArgumentKind(underlying_kind)
-                            )
-                        ]
-
-                    kind: Kind = IndividualKind
-                    if type_parameters:
-                        kind = GenericTypeKind(
-                            [v.kind for v in type_parameters], IndividualKind
-                        )
-                    self_type = BoundVariable(kind)
-                    temp_gamma |= {node.class_name: self_type}
-                    _, _, body_attrs = self.infer(
-                        temp_gamma,
-                        node.body,
-                        extensions=extensions,
-                        source_dir=source_dir,
-                        initial_stack=TypeSequence([]),
-                        check_bodies=check_bodies,
+                    gamma = self._infer_class(
+                        node, gamma, extensions, source_dir
                     )
-                    # TODO: Introduce scopes into the environment object
-                    body_attrs = Environment(
-                        {
-                            name: ty
-                            for name, ty in body_attrs.items()
-                            if name not in temp_gamma
-                        }
-                    )
-                    ty: Type = ObjectType(
-                        attributes=body_attrs,
-                    )
-                    if type_parameters:
-                        ty = GenericType(
-                            type_parameters,
-                            ty,
-                        )
-                    ty = Fix(
-                        self_type,
-                        NominalType(Brand(node.class_name, ty.kind, []), ty),
-                    )
-                    gamma |= {node.class_name: ty}
                 # TODO: Type aliases
                 else:
                     raise UnhandledNodeTypeError(
@@ -699,6 +633,80 @@ class TypeChecker:
                 error.set_location_if_missing(node.location)
                 raise
         return current_subs, current_effect, gamma
+
+    def _infer_class(
+        self,
+        node: concat.parse.ClassdefStatementNode,
+        gamma: Environment,
+        extensions: tuple[Callable] | None,
+        source_dir: str,
+    ) -> Environment:
+        type_parameters: List[Variable] = []
+        temp_gamma = gamma
+        for param_node in node.type_parameters:
+            if not isinstance(param_node, TypeNode):
+                raise UnhandledNodeTypeError(param_node)
+            param, temp_gamma = param_node.to_type(temp_gamma)
+            type_parameters.append(param)
+        if node.is_variadic:
+            if len(type_parameters) > 1:
+                raise TypeError(
+                    format_too_many_params_for_variadic_type_error()
+                )
+            underlying_kind = type_parameters[0].kind
+            type_parameters = [
+                BoundVariable(VariableArgumentKind(underlying_kind))
+            ]
+        if not self._is_in_forward_references_phase:
+            kind: Kind = IndividualKind
+            if type_parameters:
+                kind = GenericTypeKind(
+                    [v.kind for v in type_parameters], IndividualKind
+                )
+            self_type = BoundVariable(kind)
+            temp_gamma |= {node.class_name: self_type}
+            _, _, body_attrs = self.infer(
+                temp_gamma,
+                node.body,
+                extensions=extensions,
+                source_dir=source_dir,
+                initial_stack=TypeSequence([]),
+                check_bodies=False,
+            )
+            # TODO: Introduce scopes into the environment object
+            body_attrs = Environment(
+                {
+                    name: ty
+                    for name, ty in body_attrs.items()
+                    if name not in temp_gamma
+                }
+            )
+            ty: Type = ObjectType(
+                attributes=body_attrs,
+            )
+            if type_parameters:
+                ty = GenericType(
+                    type_parameters,
+                    ty,
+                )
+            ty = Fix(
+                self_type,
+                NominalType(Brand(node.class_name, ty.kind, []), ty),
+            )
+            gamma |= {node.class_name: ty}
+        else:
+            type_name = node.class_name
+            kind: Kind = IndividualKind
+            type_parameters = []
+            parameter_kinds: Sequence[Kind] = [
+                variable.kind for variable in type_parameters
+            ]
+            if type_parameters:
+                kind = GenericTypeKind(parameter_kinds, IndividualKind)
+            gamma |= {
+                type_name: ForwardTypeReference(kind, type_name, lambda: gamma)
+            }
+        return gamma
 
     _object_type: SetOnce[Type] = SetOnce()
 
