@@ -6,6 +6,7 @@ The type inference algorithm was originally based on the one described in
 
 from __future__ import annotations
 from collections.abc import Generator
+import concat.graph
 from concat.set_once import SetOnce
 from concat.typecheck.env import Environment
 from concat.typecheck.errors import (
@@ -52,7 +53,10 @@ from concat.typecheck.types import (
     SequenceKind,
     SequenceVariable,
     StackEffect,
+    TupleKind,
+    Type,
     TypeSequence,
+    TypeTuple,
     Variable,
     VariableArgumentKind,
     no_return_type,
@@ -73,7 +77,6 @@ import concat.parse
 
 if TYPE_CHECKING:
     import concat.astutils
-    from concat.typecheck.types import Type
 
 
 _builtins_stub_path = pathlib.Path(__file__) / '../builtin_stubs/builtins.cati'
@@ -199,12 +202,43 @@ class TypeChecker:
         # Prepare for forward references.
         # TODO: Do this in a more principled way with scope graphs.
         self._is_in_forward_references_phase = True
+        ids_to_defs: dict[int, concat.parse.ClassdefStatementNode] = {}
+        names_to_defs: dict[str, int] = {}
+        ref_edges: list[tuple[int, int]] = []
+        next_id = 0
         try:
             for node in e:
                 if isinstance(node, concat.parse.ClassdefStatementNode):
-                    gamma = self._infer_class(
-                        node, gamma, extensions, source_dir
-                    )
+                    ids_to_defs[next_id] = node
+                    names_to_defs[node.class_name] = next_id
+                    next_id += 1
+            for def_id, node in ids_to_defs.items():
+                free_names = node.free_type_level_names
+                for name in free_names:
+                    if name in names_to_defs:
+                        ref_edges.append((def_id, names_to_defs[name]))
+            graph = concat.graph.graph_from_edges(ref_edges)
+            sccs = concat.graph.cycles(graph)
+            for scc in sccs:
+                kinds = []
+                for def_id in scc:
+                    kind: Kind = IndividualKind
+                    type_parameters = self._get_class_params(
+                        ids_to_defs[def_id], gamma
+                    )[0]
+                    if type_parameters:
+                        kind = GenericTypeKind(
+                            [v.kind for v in type_parameters], IndividualKind
+                        )
+                    kinds.append(kind)
+                ty_vars = [ItemVariable(k) for k in kinds]
+                tup = TypeTuple(ty_vars)
+                fix_var = BoundVariable(TupleKind(kinds))
+                fixpoint = Fix(fix_var, tup)
+                gamma |= {
+                    ids_to_defs[def_id].class_name: fixpoint.project(i)
+                    for i, def_id in enumerate(scc)
+                }
         finally:
             self._is_in_forward_references_phase = False
 
@@ -219,6 +253,7 @@ class TypeChecker:
                     if pragma == 'builtin_object':
                         name = node.args[0]
                         self._object_type = gamma[name]
+                        gamma[name].unsafe_set_type_id(Type.the_object_type_id)
                     if pragma == 'builtin_list':
                         name = node.args[0]
                         self._list_type = gamma[name]
@@ -621,9 +656,12 @@ class TypeChecker:
                 elif not check_bodies and isinstance(
                     node, concat.parse.ClassdefStatementNode
                 ):
-                    gamma = self._infer_class(
+                    gamma, sub = self._infer_class(
                         node, gamma, extensions, source_dir
                     )
+                    current_subs = sub(current_subs)
+                    gamma = current_subs(gamma)
+                    current_effect = current_subs(current_effect)
                 # TODO: Type aliases
                 else:
                     raise UnhandledNodeTypeError(
@@ -634,13 +672,9 @@ class TypeChecker:
                 raise
         return current_subs, current_effect, gamma
 
-    def _infer_class(
-        self,
-        node: concat.parse.ClassdefStatementNode,
-        gamma: Environment,
-        extensions: tuple[Callable] | None,
-        source_dir: str,
-    ) -> Environment:
+    def _get_class_params(
+        self, node: concat.parse.ClassdefStatementNode, gamma: Environment
+    ) -> Tuple[Sequence[Variable], Environment]:
         type_parameters: List[Variable] = []
         temp_gamma = gamma
         for param_node in node.type_parameters:
@@ -657,56 +691,53 @@ class TypeChecker:
             type_parameters = [
                 BoundVariable(VariableArgumentKind(underlying_kind))
             ]
-        if not self._is_in_forward_references_phase:
-            kind: Kind = IndividualKind
-            if type_parameters:
-                kind = GenericTypeKind(
-                    [v.kind for v in type_parameters], IndividualKind
-                )
-            self_type = BoundVariable(kind)
-            temp_gamma |= {node.class_name: self_type}
-            _, _, body_attrs = self.infer(
-                temp_gamma,
-                node.body,
-                extensions=extensions,
-                source_dir=source_dir,
-                initial_stack=TypeSequence([]),
-                check_bodies=False,
-            )
-            # TODO: Introduce scopes into the environment object
-            body_attrs = Environment(
-                {
-                    name: ty
-                    for name, ty in body_attrs.items()
-                    if name not in temp_gamma
-                }
-            )
-            ty: Type = ObjectType(
-                attributes=body_attrs,
-            )
-            if type_parameters:
-                ty = GenericType(
-                    type_parameters,
-                    ty,
-                )
-            ty = Fix(
-                self_type,
-                NominalType(Brand(node.class_name, ty.kind, []), ty),
-            )
-            gamma |= {node.class_name: ty}
-        else:
-            type_name = node.class_name
-            kind: Kind = IndividualKind
-            type_parameters = []
-            parameter_kinds: Sequence[Kind] = [
-                variable.kind for variable in type_parameters
-            ]
-            if type_parameters:
-                kind = GenericTypeKind(parameter_kinds, IndividualKind)
-            gamma |= {
-                type_name: ForwardTypeReference(kind, type_name, lambda: gamma)
+        return type_parameters, temp_gamma
+
+    def _infer_class(
+        self,
+        node: concat.parse.ClassdefStatementNode,
+        gamma: Environment,
+        extensions: Sequence[Callable] | None,
+        source_dir: str,
+    ) -> tuple[Environment, Substitutions]:
+        type_parameters, temp_gamma = self._get_class_params(node, gamma)
+        assert not self._is_in_forward_references_phase
+        _, _, body_attrs = self.infer(
+            temp_gamma,
+            node.body,
+            extensions=extensions,
+            source_dir=source_dir,
+            initial_stack=TypeSequence([]),
+            check_bodies=False,
+        )
+        # TODO: Introduce scopes into the environment object
+        body_attrs = Environment(
+            {
+                name: ty
+                for name, ty in body_attrs.items()
+                if name not in temp_gamma
             }
-        return gamma
+        )
+        ty: Type = ObjectType(
+            attributes=body_attrs,
+        )
+        if type_parameters:
+            ty = GenericType(
+                type_parameters,
+                ty,
+            )
+        ty = NominalType(Brand(node.class_name, ty.kind, []), ty)
+        sub = Substitutions()
+        if node.class_name in gamma:
+            forward_ty = gamma[node.class_name]
+            sub = ty.constrain_and_bind_variables(
+                self,
+                forward_ty,
+                gamma.free_type_variables() - forward_ty.free_type_variables(),
+                [],
+            )
+        gamma |= {node.class_name: ty}
+        return gamma, sub
 
     _object_type: SetOnce[Type] = SetOnce()
 
@@ -897,6 +928,10 @@ class NamedTypeNode(TypeNode):
         if type is None:
             raise NameError(self.name, self.location)
         return type, env
+
+    @property
+    def free_type_level_names(self) -> set[str]:
+        return {self.name}
 
 
 class _GenericTypeNode(IndividualTypeNode):

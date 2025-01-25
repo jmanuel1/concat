@@ -170,3 +170,15 @@ def format_attributes_unknown_error(ty: Type) -> str:
 
 def format_type_tuple_index_out_of_range_error(ty: Type, index: int) -> str:
     return f'Tuple type {ty} does not support index {index}'
+
+
+def format_not_a_type_tuple_error(ty: Type) -> str:
+    return f'{ty} is not a type tuple'
+
+
+def format_unknown_sequence_type(ty: Type) -> str:
+    return f'Not enough info about sequence type {ty} is known'
+
+
+def format_not_a_nominal_type_error(ty: Type) -> str:
+    return f'{ty} is not a nominal type'

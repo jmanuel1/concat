@@ -52,3 +52,6 @@ class Environment(Mapping[str, 'Type']):
 
     def __str__(self) -> str:
         return f'{{{', '.join(f'{n}: {t}' for n, t in self.items())}}}'
+
+    def __repr__(self) -> str:
+        return f'Environment({self._env!r})'

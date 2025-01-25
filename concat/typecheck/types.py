@@ -11,11 +11,14 @@ from concat.typecheck.errors import (
     format_attributes_unknown_error,
     format_cannot_have_attributes_error,
     format_not_allowed_as_overload_error,
+    format_not_a_nominal_type_error,
+    format_not_a_type_tuple_error,
     format_not_generic_type_error,
     format_rigid_variable_error,
     format_subkinding_error,
     format_subtyping_error,
     format_type_tuple_index_out_of_range_error,
+    format_unknown_sequence_type,
     format_wrong_arg_kind_error,
     format_wrong_number_of_type_arguments_error,
 )
@@ -49,6 +52,7 @@ if TYPE_CHECKING:
 
 class Type(abc.ABC):
     _next_type_id = 0
+    the_object_type_id = -1
 
     def __init__(self) -> None:
         self._free_type_variables_cached: Optional[
@@ -57,6 +61,9 @@ class Type(abc.ABC):
         self._internal_name: Optional[str] = None
         self._type_id = Type._next_type_id
         Type._next_type_id += 1
+
+    def unsafe_set_type_id(self, identifier: int) -> None:
+        self._type_id = identifier
 
     # No <= implementation using subtyping, because variables overload that for
     # sort by identity.
@@ -164,6 +171,19 @@ class Type(abc.ABC):
 
     def force_apply(self, args: Any) -> Any:
         return self[args]
+
+    def project(self, i: int) -> Type:
+        return Projection(self, i)
+
+    def project_is_redex(self) -> bool:
+        return False
+
+    def force_project(self, i: int) -> Type:
+        return self.project(i)
+
+    @property
+    def brand(self) -> Brand:
+        raise ConcatTypeError(format_not_a_nominal_type_error(self))
 
 
 def _sub_cache[T: Type, R](
@@ -287,6 +307,76 @@ class TypeApplication(Type):
         for arg in self._args:
             ftv |= arg.free_type_variables()
         return ftv
+
+
+class Projection(Type):
+    def __init__(self, head: Type, i: int) -> None:
+        super().__init__()
+        # type tuples are an internal feature
+        assert isinstance(head.kind, TupleKind)
+        assert 0 <= i < len(head.kind.element_kinds)
+        self._head = head
+        self._index = i
+        self._kind = head.kind.element_kinds[i]
+
+    def _free_type_variables(self) -> InsertionOrderedSet[Variable]:
+        return self._head.free_type_variables()
+
+    @_sub_cache
+    def apply_substitution(self, sub: Substitutions) -> Projection:
+        return Projection(sub(self._head), self._index)
+
+    @property
+    def attributes(self) -> Mapping[str, Type]:
+        if self._head.project_is_redex():
+            return self._head.force_project(self._index).attributes
+        raise ConcatTypeError(format_attributes_unknown_error(self))
+
+    def constrain_and_bind_variables(
+        self, context, supertype, rigid_variables, subtyping_assumptions
+    ) -> Substitutions:
+        if self._type_id == supertype._type_id or _contains_assumption(
+            subtyping_assumptions, self, supertype
+        ):
+            return Substitutions()
+        if isinstance(supertype, Projection):
+            sub = self._head.constrain_and_bind_variables(
+                context,
+                supertype._head,
+                rigid_variables,
+                subtyping_assumptions,
+            )
+            if self._index != supertype._index:
+                # TODO: Hide type tuples from user-facing error messages
+                raise ConcatTypeError(format_subtyping_error(self, supertype))
+            return sub
+        if self._head.project_is_redex():
+            return self._head.force_project(
+                self._index
+            ).constrain_and_bind_variables(
+                context, supertype, rigid_variables, subtyping_assumptions
+            )
+        raise ConcatTypeError(format_subtyping_error(self, supertype))
+
+    @property
+    def kind(self) -> Kind:
+        return self._kind
+
+    def __getitem__(self, x: Any) -> Any:
+        if self._kind <= SequenceKind:
+            if self._head.project_is_redex():
+                return self._head.force_project(self._index)[x]
+            raise ConcatTypeError(format_unknown_sequence_type(self))
+        return TypeApplication(self, x)
+
+    def is_redex(self) -> bool:
+        return self._head.project_is_redex()
+
+    def force(self) -> Type:
+        return self._head.force_project(self._index)
+
+    def __repr__(self) -> str:
+        return f'Projection({self._head!r}, {self._index!r})'
 
 
 class Variable(Type, abc.ABC):
@@ -675,6 +765,13 @@ class GenericType(Type):
             and self.kind <= supertype.kind
         ):
             return Substitutions([(supertype, self)])
+        if isinstance(supertype, Projection) and supertype.is_redex():
+            return self.constrain_and_bind_variables(
+                context,
+                supertype.force(),
+                rigid_variables,
+                subtyping_assumptions,
+            )
         if not isinstance(supertype, GenericType):
             supertype_parameter_kinds: list[Kind]
             if isinstance(supertype.kind, GenericTypeKind):
@@ -688,6 +785,15 @@ class GenericType(Type):
             params_to_inst = len(self.kind.parameter_kinds) - len(
                 supertype_parameter_kinds
             )
+            if params_to_inst == 0:
+                fresh_args = [t.freshen() for t in self._type_parameters]
+                return self[fresh_args].constrain_and_bind_variables(
+                    context,
+                    supertype[fresh_args],
+                    rigid_variables,
+                    subtyping_assumptions,
+                )
+
             param_kinds_left = [
                 *self.kind.parameter_kinds[-len(supertype_parameter_kinds) :]
             ]
@@ -1156,7 +1262,7 @@ class Brand:
         return f'Brand({self._user_name!r}, {self.kind!r}, {self._superbrands!r})@{id(self)}'
 
     def is_subrand_of(self, context: TypeChecker, other: Brand) -> bool:
-        object_brand = context.object_type.unroll().brand  # type: ignore
+        object_brand = context.object_type.brand
         return (
             self is other
             or other is object_brand
@@ -1206,9 +1312,9 @@ class NominalType(Type):
         subtyping_assumptions,
     ) -> 'Substitutions':
         if (
-            supertype._type_id == context.object_type._type_id
-            or self._type_id == supertype._type_id
+            self._type_id == supertype._type_id
             or _contains_assumption(subtyping_assumptions, self, supertype)
+            or supertype._type_id == Type.the_object_type_id
         ):
             return concat.typecheck.Substitutions()
         if isinstance(supertype, NominalType):
@@ -1338,7 +1444,7 @@ class ObjectType(IndividualType):
         # every object type is a subtype of object_type
         if (
             self._type_id == supertype._type_id
-            or supertype._type_id == context.object_type._type_id
+            or supertype._type_id == Type.the_object_type_id
             or _contains_assumption(subtyping_assumptions, self, supertype)
         ):
             sub = Substitutions()
@@ -1440,7 +1546,10 @@ class ObjectType(IndividualType):
             raise concat.typecheck.errors.TypeError(
                 f'structural type {self} cannot be a subtype of nominal type {supertype}'
             )
-        if isinstance(supertype, TypeApplication) and supertype.is_redex():
+        if (
+            isinstance(supertype, (TypeApplication, Projection))
+            and supertype.is_redex()
+        ):
             sub = self.constrain_and_bind_variables(
                 context,
                 supertype.force(),
@@ -1548,6 +1657,9 @@ class TypeTuple(Type):
                 format_type_tuple_index_out_of_range_error(self, n)
             )
         return self._types[n]
+
+    def __repr__(self) -> str:
+        return f'TypeTuple({self._types!r})'
 
 
 class VariableArgumentPack(Type):
@@ -2208,6 +2320,13 @@ class TupleKind(Kind):
     def __str__(self) -> str:
         return f'Tuple[{', '.join(str(k) for k in self._kinds)}]'
 
+    def __repr__(self) -> str:
+        return f'TupleKind({self._kinds!r})'
+
+    @property
+    def element_kinds(self) -> Sequence[Kind]:
+        return self._kinds
+
 
 class _ItemKind(Kind):
     __instance: Optional['_ItemKind'] = None
@@ -2411,7 +2530,7 @@ class GenericTypeKind(Kind):
 class Fix(Type):
     def __init__(self, var: Variable, body: Type) -> None:
         super().__init__()
-        assert var.kind == body.kind
+        assert var.kind >= body.kind, f'{var.kind!r}, {body.kind!r}'
         self._var = var
         self._body = body
         self._unrolled_ty: Optional[Type] = None
@@ -2448,8 +2567,6 @@ class Fix(Type):
 
     @_sub_cache
     def apply_substitution(self, sub: 'Substitutions') -> Type:
-        if all(v not in self.free_type_variables() for v in sub):
-            return self
         sub = Substitutions(
             {v: t for v, t in sub.items() if v is not self._var}
         )
@@ -2509,6 +2626,16 @@ class Fix(Type):
 
     def force_apply(self, args: Any) -> Any:
         return self.unroll()[args]
+
+    def project_is_redex(self) -> bool:
+        return True
+
+    def force_project(self, i: int) -> Type:
+        return self.unroll().project(i)
+
+    @property
+    def brand(self) -> Brand:
+        return self._body.brand
 
 
 class ForwardTypeReference(Type):

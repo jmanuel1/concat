@@ -19,6 +19,7 @@ extend_with(extension) -- mutates the dictionary by adding the extension
 from __future__ import annotations
 import abc
 import ast
+import functools
 import operator
 from typing import (
     Any,
@@ -56,6 +57,20 @@ class Node(abc.ABC):
         self.location = location
         self.end_location = end_location
         self.children = list(children)
+
+    @property
+    def free_type_level_names(self) -> set[str]:
+        closed_names = set(
+            class_def.class_name
+            for class_def in self.children
+            if isinstance(class_def, ClassdefStatementNode)
+        )
+        inner_names: set[str] = functools.reduce(
+            operator.or_,
+            (node.free_type_level_names for node in self.children),
+            set(),
+        )
+        return inner_names - closed_names
 
     def assert_no_parse_errors(self) -> None:
         failures = list(self.parsing_failures)
