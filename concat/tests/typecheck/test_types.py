@@ -7,7 +7,6 @@ from concat.typecheck.errors import TypeError as ConcatTypeError
 from concat.typecheck.types import (
     BoundVariable,
     Fix,
-    ForwardTypeReference,
     GenericType,
     IndividualKind,
     ItemKind,
@@ -154,38 +153,6 @@ class TestFix(unittest.TestCase):
         self.assertTrue(
             self.linked_list.equals(context, self.linked_list.unroll())
         )
-
-
-class TestForwardReferences(unittest.TestCase):
-    env = Environment({'ty': context.object_type})
-    ty = ForwardTypeReference(
-        IndividualKind, 'ty', lambda: TestForwardReferences.env
-    )
-
-    def test_resolve_supertype(self) -> None:
-        self.assertEqual(
-            Substitutions(),
-            self.ty.constrain_and_bind_variables(
-                context, self.ty.resolve_forward_references(), set(), []
-            ),
-        )
-
-    def test_resolve_subtype(self) -> None:
-        self.assertEqual(
-            Substitutions(),
-            self.ty.resolve_forward_references().constrain_and_bind_variables(
-                context, self.ty, set(), []
-            ),
-        )
-
-    def test_resolve_equal(self) -> None:
-        self.assertTrue(
-            self.ty.resolve_forward_references().equals(context, self.ty)
-        )
-        self.assertTrue(
-            self.ty.equals(context, self.ty.resolve_forward_references())
-        )
-
 
 class TestTypeSequence(unittest.TestCase):
     def test_constrain_empty(self) -> None:

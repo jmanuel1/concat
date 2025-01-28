@@ -111,6 +111,13 @@ def format_name_reassigned_in_type_sequence_error(name: str) -> str:
     )
 
 
+def format_occurs_error(v: Variable, ty: Type) -> str:
+    return (
+        f'{v} cannot be a subtype of {ty} because it would form a recursive '
+        'type'
+    )
+
+
 def format_not_a_variable_error(name: str) -> str:
     return f'{name} does not refer to a variable'
 
@@ -124,6 +131,10 @@ def format_substitution_kind_error(variable: Variable, ty: Type) -> str:
 
 def format_not_generic_type_error(ty: Type) -> str:
     return f'{ty} is not a generic type (has kind {ty.kind})'
+
+
+def format_generic_type_attributes_error(ty: Type) -> str:
+    return f'Generic type {ty} does not have attributes; maybe you forgot type arguments?'
 
 
 def format_not_allowed_as_overload_error(ty: Type) -> str:

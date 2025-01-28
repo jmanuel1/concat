@@ -88,13 +88,20 @@ class TestTypeChecker(unittest.TestCase):
             tree.children,
             is_top_level=True,
         )
-        self.assertTrue(
-            type.equals(
-                context,
-                StackEffect(
-                    TypeSequence([]), TypeSequence([context.int_type])
-                ),
-            )
+        expected = StackEffect(
+            TypeSequence([]), TypeSequence([context.int_type])
+        )
+        type.constrain_and_bind_variables(
+            context,
+            expected,
+            set(),
+            []
+        )
+        expected.constrain_and_bind_variables(
+            context,
+            type,
+            set(),
+            []
         )
 
     def test_if_then_inference(self) -> None:
@@ -441,12 +448,6 @@ class TestSubtyping(unittest.TestCase):
         )
 
     @given(from_type(IndividualType), from_type(IndividualType))
-    @settings(
-        suppress_health_check=(
-            HealthCheck.filter_too_much,
-            HealthCheck.too_slow,
-        )
-    )
     def test_class_subtype_of_py_function(self, type1, type2) -> None:
         x = ItemVariable(IndividualKind)
         py_function = py_function_type[TypeSequence([type1]), type2]

@@ -8,12 +8,14 @@ from concat.typecheck.types import (
     StackEffect,
     TypeApplication,
     TypeSequence,
+    _OptionalType,
+    _PythonOverloadedType,
     no_return_type,
     optional_type,
     py_function_type,
     py_overloaded_type,
 )
-from hypothesis.strategies import (  # type: ignore
+from hypothesis.strategies import (
     SearchStrategy,
     builds,
     dictionaries,
@@ -47,12 +49,10 @@ def _object_type_strategy(
         builds(
             ObjectType,
             attributes=dictionaries(text(), individual_type_strategy),
-            _head=none(),
         ),
         lambda children: builds(
             ObjectType,
             attributes=dictionaries(text(), individual_type_strategy),
-            _head=children,
         ),
         max_leaves=10,
     )
@@ -112,14 +112,14 @@ _individual_type_strategy = recursive(
                 _py_function_strategy(children), no_rest_var=True
             ),
         ),
-        type(py_overloaded_type[()]),
+        _PythonOverloadedType,
     )
     | _mark_individual_type_strategy(
         builds(
             lambda args: optional_type[args],
             tuples(children),
         ),
-        type(optional_type[ObjectType({}),]),
+        _OptionalType,
     ),
     max_leaves=50,
 )

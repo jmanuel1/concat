@@ -38,8 +38,8 @@ from typing import (
 from concat.typecheck.types import (
     BoundVariable,
     Brand,
+    DelayedSubstitution,
     Fix,
-    ForwardTypeReference,
     GenericType,
     GenericTypeKind,
     IndividualKind,
@@ -49,6 +49,7 @@ from concat.typecheck.types import (
     Kind,
     NominalType,
     ObjectType,
+    Projection,
     QuotationType,
     SequenceKind,
     SequenceVariable,
@@ -235,10 +236,16 @@ class TypeChecker:
                 tup = TypeTuple(ty_vars)
                 fix_var = BoundVariable(TupleKind(kinds))
                 fixpoint = Fix(fix_var, tup)
-                gamma |= {
+                gamma |= Environment({
                     ids_to_defs[def_id].class_name: fixpoint.project(i)
                     for i, def_id in enumerate(scc)
-                }
+                })
+                for i, def_id in enumerate(scc):
+                    def fix_former(env: Environment, ty: Type, ids_to_defs: dict[int, concat.parse.ClassdefStatementNode] = ids_to_defs, def_id: int = def_id, scc: Sequence[int] = scc, i: int = i, fix_var: Variable = fix_var) -> Type:
+                        tys = [env[ids_to_defs[def_id].class_name] for def_id in scc]
+                        tys[i] = ty
+                        return Fix(fix_var, TypeTuple(tys)).project(i)
+                    gamma = gamma.with_mutuals(ids_to_defs[def_id].class_name, fix_former)
         finally:
             self._is_in_forward_references_phase = False
 
@@ -301,8 +308,8 @@ class TypeChecker:
                         if child.value not in gamma:
                             raise NameError(child)
                         name_type = gamma[child.value]
-                        if isinstance(name_type, ForwardTypeReference):
-                            raise NameError(child)
+                        # FIXME: Statically tell if a name is used before its
+                        # definition is executed
                         if should_instantiate:
                             name_type = name_type.instantiate()
                         current_effect = StackEffect(
@@ -363,7 +370,7 @@ class TypeChecker:
                         # FIXME: Infer the type of elements in the list based on
                         # ALL the elements.
                         if element_type == no_return_type:
-                            assert collected_type[-1] != SequenceKind
+                            assert collected_type[-1].kind <= ItemKind, f'{collected_type} {collected_type[-1]}'
                             element_type = collected_type[-1]
                         # drop the top of the stack to use as the item
                         collected_type = collected_type[:-1]
@@ -565,24 +572,20 @@ class TypeChecker:
                     if node.value not in current_subs(gamma):
                         raise NameError(node)
                     type_of_name = current_subs(gamma)[node.value]
-                    if isinstance(type_of_name, ForwardTypeReference):
-                        raise NameError(node)
+                    # FIXME: Statically tell if a name is used before its
+                    # definition is executed
                     type_of_name = type_of_name.instantiate()
                     type_of_name = type_of_name.get_type_of_attribute(
                         '__call__'
                     ).instantiate()
-                    if not isinstance(type_of_name, StackEffect):
-                        raise UnhandledNodeTypeError(
-                            'name {} of type {} (repr {!r})'.format(
-                                node.value, type_of_name, type_of_name
-                            )
-                        )
-                    constraint_subs = o1.constrain_and_bind_variables(
-                        self, type_of_name.input, set(), []
+                    out = SequenceVariable()
+                    fun = StackEffect(o1, TypeSequence([out]))
+                    constraint_subs = type_of_name.constrain_and_bind_variables(
+                        self, fun, set(), []
                     )
                     current_subs = constraint_subs(current_subs)
                     current_effect = current_subs(
-                        StackEffect(i1, type_of_name.output)
+                        StackEffect(i1, fun.output)
                     )
                 elif isinstance(node, concat.parse.QuoteWordNode):
                     quotation = cast(concat.parse.QuoteWordNode, node)
@@ -736,7 +739,9 @@ class TypeChecker:
                 gamma.free_type_variables() - forward_ty.free_type_variables(),
                 [],
             )
-        gamma |= {node.class_name: ty}
+            fix_former = gamma.get_mutuals(node.class_name)
+            ty = fix_former(gamma, ty)
+        gamma |= Environment({node.class_name: ty})
         return gamma, sub
 
     _object_type: SetOnce[Type] = SetOnce()
@@ -812,7 +817,7 @@ class TypeChecker:
         stub_path = _find_stub_path(qualified_name.split('.'), source_dir)
         init_env = self.load_builtins_and_preamble()
         module_attributes = self._check_stub(stub_path, init_env)
-        module_type_brand = self._module_type.unroll().brand  # type: ignore
+        module_type_brand = self._module_type.brand
         brand = Brand(
             f'type({qualified_name})', IndividualKind, [module_type_brand]
         )
