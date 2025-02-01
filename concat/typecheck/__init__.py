@@ -38,7 +38,6 @@ from typing import (
 from concat.typecheck.types import (
     BoundVariable,
     Brand,
-    DelayedSubstitution,
     Fix,
     GenericType,
     GenericTypeKind,
@@ -49,9 +48,7 @@ from concat.typecheck.types import (
     Kind,
     NominalType,
     ObjectType,
-    Projection,
     QuotationType,
-    SequenceKind,
     SequenceVariable,
     StackEffect,
     TupleKind,

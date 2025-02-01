@@ -34,7 +34,10 @@ class Environment(Mapping[str, 'Type']):
             self._sub_cache[sub.id] = Environment(
                 {name: sub(t) for name, t in self.items()}
             )
-            self._sub_cache[sub.id]._mutuals = {n: lambda e, t: sub(f(e, t)) for n, f in self._mutuals.items()}
+            self._sub_cache[sub.id]._mutuals = {
+                n: lambda e, t, f=f: sub(f(e, t))
+                for n, f in self._mutuals.items()
+            }
         return self._sub_cache[sub.id]
 
     def free_type_variables(self) -> 'InsertionOrderedSet[Variable]':
@@ -60,14 +63,16 @@ class Environment(Mapping[str, 'Type']):
             env._mutuals |= other._mutuals
         return env
 
-    def with_mutuals(self, referer: str, fix_former: _FixFormer) -> Environment:
+    def with_mutuals(
+        self, referer: str, fix_former: _FixFormer
+    ) -> Environment:
         env = self.copy()
         env._mutuals[referer] = fix_former
         return env
 
     def copy(self) -> Environment:
         env = Environment(self._env)
-        env._mutuals = self._mutuals
+        env._mutuals = {**self._mutuals}
         return env
 
     def get_mutuals(self, referer: str) -> _FixFormer:
