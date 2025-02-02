@@ -230,19 +230,39 @@ class TypeChecker:
                         )
                     kinds.append(kind)
                 ty_vars = [ItemVariable(k) for k in kinds]
-                tup = TypeTuple(ty_vars)
                 fix_var = BoundVariable(TupleKind(kinds))
-                fixpoint = Fix(fix_var, tup)
-                gamma |= Environment({
-                    ids_to_defs[def_id].class_name: fixpoint.project(i)
-                    for i, def_id in enumerate(scc)
-                })
+                gamma |= Environment(
+                    {
+                        ids_to_defs[def_id].class_name: ty_vars[i]
+                        for i, def_id in enumerate(scc)
+                    }
+                )
                 for i, def_id in enumerate(scc):
-                    def fix_former(env: Environment, ty: Type, ids_to_defs: dict[int, concat.parse.ClassdefStatementNode] = ids_to_defs, def_id: int = def_id, scc: Sequence[int] = scc, i: int = i, fix_var: Variable = fix_var) -> Type:
-                        tys = [env[ids_to_defs[def_id].class_name] for def_id in scc]
+
+                    def fix_former(
+                        env: Environment,
+                        ty: Type,
+                        ids_to_defs: dict[
+                            int, concat.parse.ClassdefStatementNode
+                        ] = ids_to_defs,
+                        def_id: int = def_id,
+                        scc: Sequence[int] = scc,
+                        i: int = i,
+                        fix_var: Variable = fix_var,
+                    ) -> Type:
+                        tys = [
+                            env[ids_to_defs[def_id].class_name]
+                            for def_id in scc
+                        ]
                         tys[i] = ty
+                        # I don't think reusing the fix_var is necessary since
+                        # it won't be free in the other types, but I might as
+                        # well since I've written that already.
                         return Fix(fix_var, TypeTuple(tys)).project(i)
-                    gamma = gamma.with_mutuals(ids_to_defs[def_id].class_name, fix_former)
+
+                    gamma = gamma.with_mutuals(
+                        ids_to_defs[def_id].class_name, fix_former
+                    )
         finally:
             self._is_in_forward_references_phase = False
 
@@ -367,7 +387,9 @@ class TypeChecker:
                         # FIXME: Infer the type of elements in the list based on
                         # ALL the elements.
                         if element_type == no_return_type:
-                            assert collected_type[-1].kind <= ItemKind, f'{collected_type} {collected_type[-1]}'
+                            assert (
+                                collected_type[-1].kind <= ItemKind
+                            ), f'{collected_type} {collected_type[-1]}'
                             element_type = collected_type[-1]
                         # drop the top of the stack to use as the item
                         collected_type = collected_type[:-1]
@@ -577,13 +599,13 @@ class TypeChecker:
                     ).instantiate()
                     out = SequenceVariable()
                     fun = StackEffect(o1, TypeSequence([out]))
-                    constraint_subs = type_of_name.constrain_and_bind_variables(
-                        self, fun, set(), []
+                    constraint_subs = (
+                        type_of_name.constrain_and_bind_variables(
+                            self, fun, set(), []
+                        )
                     )
                     current_subs = constraint_subs(current_subs)
-                    current_effect = current_subs(
-                        StackEffect(i1, fun.output)
-                    )
+                    current_effect = current_subs(StackEffect(i1, fun.output))
                 elif isinstance(node, concat.parse.QuoteWordNode):
                     quotation = cast(concat.parse.QuoteWordNode, node)
                     # make sure any annotation matches the current stack
