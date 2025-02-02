@@ -497,6 +497,10 @@ class Variable(Type, abc.ABC):
     def force_repr(self) -> str:
         return repr(self)
 
+    def __getitem__(self, args: 'TypeArguments') -> Type:
+        # TypeApplication will do kind checking
+        return TypeApplication(self, args)
+
 
 class BoundVariable(Variable):
     def __init__(self, kind: 'Kind') -> None:
@@ -528,24 +532,6 @@ class BoundVariable(Variable):
         raise ConcatTypeError(
             f'Cannot constrain bound variable {self} to {supertype}'
         )
-
-    def __getitem__(self, args: 'TypeArguments') -> Type:
-        if not isinstance(self.kind, GenericTypeKind):
-            raise ConcatTypeError(f'{self} is not a generic type')
-        if self.kind.parameter_kinds and isinstance(
-            self.kind.parameter_kinds[0], VariableArgumentKind
-        ):
-            args = [VariableArgumentPack.collect_arguments(args)]
-        if len(self.kind.parameter_kinds) != len(args):
-            raise ConcatTypeError(
-                f'{self} was given {len(args)} arguments but expected {len(self.kind.parameter_kinds)}'
-            )
-        for a, p in zip(args, self.kind.parameter_kinds):
-            if not (a.kind <= p):
-                raise ConcatTypeError(
-                    f'{a} has kind {a.kind} but expected kind {p}'
-                )
-        return TypeApplication(self, args)
 
     def __repr__(self) -> str:
         return f'<bound variable {id(self)}>'
@@ -1496,17 +1482,11 @@ class ObjectType(IndividualType):
 
     def __init__(
         self,
-        attributes: Mapping[str, Type],
-        _head: Optional['ObjectType'] = None,
+        attributes: Mapping[str, Type]
     ) -> None:
         super().__init__()
 
         self._attributes = attributes
-
-        self._head = _head or self
-
-        self._internal_name: Optional[str] = None
-        self._internal_name = self._head._internal_name
 
     @property
     def kind(self) -> 'Kind':
@@ -1516,19 +1496,12 @@ class ObjectType(IndividualType):
         self,
         sub: 'concat.typecheck.Substitutions',
     ) -> 'ObjectType':
-        # if no free type vars will be substituted, just return self
-        if not any(free_var in sub for free_var in self.free_type_variables()):
-            return self
-
         attributes = cast(
             Dict[str, IndividualType],
             {attr: sub(t) for attr, t in self._attributes.items()},
         )
         subbed_type = type(self)(
             attributes,
-            # head is only used to keep track of where a type came from, so
-            # there's no need to substitute it
-            _head=self._head,
         )
         if self._internal_name is not None:
             subbed_type.set_internal_name(self._internal_name)
@@ -1668,9 +1641,7 @@ class ObjectType(IndividualType):
         return sub
 
     def __repr__(self) -> str:
-        # TODO: Remove `_head`
-        head = None if self._head is self else self._head
-        return f'{type(self).__qualname__}(attributes={self._attributes!r}, _head={head!r})'
+        return f'{type(self).__qualname__}(attributes={self._attributes!r})'
 
     def force_repr(self) -> str:
         attributes = _mapping_to_str({a: t.force_repr() for a, t in self._attributes.items()})
@@ -1684,15 +1655,11 @@ class ObjectType(IndividualType):
     def __str__(self) -> str:
         if self._internal_name is not None:
             return self._internal_name
-        return f'ObjectType({_mapping_to_str(self._attributes)}, {None if self._head is self else self._head})'
+        return f'ObjectType({_mapping_to_str(self._attributes)})'
 
     @property
     def attributes(self) -> Mapping[str, Type]:
         return self._attributes
-
-    @property
-    def head(self) -> 'ObjectType':
-        return self._head
 
 
 class TypeTuple(Type):
@@ -2752,6 +2719,9 @@ class GenericTypeKind(Kind):
 
     def __str__(self) -> str:
         return f'Generic[{", ".join(map(str, self.parameter_kinds))}, {self.result_kind}]'
+
+    def __repr__(self) -> str:
+        return f'GenericTypeKind({self.parameter_kinds!r}, {self.result_kind!r})'
 
 
 class Fix(Type):
