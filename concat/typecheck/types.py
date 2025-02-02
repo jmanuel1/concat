@@ -1,6 +1,7 @@
 from __future__ import annotations
 import abc
 from collections.abc import Callable
+from concat.logging import ConcatLogger
 from concat.orderedset import InsertionOrderedSet
 import concat.typecheck
 from concat.typecheck.errors import (
@@ -27,6 +28,7 @@ from concat.typecheck.errors import (
 )
 from concat.typecheck.substitutions import Substitutions
 import functools
+import logging
 import operator
 from typing import (
     AbstractSet,
@@ -51,6 +53,9 @@ from typing import (
 if TYPE_CHECKING:
     from concat.typecheck import TypeChecker
     from concat.typecheck.env import Environment
+
+
+_logger = ConcatLogger(logging.getLogger())
 
 
 def _sub_cache[T: Type, R](
@@ -196,6 +201,7 @@ class Type(abc.ABC):
         pass
 
     def __getitem__(self, _: Any) -> Type:
+        _logger.debug('tried to treat {} as generic or sequence', self)
         raise ConcatTypeError(
             f'{self} is neither a generic type nor a sequence type'
         )
@@ -1409,6 +1415,7 @@ class NominalType(Type):
         rigid_variables,
         subtyping_assumptions,
     ) -> 'Substitutions':
+        _logger.debug('{} <:? {}', self, supertype)
         if (
             self._type_id == supertype._type_id
             or _contains_assumption(subtyping_assumptions, self, supertype)
@@ -1534,6 +1541,7 @@ class ObjectType(IndividualType):
         rigid_variables: AbstractSet['Variable'],
         subtyping_assumptions: List[Tuple['Type', 'Type']],
     ) -> 'Substitutions':
+        _logger.debug('{} <:? {}', self, supertype)
         # every object type is a subtype of object_type
         if (
             self._type_id == supertype._type_id
@@ -2805,6 +2813,7 @@ class Fix(Type):
         rigid_variables,
         subtyping_assumptions,
     ) -> 'Substitutions':
+        _logger.debug('{} <:? {}', self, supertype)
         if isinstance(supertype, DelayedSubstitution):
             supertype = supertype.force()
         if (
