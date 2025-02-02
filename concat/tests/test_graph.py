@@ -26,11 +26,11 @@ class TestCycles(TestCase):
             next(it)
 
     def test_two_strongly_connected_components(self) -> None:
-        it = set(frozenset(c) for c in cycles({1: [2], 2: [1, 3], 3: []}))
+        it = {frozenset(c) for c in cycles({1: [2], 2: [1, 3], 3: []})}
         self.assertIn(frozenset([1, 2]), it)
         self.assertIn(frozenset([3]), it)
 
     def test_pointing_back_at_cycle(self) -> None:
-        it = set(frozenset(c) for c in cycles({1: [2], 2: [1], 3: [1]}))
+        it = {frozenset(c) for c in cycles({1: [2], 2: [1], 3: [1]})}
         self.assertIn(frozenset([1, 2]), it)
         self.assertIn(frozenset([3]), it)

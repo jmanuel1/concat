@@ -16,7 +16,6 @@ import concat.stdlib.repl
 import concat.typecheck
 import json
 import logging
-import logging.handlers
 import os.path
 import sys
 from typing import Callable, IO, AnyStr, assert_never

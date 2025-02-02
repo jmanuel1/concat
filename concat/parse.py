@@ -60,11 +60,9 @@ class Node(abc.ABC):
 
     @property
     def free_type_level_names(self) -> set[str]:
-        closed_names = set(
-            class_def.class_name
+        closed_names = {class_def.class_name
             for class_def in self.children
-            if isinstance(class_def, ClassdefStatementNode)
-        )
+            if isinstance(class_def, ClassdefStatementNode)}
         inner_names: set[str] = functools.reduce(
             operator.or_,
             (node.free_type_level_names for node in self.children),

@@ -694,8 +694,9 @@ class TypeChecker:
                 raise
         return current_subs, current_effect, gamma
 
+    @staticmethod
     def _get_class_params(
-        self, node: concat.parse.ClassdefStatementNode, gamma: Environment
+        node: concat.parse.ClassdefStatementNode, gamma: Environment
     ) -> Tuple[Sequence[Variable], Environment]:
         type_parameters: List[Variable] = []
         temp_gamma = gamma
@@ -872,11 +873,10 @@ class TypeChecker:
                 TypeSequence([_seq_var]), TypeSequence([_seq_var, module_t])
             )
             return GenericType([_seq_var], effect)
-        else:
-            innermost_type = self._generate_type_of_innermost_module(
-                _full_name, source_dir=pathlib.Path(source_dir)
-            )
-            return GenericType([_seq_var], innermost_type)
+        innermost_type = self._generate_type_of_innermost_module(
+            _full_name, source_dir=pathlib.Path(source_dir)
+        )
+        return GenericType([_seq_var], innermost_type)
 
 
 def _find_stub_path(

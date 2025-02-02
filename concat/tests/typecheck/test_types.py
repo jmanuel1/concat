@@ -1,7 +1,6 @@
 from concat.typecheck import (
     TypeChecker,
 )
-from concat.typecheck.env import Environment
 from concat.typecheck.substitutions import Substitutions
 from concat.typecheck.errors import TypeError as ConcatTypeError
 from concat.typecheck.types import (
@@ -206,7 +205,8 @@ class TestTypeTuples(unittest.TestCase):
                 context, TypeTuple([no_return_type]), set(), []
             )
 
-    def test_subtype(self) -> None:
+    @staticmethod
+    def test_subtype() -> None:
         TypeTuple([context.int_type]).constrain_and_bind_variables(
             context, TypeTuple([context.object_type]), set(), []
         )

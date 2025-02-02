@@ -22,7 +22,6 @@ from hypothesis.strategies import (
     from_type,
     just,
     lists,
-    none,
     recursive,
     register_type_strategy,
     text,

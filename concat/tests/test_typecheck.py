@@ -80,7 +80,8 @@ class TestTypeChecker(unittest.TestCase):
         self.assertEqual(len(type.output), 1)
         self.assertTrue(type.output[0].equals(context, context.int_type))
 
-    def test_add_operator_inference(self) -> None:
+    @staticmethod
+    def test_add_operator_inference() -> None:
         try_prog = '0 0 +\n'
         tree = parse(try_prog)
         sub, type, _ = context.infer(

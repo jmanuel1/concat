@@ -14,10 +14,8 @@ from concat.typecheck.errors import (
     format_generic_type_attributes_error,
     format_item_type_expected_in_type_sequence_error,
     format_not_a_nominal_type_error,
-    format_not_a_type_tuple_error,
     format_not_allowed_as_overload_error,
     format_not_generic_type_error,
-    format_occurs_error,
     format_rigid_variable_error,
     format_subkinding_error,
     format_subtyping_error,
@@ -206,7 +204,8 @@ class Type(abc.ABC):
             f'{self} is neither a generic type nor a sequence type'
         )
 
-    def apply_is_redex(self) -> bool:
+    @staticmethod
+    def apply_is_redex() -> bool:
         return False
 
     def force_apply(self, args: Any) -> Type:
@@ -215,7 +214,8 @@ class Type(abc.ABC):
     def project(self, i: int) -> Type:
         return Projection(self, i)
 
-    def project_is_redex(self) -> bool:
+    @staticmethod
+    def project_is_redex() -> bool:
         return False
 
     def force_project(self, i: int) -> Type:
@@ -2098,10 +2098,7 @@ class PythonFunctionType(IndividualType):
             raise ConcatTypeError(
                 f'{self} has kind {self.kind} but {supertype} has kind {supertype.kind}'
             )
-        if (
-            supertype._type_id == context.object_type._type_id
-            or supertype._type_id == py_overloaded_type[()]._type_id
-        ):
+        if supertype._type_id in (context.object_type._type_id, py_overloaded_type[()]._type_id):
             sub = Substitutions()
             sub.add_subtyping_provenance((self, supertype))
             return sub
