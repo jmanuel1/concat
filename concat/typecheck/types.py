@@ -275,7 +275,9 @@ class TypeApplication(Type):
         return self._result_kind
 
     def force_substitution(self, sub: 'Substitutions') -> Type:
-        forced = self._head.force_substitution(sub)[[sub(t) for t in self._args]]
+        forced = self._head.force_substitution(sub)[
+            [sub(t) for t in self._args]
+        ]
         if isinstance(forced, DelayedSubstitution):
             return forced.force()
         return forced
@@ -307,7 +309,12 @@ class TypeApplication(Type):
                 subtyping_assumptions,
             )
         # occurs check!
-        if isinstance(supertype, Variable) and supertype.kind >= self.kind and supertype not in rigid_variables and supertype not in self.free_type_variables():
+        if (
+            isinstance(supertype, Variable)
+            and supertype.kind >= self.kind
+            and supertype not in rigid_variables
+            and supertype not in self.free_type_variables()
+        ):
             return Substitutions([(supertype, self)])
         if self._head.apply_is_redex():
             return self.force().constrain_and_bind_variables(
@@ -581,9 +588,7 @@ class ItemVariable(Variable):
         ):
             return Substitutions([(supertype, self)])
         mapping: Mapping[Variable, Type]
-        if isinstance(
-            supertype, _OptionalType
-        ):
+        if isinstance(supertype, _OptionalType):
             try:
                 return self.constrain_and_bind_variables(
                     context,
@@ -921,9 +926,7 @@ class GenericType(Type):
 
     @property
     def attributes(self) -> NoReturn:
-        raise ConcatTypeError(
-            format_generic_type_attributes_error(self)
-        )
+        raise ConcatTypeError(format_generic_type_attributes_error(self))
 
     def _free_type_variables(self) -> InsertionOrderedSet['Variable']:
         return self._body.free_type_variables() - set(self._type_parameters)
@@ -932,10 +935,16 @@ class GenericType(Type):
 class TypeSequence(Type, Iterable[Type]):
     def __init__(self, sequence: Sequence[Type]) -> None:
         super().__init__()
-        while any(isinstance(t, DelayedSubstitution) and t.kind <= SequenceKind for t in sequence):
+        while any(
+            isinstance(t, DelayedSubstitution) and t.kind <= SequenceKind
+            for t in sequence
+        ):
             flattened: list[Type] = []
             for t in sequence:
-                if isinstance(t, DelayedSubstitution) and t.kind <= SequenceKind:
+                if (
+                    isinstance(t, DelayedSubstitution)
+                    and t.kind <= SequenceKind
+                ):
                     t = t.force()
                     if isinstance(t, TypeSequence):
                         flattened.extend(t)
@@ -943,21 +952,24 @@ class TypeSequence(Type, Iterable[Type]):
                 flattened.append(t)
             sequence = flattened
         self._rest: Variable | None
-        if (
-            sequence
-            and sequence[0].kind is SequenceKind
-        ):
+        if sequence and sequence[0].kind is SequenceKind:
             if isinstance(sequence[0], Variable):
                 self._rest = sequence[0]
             else:
-                raise ConcatTypeError(format_item_type_expected_in_type_sequence_error(sequence[0]))
+                raise ConcatTypeError(
+                    format_item_type_expected_in_type_sequence_error(
+                        sequence[0]
+                    )
+                )
             self._individual_types = sequence[1:]
         else:
             self._rest = None
             self._individual_types = sequence
         for ty in self._individual_types:
             if not (ty.kind <= ItemKind):
-                raise ConcatTypeError(format_item_type_expected_in_type_sequence_error(ty))
+                raise ConcatTypeError(
+                    format_item_type_expected_in_type_sequence_error(ty)
+                )
 
     def as_sequence(self) -> Sequence[Type]:
         if self._rest is not None:
@@ -1132,7 +1144,9 @@ class TypeSequence(Type, Iterable[Type]):
         return 'TypeSequence([' + ', '.join(repr(t) for t in self) + '])'
 
     def force_repr(self) -> str:
-        return 'TypeSequence([' + ', '.join(t.force_repr() for t in self) + '])'
+        return (
+            'TypeSequence([' + ', '.join(t.force_repr() for t in self) + '])'
+        )
 
     def __iter__(self) -> Iterator[Type]:
         return iter(self.as_sequence())
@@ -1235,9 +1249,7 @@ class _Function(IndividualType):
         return True
 
     def __repr__(self) -> str:
-        return 'StackEffect({!r}, {!r})'.format(
-            self.input, self.output
-        )
+        return 'StackEffect({!r}, {!r})'.format(self.input, self.output)
 
     def force_repr(self) -> str:
         return f'StackEffect({self.input.force_repr()}, {self.output.force_repr()})'
@@ -1446,7 +1458,11 @@ class NominalType(Type):
                     f'{self} has kind {self.kind}, but {supertype} has kind {supertype.kind}'
                 )
             return concat.typecheck.Substitutions([(supertype, self)])
-        if isinstance(supertype, (TypeApplication, Projection)) and supertype.is_redex() or isinstance(supertype, DelayedSubstitution):
+        if (
+            isinstance(supertype, (TypeApplication, Projection))
+            and supertype.is_redex()
+            or isinstance(supertype, DelayedSubstitution)
+        ):
             sub = self.constrain_and_bind_variables(
                 context,
                 supertype.force(),
@@ -1480,10 +1496,7 @@ class NominalType(Type):
 class ObjectType(IndividualType):
     """Structural record types."""
 
-    def __init__(
-        self,
-        attributes: Mapping[str, Type]
-    ) -> None:
+    def __init__(self, attributes: Mapping[str, Type]) -> None:
         super().__init__()
 
         self._attributes = attributes
@@ -1644,7 +1657,9 @@ class ObjectType(IndividualType):
         return f'{type(self).__qualname__}(attributes={self._attributes!r})'
 
     def force_repr(self) -> str:
-        attributes = _mapping_to_str({a: t.force_repr() for a, t in self._attributes.items()})
+        attributes = _mapping_to_str(
+            {a: t.force_repr() for a, t in self._attributes.items()}
+        )
         return f'{type(self).__qualname__}(attributes={attributes})'
 
     def _free_type_variables(self) -> InsertionOrderedSet[Variable]:
@@ -1737,7 +1752,9 @@ class DelayedSubstitution(Type):
         if isinstance(ty, DelayedSubstitution):
             sub = sub(ty._sub)
             ty = ty._ty
-        self._sub = Substitutions({v: t for v, t in sub.items() if v in ty.free_type_variables()})
+        self._sub = Substitutions(
+            {v: t for v, t in sub.items() if v in ty.free_type_variables()}
+        )
         self._ty = ty
         self._forced: Type | None = None
 
@@ -1787,12 +1804,26 @@ class DelayedSubstitution(Type):
     def attributes(self) -> Mapping[str, Type]:
         return self.force().attributes
 
-    def constrain_and_bind_variables(self, context, supertype, rigid_variables, subtyping_assumptions) -> Substitutions:
-        if self._type_id == supertype._type_id or _contains_assumption(subtyping_assumptions, self, supertype) or self.kind <= ItemKind and supertype._type_id == Type.the_object_type_id:
+    def constrain_and_bind_variables(
+        self, context, supertype, rigid_variables, subtyping_assumptions
+    ) -> Substitutions:
+        if (
+            self._type_id == supertype._type_id
+            or _contains_assumption(subtyping_assumptions, self, supertype)
+            or self.kind <= ItemKind
+            and supertype._type_id == Type.the_object_type_id
+        ):
             return Substitutions()
-        if isinstance(supertype, DelayedSubstitution) and self._sub == supertype._sub:
-            return self._ty.constrain_and_bind_variables(context, supertype._ty, rigid_variables, subtyping_assumptions)
-        return self.force().constrain_and_bind_variables(context, supertype, rigid_variables, subtyping_assumptions)
+        if (
+            isinstance(supertype, DelayedSubstitution)
+            and self._sub == supertype._sub
+        ):
+            return self._ty.constrain_and_bind_variables(
+                context, supertype._ty, rigid_variables, subtyping_assumptions
+            )
+        return self.force().constrain_and_bind_variables(
+            context, supertype, rigid_variables, subtyping_assumptions
+        )
 
     @property
     def kind(self) -> Kind:
@@ -1802,7 +1833,9 @@ class DelayedSubstitution(Type):
         if not self._forced:
             self._forced = self._ty.force_substitution(self._sub)
             self._forced._type_id = self._type_id
-            assert not isinstance(self._forced, DelayedSubstitution), f'{self._ty!r}'
+            assert not isinstance(
+                self._forced, DelayedSubstitution
+            ), f'{self._ty!r}'
         return self._forced
 
     def __iter__(self) -> Iterator[DelayedSubstitution]:
@@ -2127,7 +2160,9 @@ class PythonFunctionType(IndividualType):
 
 
 class _PythonOverloadedType(IndividualType):
-    def __init__(self, overloads: VariableArgumentPack | DelayedSubstitution) -> None:
+    def __init__(
+        self, overloads: VariableArgumentPack | DelayedSubstitution
+    ) -> None:
         super().__init__()
         _fixed_overloads: List[Type] = []
         self._overloads: VariableArgumentPack
@@ -2379,9 +2414,7 @@ class _OptionalType(IndividualType):
                 subtyping_assumptions,
             )
         if not (self.kind <= supertype.kind):
-            raise ConcatTypeError(
-                format_subkinding_error(self, supertype)
-            )
+            raise ConcatTypeError(format_subkinding_error(self, supertype))
         # FIXME: optional[none] should simplify to none
         if (
             self._type_argument is context.none_type
@@ -2721,7 +2754,9 @@ class GenericTypeKind(Kind):
         return f'Generic[{", ".join(map(str, self.parameter_kinds))}, {self.result_kind}]'
 
     def __repr__(self) -> str:
-        return f'GenericTypeKind({self.parameter_kinds!r}, {self.result_kind!r})'
+        return (
+            f'GenericTypeKind({self.parameter_kinds!r}, {self.result_kind!r})'
+        )
 
 
 class Fix(Type):
