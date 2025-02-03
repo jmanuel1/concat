@@ -3,7 +3,6 @@ import abc
 from collections.abc import Callable
 from concat.logging import ConcatLogger
 from concat.orderedset import InsertionOrderedSet
-import concat.typecheck
 from concat.typecheck.errors import (
     AttributeError as ConcatAttributeError,
     StackMismatchError,
@@ -61,9 +60,7 @@ def _sub_cache[T: Type, R](
 ) -> Callable[[T, Substitutions], T | R]:
     _sub_cache = dict[tuple[int, int], T | R]()
 
-    def apply_substitution(
-        self: T, sub: 'concat.typecheck.Substitutions'
-    ) -> T | R:
+    def apply_substitution(self: T, sub: Substitutions) -> T | R:
         if (self._type_id, sub.id) not in _sub_cache:
             if not (set(sub) & self.free_type_variables()):
                 _sub_cache[self._type_id, sub.id] = self
@@ -158,15 +155,11 @@ class Type(abc.ABC):
         return self._free_type_variables_cached
 
     @_sub_cache
-    def apply_substitution(
-        self, sub: 'concat.typecheck.Substitutions'
-    ) -> 'Type':
+    def apply_substitution(self, sub: Substitutions) -> 'Type':
         return DelayedSubstitution(sub, self)
 
     @abc.abstractmethod
-    def force_substitution(
-        self, _: 'concat.typecheck.Substitutions'
-    ) -> 'Type':
+    def force_substitution(self, _: Substitutions) -> 'Type':
         pass
 
     @abc.abstractmethod
@@ -204,8 +197,7 @@ class Type(abc.ABC):
             f'{self} is neither a generic type nor a sequence type'
         )
 
-    @staticmethod
-    def apply_is_redex() -> bool:
+    def apply_is_redex(_) -> bool:
         return False
 
     def force_apply(self, args: Any) -> Type:
@@ -214,8 +206,7 @@ class Type(abc.ABC):
     def project(self, i: int) -> Type:
         return Projection(self, i)
 
-    @staticmethod
-    def project_is_redex() -> bool:
+    def project_is_redex(_) -> bool:
         return False
 
     def force_project(self, i: int) -> Type:
@@ -1231,7 +1222,7 @@ class _Function(IndividualType):
     def _rename_sequence_variable(
         supertype_list: Sequence['StackItemType'],
         subtype_list: Sequence['StackItemType'],
-        sub: 'concat.typecheck.Substitutions',
+        sub: Substitutions,
     ) -> bool:
         both_lists_nonempty = supertype_list and subtype_list
         if (
@@ -1263,9 +1254,7 @@ class _Function(IndividualType):
     def attributes(self) -> Mapping[str, 'StackEffect']:
         return {'__call__': self}
 
-    def force_substitution(
-        self, sub: 'concat.typecheck.Substitutions'
-    ) -> '_Function':
+    def force_substitution(self, sub: Substitutions) -> '_Function':
         return _Function(sub(self.input), sub(self.output))
 
     def bind(self) -> '_Function':
@@ -1301,9 +1290,7 @@ class QuotationType(_Function):
             )
 
     @_sub_cache
-    def apply_substitution(
-        self, sub: 'concat.typecheck.Substitutions'
-    ) -> 'QuotationType':
+    def apply_substitution(self, sub: Substitutions) -> 'QuotationType':
         return QuotationType(super().apply_substitution(sub))
 
     def __repr__(self) -> str:
@@ -1419,10 +1406,10 @@ class NominalType(Type):
             or _contains_assumption(subtyping_assumptions, self, supertype)
             or supertype._type_id == Type.the_object_type_id
         ):
-            return concat.typecheck.Substitutions()
+            return Substitutions()
         if isinstance(supertype, NominalType):
             if self._brand.is_subrand_of(context, supertype._brand):
-                return concat.typecheck.Substitutions()
+                return Substitutions()
             raise ConcatTypeError(f'{self} is not a subtype of {supertype}')
         # TODO: Find a way to force myself to handle these different cases.
         # Visitor pattern? singledispatch?
@@ -1457,7 +1444,7 @@ class NominalType(Type):
                 raise ConcatTypeError(
                     f'{self} has kind {self.kind}, but {supertype} has kind {supertype.kind}'
                 )
-            return concat.typecheck.Substitutions([(supertype, self)])
+            return Substitutions([(supertype, self)])
         if (
             isinstance(supertype, (TypeApplication, Projection))
             and supertype.is_redex()
@@ -1507,7 +1494,7 @@ class ObjectType(IndividualType):
 
     def force_substitution(
         self,
-        sub: 'concat.typecheck.Substitutions',
+        sub: Substitutions,
     ) -> 'ObjectType':
         attributes = cast(
             Dict[str, IndividualType],
@@ -1620,7 +1607,7 @@ class ObjectType(IndividualType):
             return sub
         # Don't forget that there's nominal subtyping too.
         if isinstance(supertype, NominalType):
-            raise concat.typecheck.errors.TypeError(
+            raise ConcatTypeError(
                 f'structural type {self} cannot be a subtype of nominal type {supertype}'
             )
         if (
@@ -1788,10 +1775,14 @@ class DelayedSubstitution(Type):
         return str(self.force())
 
     def _free_type_variables(self) -> InsertionOrderedSet[Variable]:
-        ftv = self._ty.free_type_variables() - set(self._sub)
-        for v, t in self._sub.items():
-            ftv |= t.free_type_variables()
-        return ftv
+        return functools.reduce(
+            operator.or_,
+            (
+                self._sub(v).free_type_variables()
+                for v in self._ty.free_type_variables()
+            ),
+            InsertionOrderedSet([]),
+        )
 
     @_sub_cache
     def apply_substitution(self, sub: Substitutions) -> Type:
@@ -2056,9 +2047,7 @@ class PythonFunctionType(IndividualType):
     ) -> 'PythonFunctionType':
         raise ConcatTypeError(f'{self} is not a generic type')
 
-    def force_substitution(
-        self, sub: 'concat.typecheck.Substitutions'
-    ) -> 'PythonFunctionType':
+    def force_substitution(self, sub: Substitutions) -> 'PythonFunctionType':
         inp = sub(self.input)
         out = sub(self.output)
         return PythonFunctionType(inputs=inp, output=out)
@@ -2098,7 +2087,10 @@ class PythonFunctionType(IndividualType):
             raise ConcatTypeError(
                 f'{self} has kind {self.kind} but {supertype} has kind {supertype.kind}'
             )
-        if supertype._type_id in (context.object_type._type_id, py_overloaded_type[()]._type_id):
+        if supertype._type_id in (
+            context.object_type._type_id,
+            py_overloaded_type[()]._type_id,
+        ):
             sub = Substitutions()
             sub.add_subtyping_provenance((self, supertype))
             return sub
@@ -2206,7 +2198,7 @@ class _PythonOverloadedType(IndividualType):
         )
 
     def force_substitution(
-        self, sub: 'concat.typecheck.Substitutions'
+        self, sub: Substitutions
     ) -> '_PythonOverloadedType':
         return _PythonOverloadedType(sub(self._overloads))
 
@@ -2343,9 +2335,7 @@ class _NoReturnType(IndividualType):
         return Substitutions()
 
     @_sub_cache
-    def apply_substitution(
-        self, sub: 'concat.typecheck.Substitutions'
-    ) -> '_NoReturnType':
+    def apply_substitution(self, sub: Substitutions) -> '_NoReturnType':
         return self
 
     def force_substitution(self, sub: Substitutions) -> _NoReturnType:
@@ -2435,9 +2425,7 @@ class _OptionalType(IndividualType):
         )
         return sub
 
-    def force_substitution(
-        self, sub: 'concat.typecheck.Substitutions'
-    ) -> '_OptionalType':
+    def force_substitution(self, sub: Substitutions) -> '_OptionalType':
         return _OptionalType(sub(self._type_argument))
 
     @property

@@ -57,11 +57,3 @@ def graph_from_edges[T](
         preds.add(dest)
         graph[src] = preds
     return graph
-
-
-def _adjacent_pairs[T](it: Iterable[T]) -> Iterator[tuple[T, T]]:
-    itor = iter(it)
-    last = next(itor)
-    for x in itor:
-        yield (last, x)
-        last = x

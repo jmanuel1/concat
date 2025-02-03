@@ -75,6 +75,7 @@ import concat.parse
 
 if TYPE_CHECKING:
     import concat.astutils
+    from collections.abc import Mapping
 
 
 _builtins_stub_path = pathlib.Path(__file__) / '../builtin_stubs/builtins.cati'
@@ -242,7 +243,7 @@ class TypeChecker:
                     def fix_former(
                         env: Environment,
                         ty: Type,
-                        ids_to_defs: dict[
+                        ids_to_defs: Mapping[
                             int, concat.parse.ClassdefStatementNode
                         ] = ids_to_defs,
                         def_id: int = def_id,
@@ -542,14 +543,14 @@ class TypeChecker:
                                 S(recursion_env).free_type_variables(),
                                 [],
                             )(S)
-                        except TypeError as e:
+                        except TypeError as error:
                             message = (
                                 'declared function type {} is not compatible with '
                                 'inferred type {}'
                             )
                             raise TypeError(
                                 message.format(declared_type, inferred_type)
-                            ) from e
+                            ) from error
                     effect = declared_type
                     # type check decorators
                     _, final_type_stack, _ = self.infer(
@@ -646,20 +647,19 @@ class TypeChecker:
                     attr_function_type = stack_top_type.get_type_of_attribute(
                         node.value
                     ).instantiate()
-                    if not isinstance(attr_function_type, StackEffect):
-                        raise UnhandledNodeTypeError(
-                            'attribute {} of type {} (repr {!r})'.format(
-                                node.value,
-                                attr_function_type,
-                                attr_function_type,
-                            )
-                        )
-                    R = out_types.constrain_and_bind_variables(
-                        self, attr_function_type.input, set(), []
+                    attr_function_type_output = SequenceVariable()
+                    R = attr_function_type.constrain_and_bind_variables(
+                        self,
+                        StackEffect(
+                            out_types,
+                            TypeSequence([attr_function_type_output]),
+                        ),
+                        set(),
+                        [],
                     )
                     current_subs, current_effect = (
                         R(S),
-                        R(StackEffect(i, attr_function_type.output)),
+                        R(StackEffect(i, attr_function_type_output)),
                     )
                 elif isinstance(node, concat.parse.CastWordNode):
                     new_type, _ = node.type.to_type(gamma)
