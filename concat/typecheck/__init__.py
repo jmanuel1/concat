@@ -243,7 +243,8 @@ class TypeChecker:
                     def fix_former(
                         env: Environment,
                         ty: Type,
-                        ids_to_defs: Mapping[
+                        # skipcq: PYL-W0102
+                        ids_to_defs: dict[
                             int, concat.parse.ClassdefStatementNode
                         ] = ids_to_defs,
                         def_id: int = def_id,
