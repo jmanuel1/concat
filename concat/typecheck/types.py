@@ -1148,7 +1148,7 @@ class TypeSequence(Type, Iterable[Type]):
 
 
 # TODO: Rename to StackEffect at all use sites.
-class _Function(IndividualType):
+class StackEffect(IndividualType):
     def __init__(
         self,
         input_types: TypeSequence,
@@ -1254,16 +1254,16 @@ class _Function(IndividualType):
     def attributes(self) -> Mapping[str, 'StackEffect']:
         return {'__call__': self}
 
-    def force_substitution(self, sub: Substitutions) -> '_Function':
-        return _Function(sub(self.input), sub(self.output))
+    def force_substitution(self, sub: Substitutions) -> 'StackEffect':
+        return StackEffect(sub(self.input), sub(self.output))
 
-    def bind(self) -> '_Function':
-        return _Function(self.input[:-1], self.output)
+    def bind(self) -> 'StackEffect':
+        return StackEffect(self.input[:-1], self.output)
 
 
 # QUESTION: Do I use this?
-class QuotationType(_Function):
-    def __init__(self, fun_type: _Function) -> None:
+class QuotationType(StackEffect):
+    def __init__(self, fun_type: StackEffect) -> None:
         super().__init__(fun_type.input, fun_type.output)
 
     def constrain_and_bind_variables(
@@ -2873,9 +2873,6 @@ def _mapping_to_str(mapping: Mapping) -> str:
         + '}'
     )
 
-
-# expose _Function as StackEffect
-StackEffect = _Function
 
 _overloads_var = BoundVariable(VariableArgumentKind(IndividualKind))
 py_overloaded_type = GenericType(
