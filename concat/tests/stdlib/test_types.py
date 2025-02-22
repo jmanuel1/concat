@@ -1,11 +1,6 @@
-from concat.execute import LoggableStack
-from concat.stdlib.compositional import curry
-from concat.stdlib.execution import choose
-from concat.stdlib.shuffle_words import drop, swap
 import concat.stdlib.types
-from concat.stdlib.types import Quotation
 import unittest
-from typing import Iterator, Generator, List, Callable, cast
+from typing import List, Callable
 
 
 class TestQuotations(unittest.TestCase):

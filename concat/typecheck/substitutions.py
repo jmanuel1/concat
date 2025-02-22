@@ -90,6 +90,9 @@ class Substitutions(Mapping['Variable', 'Type']):
             f'{{{', '.join(map(lambda i: f'{i[0]}: {i[1]}', self.items()))}}}'
         )
 
+    def __repr__(self) -> str:
+        return f'Substitutions({self._sub!r})'
+
     def apply_substitution(self, sub: 'Substitutions') -> 'Substitutions':
         new_sub = Substitutions(
             {

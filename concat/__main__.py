@@ -10,13 +10,21 @@ from concat.error_reporting import (
 )
 import concat.execute
 import concat.lex
+from concat.logging.json import JSONFormatter
 import concat.parser_combinators
 import concat.stdlib.repl
 import concat.typecheck
 import json
+import logging
 import os.path
 import sys
 from typing import Callable, IO, AnyStr, assert_never
+
+
+_log_handler = logging.StreamHandler(sys.stderr)
+_log_handler.setFormatter(JSONFormatter())
+_logger = logging.getLogger()
+_logger.addHandler(_log_handler)
 
 
 filename = '<stdin>'
@@ -140,6 +148,9 @@ def batch_main():
 
 
 def main():
+    if args.verbose:
+        _logger.setLevel(logging.DEBUG)
+
     # interactive mode
     if args.file.isatty():
         concat.stdlib.repl.repl([], [], args.debug)

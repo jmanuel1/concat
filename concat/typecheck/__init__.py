@@ -6,6 +6,8 @@ The type inference algorithm was originally based on the one described in
 
 from __future__ import annotations
 from collections.abc import Generator
+import concat.graph
+from concat.set_once import SetOnce
 from concat.typecheck.env import Environment
 from concat.typecheck.errors import (
     NameError,
@@ -16,6 +18,7 @@ from concat.typecheck.errors import (
     format_name_reassigned_in_type_sequence_error,
     format_not_a_variable_error,
     format_decorator_result_kind_error,
+    format_too_many_params_for_variadic_type_error,
 )
 import concat.typecheck.preamble_types
 from concat.typecheck.substitutions import Substitutions
@@ -36,7 +39,6 @@ from concat.typecheck.types import (
     BoundVariable,
     Brand,
     Fix,
-    ForwardTypeReference,
     GenericType,
     GenericTypeKind,
     IndividualKind,
@@ -47,16 +49,14 @@ from concat.typecheck.types import (
     NominalType,
     ObjectType,
     QuotationType,
-    SequenceKind,
     SequenceVariable,
     StackEffect,
+    TupleKind,
+    Type,
     TypeSequence,
+    TypeTuple,
     Variable,
-    get_int_type,
-    get_list_type,
-    get_str_type,
-    get_tuple_type,
-    get_module_type,
+    VariableArgumentKind,
     no_return_type,
 )
 import abc
@@ -75,541 +75,809 @@ import concat.parse
 
 if TYPE_CHECKING:
     import concat.astutils
-    from concat.typecheck.types import Type
+    from collections.abc import Mapping
 
 
 _builtins_stub_path = pathlib.Path(__file__) / '../builtin_stubs/builtins.cati'
 
 
-def load_builtins_and_preamble() -> Environment:
-    env = _check_stub(
-        pathlib.Path(__file__).with_name('preamble0.cati'),
-    )
-    env = _check_stub(_builtins_stub_path, initial_env=env)
-    env = _check_stub(
-        pathlib.Path(__file__).with_name('preamble.cati'),
-        initial_env=env,
-    )
-    # pick up ModuleType
-    return _check_stub(
-        _builtins_stub_path.with_name('types.cati'),
-        initial_env=env,
-    )
+class TypeChecker:
+    def __init__(self) -> None:
+        self._module_namespaces: dict[pathlib.Path, Environment] = {}
+        self._is_in_forward_references_phase = False
 
-
-def check(
-    environment: Environment,
-    program: Sequence[concat.parse.Node],
-    source_dir: str = '.',
-    _should_check_bodies: bool = True,
-) -> Environment:
-    environment = Environment(
-        {
-            **concat.typecheck.preamble_types.types,
-            **environment,
-        }
-    )
-    res = infer(
-        environment,
-        program,
-        None,
-        True,
-        source_dir,
-        check_bodies=_should_check_bodies,
-    )
-
-    return res[2]
-
-
-# FIXME: I'm really passing around a bunch of state here. I could create an
-# object to store it, or turn this algorithm into an object.
-def infer(
-    gamma: Environment,
-    e: Sequence[concat.parse.Node],
-    extensions: Optional[Tuple[Callable]] = None,
-    is_top_level=False,
-    source_dir='.',
-    initial_stack: Optional[TypeSequence] = None,
-    check_bodies: bool = True,
-) -> Tuple[Substitutions, StackEffect, Environment]:
-    """The infer function described by Kleffner."""
-    e = list(e)
-    current_subs = Substitutions()
-    if initial_stack is None:
-        initial_stack = TypeSequence(
-            [] if is_top_level else [SequenceVariable()]
+    def load_builtins_and_preamble(self) -> Environment:
+        env = self._check_stub(
+            pathlib.Path(__file__).with_name('preamble0.cati'),
         )
-    current_effect = StackEffect(initial_stack, initial_stack)
+        env = self._check_stub(_builtins_stub_path, initial_env=env)
+        env = self._check_stub(
+            pathlib.Path(__file__).with_name('preamble.cati'),
+            initial_env=env,
+        )
+        # pick up ModuleType
+        return self._check_stub(
+            _builtins_stub_path.with_name('types.cati'),
+            initial_env=env,
+        )
 
-    # Prepare for forward references.
-    # TODO: Do this in a more principled way with scope graphs.
-    for node in e:
-        if isinstance(node, concat.parse.ClassdefStatementNode):
-            type_name = node.class_name
-            kind: Kind = IndividualKind
-            type_parameters = []
-            parameter_kinds: Sequence[Kind]
-            if node.is_variadic:
-                parameter_kinds = [SequenceKind]
-            else:
-                for param in node.type_parameters:
-                    if isinstance(param, TypeNode):
-                        type_parameters.append(param.to_type(gamma)[0])
-                        continue
-                    raise UnhandledNodeTypeError(param)
-            if type_parameters:
-                parameter_kinds = [
-                    variable.kind for variable in type_parameters
-                ]
-                kind = GenericTypeKind(parameter_kinds, IndividualKind)
-            gamma |= {
-                type_name: ForwardTypeReference(kind, type_name, lambda: gamma)
-            }
+    def _check_stub(
+        self,
+        path: pathlib.Path,
+        initial_env: Optional['Environment'] = None,
+    ) -> 'Environment':
+        path = path.resolve()
+        return self._check_stub_resolved_path(path, initial_env)
 
-    for node in e:
+    def _check_stub_resolved_path(
+        self,
+        path: pathlib.Path,
+        initial_env: Optional['Environment'] = None,
+    ) -> 'Environment':
+        if path in self._module_namespaces:
+            return self._module_namespaces[path]
         try:
-            S, (i, o) = current_subs, current_effect
-
-            if isinstance(node, concat.parse.PragmaNode):
-                namespace = 'concat.typecheck.'
-                if node.pragma.startswith(namespace):
-                    pragma = node.pragma[len(namespace) :]
-                if pragma == 'builtin_object':
-                    name = node.args[0]
-                    concat.typecheck.types.set_object_type(gamma[name])
-                if pragma == 'builtin_list':
-                    name = node.args[0]
-                    concat.typecheck.types.set_list_type(gamma[name])
-                if pragma == 'builtin_str':
-                    name = node.args[0]
-                    concat.typecheck.types.set_str_type(gamma[name])
-                if pragma == 'builtin_int':
-                    name = node.args[0]
-                    concat.typecheck.types.set_int_type(gamma[name])
-                if pragma == 'builtin_bool':
-                    name = node.args[0]
-                    concat.typecheck.types.set_bool_type(gamma[name])
-                if pragma == 'builtin_tuple':
-                    name = node.args[0]
-                    concat.typecheck.types.set_tuple_type(gamma[name])
-                if pragma == 'builtin_none':
-                    name = node.args[0]
-                    concat.typecheck.types.set_none_type(gamma[name])
-                if pragma == 'builtin_module':
-                    name = node.args[0]
-                    concat.typecheck.types.set_module_type(gamma[name])
-            elif isinstance(node, concat.parse.PushWordNode):
-                S1, (i1, o1) = S, (i, o)
-                child = node.children[0]
-                if isinstance(child, concat.parse.FreezeWordNode):
-                    should_instantiate = False
-                    child = child.word
+            source = path.read_text()
+        except FileNotFoundError as e:
+            raise TypeError(f'Type stubs at {path} do not exist') from e
+        except IOError as e:
+            raise TypeError(f'Failed to read type stubs at {path}') from e
+        token_results = concat.lex.tokenize(source)
+        tokens = list[Token]()
+        with path.open() as f:
+            for r in token_results:
+                if r.type == 'token':
+                    tokens.append(r.token)
+                elif r.type == 'indent-err':
+                    print('Indentation error:')
+                    print(
+                        create_indentation_error_message(
+                            f,
+                            (r.err.lineno or 1, r.err.offset or 0),
+                            r.err.msg,
+                        )
+                    )
+                elif r.type == 'token-err':
+                    print('Lexical error:')
+                    print(
+                        create_lexical_error_message(f, r.location, str(r.err))
+                    )
                 else:
-                    should_instantiate = True
-                # special case for pushing an attribute accessor
-                if isinstance(child, concat.parse.AttributeWordNode):
-                    top = o1[-1]
-                    attr_type = top.get_type_of_attribute(child.value)
-                    if should_instantiate:
-                        attr_type = attr_type.instantiate()
-                    rest_types = o1[:-1]
-                    current_subs, current_effect = (
-                        S1,
-                        StackEffect(
-                            i1, TypeSequence([*rest_types, attr_type])
-                        ),
+                    assert_never(r)
+        env = initial_env or Environment()
+        from concat.transpile import parse
+
+        try:
+            concat_ast = parse(tokens)
+        except concat.parser_combinators.ParseError as e:
+            print('Parse Error:')
+            with path.open() as file:
+                print(
+                    create_parsing_failure_message(
+                        file, tokens, e.args[0].failures
                     )
-                # special case for name words
-                elif isinstance(child, concat.parse.NameWordNode):
-                    if child.value not in gamma:
-                        raise NameError(child)
-                    name_type = gamma[child.value]
-                    if isinstance(name_type, ForwardTypeReference):
-                        raise NameError(child)
-                    if should_instantiate:
-                        name_type = name_type.instantiate()
-                    current_effect = StackEffect(
-                        current_effect.input,
-                        TypeSequence(
-                            [*current_effect.output, current_subs(name_type)]
-                        ),
+                )
+            self._module_namespaces[path] = env
+            return env
+        recovered_parsing_failures = concat_ast.parsing_failures
+        with path.open() as file:
+            for failure in recovered_parsing_failures:
+                print('Parse Error:')
+                print(create_parsing_failure_message(file, tokens, failure))
+        try:
+            env = self.check(
+                env,
+                concat_ast.children,
+                str(path.parent),
+                _should_check_bodies=False,
+            )
+        except StaticAnalysisError as e:
+            e.set_path_if_missing(path)
+            raise
+        self._module_namespaces[path] = env
+        return env
+
+    # FIXME: I'm really passing around a bunch of state here. I could create an
+    # object to store it, or turn this algorithm into an object.
+    def infer(
+        self,
+        gamma: Environment,
+        e: Sequence[concat.parse.Node],
+        extensions: Optional[Tuple[Callable]] = None,
+        is_top_level=False,
+        source_dir='.',
+        initial_stack: Optional[TypeSequence] = None,
+        check_bodies: bool = True,
+    ) -> Tuple[Substitutions, StackEffect, Environment]:
+        """The infer function described by Kleffner."""
+        e = list(e)
+        current_subs = Substitutions()
+        if initial_stack is None:
+            initial_stack = TypeSequence(
+                [] if is_top_level else [SequenceVariable()]
+            )
+        current_effect = StackEffect(initial_stack, initial_stack)
+
+        # Prepare for forward references.
+        # TODO: Do this in a more principled way with scope graphs.
+        self._is_in_forward_references_phase = True
+        ids_to_defs: dict[int, concat.parse.ClassdefStatementNode] = {}
+        names_to_defs: dict[str, int] = {}
+        ref_edges: list[tuple[int, int]] = []
+        next_id = 0
+        try:
+            for node in e:
+                if isinstance(node, concat.parse.ClassdefStatementNode):
+                    ids_to_defs[next_id] = node
+                    names_to_defs[node.class_name] = next_id
+                    next_id += 1
+            for def_id, node in ids_to_defs.items():
+                free_names = node.free_type_level_names
+                for name in free_names:
+                    if name in names_to_defs:
+                        ref_edges.append((def_id, names_to_defs[name]))
+            graph = concat.graph.graph_from_edges(ref_edges)
+            sccs = concat.graph.cycles(graph)
+            for scc in sccs:
+                kinds = []
+                for def_id in scc:
+                    kind: Kind = IndividualKind
+                    type_parameters = self._get_class_params(
+                        ids_to_defs[def_id], gamma
+                    )[0]
+                    if type_parameters:
+                        kind = GenericTypeKind(
+                            [v.kind for v in type_parameters], IndividualKind
+                        )
+                    kinds.append(kind)
+                ty_vars = [ItemVariable(k) for k in kinds]
+                fix_var = BoundVariable(TupleKind(kinds))
+                gamma |= Environment(
+                    {
+                        ids_to_defs[def_id].class_name: ty_vars[i]
+                        for i, def_id in enumerate(scc)
+                    }
+                )
+                for i, def_id in enumerate(scc):
+
+                    def fix_former(
+                        env: Environment,
+                        ty: Type,
+                        # skipcq: PYL-W0102
+                        ids_to_defs: dict[
+                            int, concat.parse.ClassdefStatementNode
+                        ] = ids_to_defs,
+                        def_id: int = def_id,
+                        scc: Sequence[int] = scc,
+                        i: int = i,
+                        fix_var: Variable = fix_var,
+                    ) -> Type:
+                        tys = [
+                            env[ids_to_defs[def_id].class_name]
+                            for def_id in scc
+                        ]
+                        tys[i] = ty
+                        # I don't think reusing the fix_var is necessary since
+                        # it won't be free in the other types, but I might as
+                        # well since I've written that already.
+                        return Fix(fix_var, TypeTuple(tys)).project(i)
+
+                    gamma = gamma.with_mutuals(
+                        ids_to_defs[def_id].class_name, fix_former
                     )
-                elif isinstance(child, concat.parse.QuoteWordNode):
-                    if child.input_stack_type is not None:
-                        input_stack, _ = child.input_stack_type.to_type(gamma)
+        finally:
+            self._is_in_forward_references_phase = False
+
+        for node in e:
+            try:
+                S, (i, o) = current_subs, current_effect
+
+                if isinstance(node, concat.parse.PragmaNode):
+                    namespace = 'concat.typecheck.'
+                    if node.pragma.startswith(namespace):
+                        pragma = node.pragma[len(namespace) :]
+                    if pragma == 'builtin_object':
+                        name = node.args[0]
+                        self._object_type = gamma[name]
+                        gamma[name].unsafe_set_type_id(Type.the_object_type_id)
+                    if pragma == 'builtin_list':
+                        name = node.args[0]
+                        self._list_type = gamma[name]
+                    if pragma == 'builtin_str':
+                        name = node.args[0]
+                        self._str_type = gamma[name]
+                    if pragma == 'builtin_int':
+                        name = node.args[0]
+                        self._int_type = gamma[name]
+                    if pragma == 'builtin_bool':
+                        name = node.args[0]
+                        self._bool_type = gamma[name]
+                    if pragma == 'builtin_tuple':
+                        name = node.args[0]
+                        self._tuple_type = gamma[name]
+                    if pragma == 'builtin_none':
+                        name = node.args[0]
+                        self._none_type = gamma[name]
+                    if pragma == 'builtin_module':
+                        name = node.args[0]
+                        self._module_type = gamma[name]
+                elif isinstance(node, concat.parse.PushWordNode):
+                    S1, (i1, o1) = S, (i, o)
+                    child = node.children[0]
+                    if isinstance(child, concat.parse.FreezeWordNode):
+                        should_instantiate = False
+                        child = child.word
                     else:
-                        # The majority of quotations I've written don't comsume
-                        # anything on the stack, so make that the default.
-                        input_stack = TypeSequence([SequenceVariable()])
-                    S2, fun_type, _ = infer(
-                        S1(gamma),
-                        child.children,
+                        should_instantiate = True
+                    # special case for pushing an attribute accessor
+                    if isinstance(child, concat.parse.AttributeWordNode):
+                        top = o1[-1]
+                        attr_type = top.get_type_of_attribute(child.value)
+                        if should_instantiate:
+                            attr_type = attr_type.instantiate()
+                        rest_types = o1[:-1]
+                        current_subs, current_effect = (
+                            S1,
+                            StackEffect(
+                                i1, TypeSequence([*rest_types, attr_type])
+                            ),
+                        )
+                    # special case for name words
+                    elif isinstance(child, concat.parse.NameWordNode):
+                        if child.value not in gamma:
+                            raise NameError(child)
+                        name_type = gamma[child.value]
+                        # FIXME: Statically tell if a name is used before its
+                        # definition is executed
+                        if should_instantiate:
+                            name_type = name_type.instantiate()
+                        current_effect = StackEffect(
+                            current_effect.input,
+                            TypeSequence(
+                                [
+                                    *current_effect.output,
+                                    current_subs(name_type),
+                                ]
+                            ),
+                        )
+                    elif isinstance(child, concat.parse.QuoteWordNode):
+                        if child.input_stack_type is not None:
+                            input_stack, _ = child.input_stack_type.to_type(
+                                gamma
+                            )
+                        else:
+                            # The majority of quotations I've written don't comsume
+                            # anything on the stack, so make that the default.
+                            input_stack = TypeSequence([SequenceVariable()])
+                        S2, fun_type, _ = self.infer(
+                            S1(gamma),
+                            child.children,
+                            extensions=extensions,
+                            source_dir=source_dir,
+                            initial_stack=input_stack,
+                            check_bodies=check_bodies,
+                        )
+                        current_subs, current_effect = (
+                            S2(S1),
+                            StackEffect(
+                                S2(i1),
+                                TypeSequence(
+                                    [*S2(o1), QuotationType(fun_type)]
+                                ),
+                            ),
+                        )
+                    else:
+                        raise UnhandledNodeTypeError(
+                            'quoted word {child} (repr {child!r})'.format(
+                                child=child
+                            )
+                        )
+                elif isinstance(node, concat.parse.ListWordNode):
+                    phi = S
+                    collected_type = o
+                    element_type: 'Type' = no_return_type
+                    for item in node.list_children:
+                        phi1, fun_type, _ = self.infer(
+                            phi(gamma),
+                            item,
+                            extensions=extensions,
+                            source_dir=source_dir,
+                            initial_stack=collected_type,
+                            check_bodies=check_bodies,
+                        )
+                        collected_type = fun_type.output
+                        # FIXME: Infer the type of elements in the list based on
+                        # ALL the elements.
+                        if element_type == no_return_type:
+                            assert (
+                                collected_type[-1].kind <= ItemKind
+                            ), f'{collected_type} {collected_type[-1]}'
+                            element_type = collected_type[-1]
+                        # drop the top of the stack to use as the item
+                        collected_type = collected_type[:-1]
+                        phi = phi1(phi)
+                    current_subs, current_effect = (
+                        phi,
+                        phi(
+                            StackEffect(
+                                i,
+                                TypeSequence(
+                                    [
+                                        *collected_type,
+                                        self._list_type[element_type,],
+                                    ]
+                                ),
+                            )
+                        ),
+                    )
+                elif isinstance(node, concat.parse.TupleWordNode):
+                    phi = S
+                    collected_type = current_effect.output
+                    element_types: List[IndividualType] = []
+                    for item in node.tuple_children:
+                        phi1, fun_type, _ = self.infer(
+                            phi(gamma),
+                            item,
+                            extensions=extensions,
+                            source_dir=source_dir,
+                            initial_stack=collected_type,
+                            check_bodies=check_bodies,
+                        )
+                        collected_type = fun_type.output
+                        assert isinstance(collected_type[-1], IndividualType)
+                        element_types.append(collected_type[-1])
+                        # drop the top of the stack to use as the item
+                        collected_type = collected_type[:-1]
+                        phi = phi1(phi)
+                    current_subs, current_effect = (
+                        phi,
+                        phi(
+                            StackEffect(
+                                i,
+                                TypeSequence(
+                                    [
+                                        *collected_type,
+                                        self._tuple_type[element_types],
+                                    ]
+                                ),
+                            )
+                        ),
+                    )
+                elif isinstance(node, concat.parse.FromImportStatementNode):
+                    imported_name = node.asname or node.imported_name
+                    module_parts = node.value.split('.')
+                    module_spec = None
+                    path = None
+                    if module_parts[0] in sys.builtin_module_names:
+                        stub_path = pathlib.Path(__file__) / '../builtin_stubs'
+                        for part in module_parts:
+                            stub_path = stub_path / part
+                    else:
+                        for module_prefix in itertools.accumulate(
+                            module_parts, lambda a, b: f'{a}.{b}'
+                        ):
+                            for finder in sys.meta_path:
+                                module_spec = finder.find_spec(
+                                    module_prefix, path
+                                )
+                                if module_spec is not None:
+                                    path = (
+                                        module_spec.submodule_search_locations
+                                    )
+                                    break
+                        assert module_spec is not None
+                        module_path = module_spec.origin
+                        if module_path is None:
+                            raise TypeError(
+                                f'Cannot find path of module {node.value}'
+                            )
+                        # For now, assume the module's written in Python.
+                        stub_path = pathlib.Path(module_path)
+                    stub_path = stub_path.with_suffix('.cati')
+                    stub_env = self._check_stub(
+                        stub_path,
+                        initial_env=self.load_builtins_and_preamble(),
+                    )
+                    imported_type = stub_env.get(node.imported_name)
+                    if imported_type is None:
+                        raise TypeError(
+                            f'Cannot find {node.imported_name} in module {node.value}'
+                        )
+                    # TODO: Support star imports
+                    gamma |= {imported_name: current_subs(imported_type)}
+                elif isinstance(node, concat.parse.ImportStatementNode):
+                    # TODO: Support all types of import correctly.
+                    if node.asname is not None:
+                        gamma |= {
+                            node.asname: current_subs(
+                                self._generate_type_of_innermost_module(
+                                    node.value,
+                                    source_dir=pathlib.Path(source_dir),
+                                ).generalized_wrt(current_subs(gamma))
+                            ),
+                        }
+                    else:
+                        imported_name = node.value
+                        # mutate type environment
+                        components = node.value.split('.')
+                        # FIXME: This replaces whatever was previously imported. I really
+                        # should implement namespaces properly.
+                        gamma |= {
+                            components[0]: current_subs(
+                                self._generate_module_type(
+                                    components,
+                                    source_dir=pathlib.Path(source_dir),
+                                )
+                            ),
+                        }
+                elif isinstance(node, concat.parse.FuncdefStatementNode):
+                    S = current_subs
+                    name = node.name
+                    # NOTE: To continue the "bidirectional" bent, we will require a ghg
+                    # type annotation.
+                    # TODO: Make the return types optional?
+                    declared_type, _ = node.stack_effect.to_type(S(gamma))
+                    declared_type = S(declared_type)
+                    if not isinstance(declared_type, StackEffect):
+                        raise TypeError(
+                            f'declared type of {name} must be a stack effect, got {declared_type}'
+                        )
+                    recursion_env = gamma | {
+                        name: declared_type.generalized_wrt(S(gamma))
+                    }
+                    if check_bodies:
+                        phi1, inferred_type, _ = self.infer(
+                            S(recursion_env),
+                            node.body,
+                            is_top_level=False,
+                            extensions=extensions,
+                            initial_stack=declared_type.input,
+                            check_bodies=check_bodies,
+                        )
+                        # We want to check that the inferred outputs are subtypes of
+                        # the declared outputs. Thus, inferred_type.output should be a subtype
+                        # declared_type.output.
+                        try:
+                            S = inferred_type.output.constrain_and_bind_variables(
+                                self,
+                                declared_type.output,
+                                S(recursion_env).free_type_variables(),
+                                [],
+                            )(S)
+                        except TypeError as error:
+                            message = (
+                                'declared function type {} is not compatible with '
+                                'inferred type {}'
+                            )
+                            raise TypeError(
+                                message.format(declared_type, inferred_type)
+                            ) from error
+                    effect = declared_type
+                    # type check decorators
+                    _, final_type_stack, _ = self.infer(
+                        gamma,
+                        list(node.decorators),
+                        is_top_level=False,
+                        extensions=extensions,
+                        initial_stack=TypeSequence([effect]),
+                        check_bodies=check_bodies,
+                    )
+                    final_type_stack_output = (
+                        final_type_stack.output.as_sequence()
+                    )
+                    if len(final_type_stack_output) != 1:
+                        raise TypeError(
+                            f'Decorators produce too many stack items: only 1 should be left. Stack: {final_type_stack.output}'
+                        )
+                    final_type = final_type_stack_output[0]
+                    if not (final_type.kind <= ItemKind):
+                        raise TypeError(
+                            format_decorator_result_kind_error(final_type)
+                        )
+                    gamma |= {
+                        name: (
+                            final_type.generalized_wrt(S(gamma))
+                            if isinstance(final_type, StackEffect)
+                            else final_type
+                        ),
+                    }
+                elif isinstance(node, concat.parse.NumberWordNode):
+                    if isinstance(node.value, int):
+                        current_effect = StackEffect(
+                            i, TypeSequence([*o, self._int_type])
+                        )
+                    else:
+                        raise UnhandledNodeTypeError
+                elif isinstance(node, concat.parse.NameWordNode):
+                    (i1, o1) = current_effect
+                    if node.value not in current_subs(gamma):
+                        raise NameError(node)
+                    type_of_name = current_subs(gamma)[node.value]
+                    # FIXME: Statically tell if a name is used before its
+                    # definition is executed
+                    type_of_name = type_of_name.instantiate()
+                    type_of_name = type_of_name.get_type_of_attribute(
+                        '__call__'
+                    ).instantiate()
+                    out = SequenceVariable()
+                    fun = StackEffect(o1, TypeSequence([out]))
+                    constraint_subs = (
+                        type_of_name.constrain_and_bind_variables(
+                            self, fun, set(), []
+                        )
+                    )
+                    current_subs = constraint_subs(current_subs)
+                    current_effect = current_subs(StackEffect(i1, fun.output))
+                elif isinstance(node, concat.parse.QuoteWordNode):
+                    quotation = cast(concat.parse.QuoteWordNode, node)
+                    # make sure any annotation matches the current stack
+                    if quotation.input_stack_type is not None:
+                        input_stack, _ = quotation.input_stack_type.to_type(
+                            gamma
+                        )
+                        S = o.constrain_and_bind_variables(
+                            self, input_stack, set(), []
+                        )(S)
+                    else:
+                        input_stack = o
+                    S1, (i1, o1), _ = self.infer(
+                        gamma,
+                        [*quotation.children],
                         extensions=extensions,
                         source_dir=source_dir,
                         initial_stack=input_stack,
                         check_bodies=check_bodies,
                     )
                     current_subs, current_effect = (
-                        S2(S1),
+                        S1(S),
+                        S1(StackEffect(i, o1)),
+                    )
+                elif isinstance(node, concat.parse.StringWordNode):
+                    current_subs, current_effect = (
+                        S,
                         StackEffect(
-                            S2(i1),
-                            TypeSequence([*S2(o1), QuotationType(fun_type)]),
-                        ),
-                    )
-                else:
-                    raise UnhandledNodeTypeError(
-                        'quoted word {child} (repr {child!r})'.format(
-                            child=child
-                        )
-                    )
-            elif isinstance(node, concat.parse.ListWordNode):
-                phi = S
-                collected_type = o
-                element_type: 'Type' = no_return_type
-                for item in node.list_children:
-                    phi1, fun_type, _ = infer(
-                        phi(gamma),
-                        item,
-                        extensions=extensions,
-                        source_dir=source_dir,
-                        initial_stack=collected_type,
-                        check_bodies=check_bodies,
-                    )
-                    collected_type = fun_type.output
-                    # FIXME: Infer the type of elements in the list based on
-                    # ALL the elements.
-                    if element_type == no_return_type:
-                        assert collected_type[-1] != SequenceKind
-                        element_type = collected_type[-1]
-                    # drop the top of the stack to use as the item
-                    collected_type = collected_type[:-1]
-                    phi = phi1(phi)
-                current_subs, current_effect = (
-                    phi,
-                    phi(
-                        StackEffect(
-                            i,
+                            current_effect.input,
                             TypeSequence(
-                                [
-                                    *collected_type,
-                                    get_list_type()[element_type,],
-                                ]
+                                [*current_effect.output, self._str_type]
                             ),
-                        )
-                    ),
-                )
-            elif isinstance(node, concat.parse.TupleWordNode):
-                phi = S
-                collected_type = current_effect.output
-                element_types: List[IndividualType] = []
-                for item in node.tuple_children:
-                    phi1, fun_type, _ = infer(
-                        phi(gamma),
-                        item,
-                        extensions=extensions,
-                        source_dir=source_dir,
-                        initial_stack=collected_type,
-                        check_bodies=check_bodies,
+                        ),
                     )
-                    collected_type = fun_type.output
-                    assert isinstance(collected_type[-1], IndividualType)
-                    element_types.append(collected_type[-1])
-                    # drop the top of the stack to use as the item
-                    collected_type = collected_type[:-1]
-                    phi = phi1(phi)
-                current_subs, current_effect = (
-                    phi,
-                    phi(
+                elif isinstance(node, concat.parse.AttributeWordNode):
+                    stack_top_type = o[-1]
+                    out_types = o[:-1]
+                    attr_function_type = stack_top_type.get_type_of_attribute(
+                        node.value
+                    ).instantiate()
+                    attr_function_type_output = SequenceVariable()
+                    R = attr_function_type.constrain_and_bind_variables(
+                        self,
                         StackEffect(
-                            i,
-                            TypeSequence(
-                                [
-                                    *collected_type,
-                                    get_tuple_type()[element_types],
-                                ]
-                            ),
-                        )
-                    ),
-                )
-            elif isinstance(node, concat.parse.FromImportStatementNode):
-                imported_name = node.asname or node.imported_name
-                module_parts = node.value.split('.')
-                module_spec = None
-                path = None
-                if module_parts[0] in sys.builtin_module_names:
-                    stub_path = pathlib.Path(__file__) / '../builtin_stubs'
-                    for part in module_parts:
-                        stub_path = stub_path / part
-                else:
-                    for module_prefix in itertools.accumulate(
-                        module_parts, lambda a, b: f'{a}.{b}'
-                    ):
-                        for finder in sys.meta_path:
-                            module_spec = finder.find_spec(module_prefix, path)
-                            if module_spec is not None:
-                                path = module_spec.submodule_search_locations
-                                break
-                    assert module_spec is not None
-                    module_path = module_spec.origin
-                    if module_path is None:
-                        raise TypeError(
-                            f'Cannot find path of module {node.value}'
-                        )
-                    # For now, assume the module's written in Python.
-                    stub_path = pathlib.Path(module_path)
-                stub_path = stub_path.with_suffix('.cati')
-                stub_env = _check_stub(
-                    stub_path, initial_env=load_builtins_and_preamble()
-                )
-                imported_type = stub_env.get(node.imported_name)
-                if imported_type is None:
-                    raise TypeError(
-                        f'Cannot find {node.imported_name} in module {node.value}'
-                    )
-                # TODO: Support star imports
-                gamma |= {imported_name: current_subs(imported_type)}
-            elif isinstance(node, concat.parse.ImportStatementNode):
-                # TODO: Support all types of import correctly.
-                if node.asname is not None:
-                    gamma |= {
-                        node.asname: current_subs(
-                            _generate_type_of_innermost_module(
-                                node.value, source_dir=pathlib.Path(source_dir)
-                            ).generalized_wrt(current_subs(gamma))
+                            out_types,
+                            TypeSequence([attr_function_type_output]),
                         ),
-                    }
-                else:
-                    imported_name = node.value
-                    # mutate type environment
-                    components = node.value.split('.')
-                    # FIXME: This replaces whatever was previously imported. I really
-                    # should implement namespaces properly.
-                    gamma |= {
-                        components[0]: current_subs(
-                            _generate_module_type(
-                                components, source_dir=pathlib.Path(source_dir)
-                            )
-                        ),
-                    }
-            elif isinstance(node, concat.parse.FuncdefStatementNode):
-                S = current_subs
-                name = node.name
-                # NOTE: To continue the "bidirectional" bent, we will require a ghg
-                # type annotation.
-                # TODO: Make the return types optional?
-                declared_type, _ = node.stack_effect.to_type(S(gamma))
-                declared_type = S(declared_type)
-                if not isinstance(declared_type, StackEffect):
-                    raise TypeError(
-                        f'declared type of {name} must be a stack effect, got {declared_type}'
+                        set(),
+                        [],
                     )
-                recursion_env = gamma | {
-                    name: declared_type.generalized_wrt(S(gamma))
-                }
-                if check_bodies:
-                    phi1, inferred_type, _ = infer(
-                        S(recursion_env),
-                        node.body,
-                        is_top_level=False,
-                        extensions=extensions,
-                        initial_stack=declared_type.input,
-                        check_bodies=check_bodies,
+                    current_subs, current_effect = (
+                        R(S),
+                        R(StackEffect(i, attr_function_type_output)),
                     )
-                    # We want to check that the inferred outputs are subtypes of
-                    # the declared outputs. Thus, inferred_type.output should be a subtype
-                    # declared_type.output.
-                    try:
-                        S = inferred_type.output.constrain_and_bind_variables(
-                            declared_type.output,
-                            S(recursion_env).free_type_variables(),
-                            [],
-                        )(S)
-                    except TypeError as e:
-                        message = (
-                            'declared function type {} is not compatible with '
-                            'inferred type {}'
+                elif isinstance(node, concat.parse.CastWordNode):
+                    new_type, _ = node.type.to_type(gamma)
+                    rest = current_effect.output[:-1]
+                    current_effect = current_subs(
+                        StackEffect(
+                            current_effect.input,
+                            TypeSequence([*rest, new_type]),
                         )
-                        raise TypeError(
-                            message.format(declared_type, inferred_type)
-                        ) from e
-                effect = declared_type
-                # type check decorators
-                _, final_type_stack, _ = infer(
-                    gamma,
-                    list(node.decorators),
-                    is_top_level=False,
-                    extensions=extensions,
-                    initial_stack=TypeSequence([effect]),
-                    check_bodies=check_bodies,
-                )
-                final_type_stack_output = final_type_stack.output.as_sequence()
-                if len(final_type_stack_output) != 1:
-                    raise TypeError(
-                        f'Decorators produce too many stack items: only 1 should be left. Stack: {final_type_stack.output}'
                     )
-                final_type = final_type_stack_output[0]
-                if not (final_type.kind <= ItemKind):
-                    raise TypeError(
-                        format_decorator_result_kind_error(final_type)
-                    )
-                gamma |= {
-                    name: (
-                        final_type.generalized_wrt(S(gamma))
-                        if isinstance(final_type, StackEffect)
-                        else final_type
-                    ),
-                }
-            elif isinstance(node, concat.parse.NumberWordNode):
-                if isinstance(node.value, int):
+                elif isinstance(node, concat.parse.ParseError):
                     current_effect = StackEffect(
-                        i, TypeSequence([*o, get_int_type()])
-                    )
-                else:
-                    raise UnhandledNodeTypeError
-            elif isinstance(node, concat.parse.NameWordNode):
-                (i1, o1) = current_effect
-                if node.value not in current_subs(gamma):
-                    raise NameError(node)
-                type_of_name = current_subs(gamma)[node.value]
-                if isinstance(type_of_name, ForwardTypeReference):
-                    raise NameError(node)
-                type_of_name = type_of_name.instantiate()
-                type_of_name = type_of_name.get_type_of_attribute(
-                    '__call__'
-                ).instantiate()
-                if not isinstance(type_of_name, StackEffect):
-                    raise UnhandledNodeTypeError(
-                        'name {} of type {} (repr {!r})'.format(
-                            node.value, type_of_name, type_of_name
-                        )
-                    )
-                constraint_subs = o1.constrain_and_bind_variables(
-                    type_of_name.input, set(), []
-                )
-                current_subs = constraint_subs(current_subs)
-                current_effect = current_subs(
-                    StackEffect(i1, type_of_name.output)
-                )
-            elif isinstance(node, concat.parse.QuoteWordNode):
-                quotation = cast(concat.parse.QuoteWordNode, node)
-                # make sure any annotation matches the current stack
-                if quotation.input_stack_type is not None:
-                    input_stack, _ = quotation.input_stack_type.to_type(gamma)
-                    S = o.constrain_and_bind_variables(input_stack, set(), [])(
-                        S
-                    )
-                else:
-                    input_stack = o
-                S1, (i1, o1), _ = infer(
-                    gamma,
-                    [*quotation.children],
-                    extensions=extensions,
-                    source_dir=source_dir,
-                    initial_stack=input_stack,
-                    check_bodies=check_bodies,
-                )
-                current_subs, current_effect = (
-                    S1(S),
-                    S1(StackEffect(i, o1)),
-                )
-            elif isinstance(node, concat.parse.StringWordNode):
-                current_subs, current_effect = (
-                    S,
-                    StackEffect(
                         current_effect.input,
-                        TypeSequence([*current_effect.output, get_str_type()]),
-                    ),
-                )
-            elif isinstance(node, concat.parse.AttributeWordNode):
-                stack_top_type = o[-1]
-                out_types = o[:-1]
-                attr_function_type = stack_top_type.get_type_of_attribute(
-                    node.value
-                ).instantiate()
-                if not isinstance(attr_function_type, StackEffect):
-                    raise UnhandledNodeTypeError(
-                        'attribute {} of type {} (repr {!r})'.format(
-                            node.value, attr_function_type, attr_function_type
-                        )
+                        TypeSequence([SequenceVariable()]),
                     )
-                R = out_types.constrain_and_bind_variables(
-                    attr_function_type.input, set(), []
-                )
-                current_subs, current_effect = (
-                    R(S),
-                    R(StackEffect(i, attr_function_type.output)),
-                )
-            elif isinstance(node, concat.parse.CastWordNode):
-                new_type, _ = node.type.to_type(gamma)
-                rest = current_effect.output[:-1]
-                current_effect = current_subs(
-                    StackEffect(
-                        current_effect.input, TypeSequence([*rest, new_type])
+                elif not check_bodies and isinstance(
+                    node, concat.parse.ClassdefStatementNode
+                ):
+                    gamma, sub = self._infer_class(
+                        node, gamma, extensions, source_dir
                     )
-                )
-            elif isinstance(node, concat.parse.ParseError):
-                current_effect = StackEffect(
-                    current_effect.input,
-                    TypeSequence([SequenceVariable()]),
-                )
-            elif not check_bodies and isinstance(
-                node, concat.parse.ClassdefStatementNode
-            ):
-                type_parameters: List[Variable] = []
-                temp_gamma = gamma
-                if node.is_variadic:
-                    type_parameters.append(SequenceVariable())
+                    current_subs = sub(current_subs)
+                    gamma = current_subs(gamma)
+                    current_effect = current_subs(current_effect)
+                # TODO: Type aliases
                 else:
-                    for param_node in node.type_parameters:
-                        if not isinstance(param_node, TypeNode):
-                            raise UnhandledNodeTypeError(param_node)
-                        param, temp_gamma = param_node.to_type(temp_gamma)
-                        type_parameters.append(param)
+                    raise UnhandledNodeTypeError(
+                        "don't know how to handle '{}'".format(node)
+                    )
+            except TypeError as error:
+                error.set_location_if_missing(node.location)
+                raise
+        return current_subs, current_effect, gamma
 
-                kind: Kind = IndividualKind
-                if type_parameters:
-                    kind = GenericTypeKind(
-                        [v.kind for v in type_parameters], IndividualKind
-                    )
-                self_type = BoundVariable(kind)
-                temp_gamma |= {node.class_name: self_type}
-                _, _, body_attrs = infer(
-                    temp_gamma,
-                    node.body,
-                    extensions=extensions,
-                    source_dir=source_dir,
-                    initial_stack=TypeSequence([]),
-                    check_bodies=check_bodies,
+    @staticmethod
+    def _get_class_params(
+        node: concat.parse.ClassdefStatementNode, gamma: Environment
+    ) -> Tuple[Sequence[Variable], Environment]:
+        type_parameters: List[Variable] = []
+        temp_gamma = gamma
+        for param_node in node.type_parameters:
+            if not isinstance(param_node, TypeNode):
+                raise UnhandledNodeTypeError(param_node)
+            param, temp_gamma = param_node.to_type(temp_gamma)
+            type_parameters.append(param)
+        if node.is_variadic:
+            if len(type_parameters) > 1:
+                raise TypeError(
+                    format_too_many_params_for_variadic_type_error()
                 )
-                # TODO: Introduce scopes into the environment object
-                body_attrs = Environment(
+            underlying_kind = type_parameters[0].kind
+            type_parameters = [
+                BoundVariable(VariableArgumentKind(underlying_kind))
+            ]
+        return type_parameters, temp_gamma
+
+    def _infer_class(
+        self,
+        node: concat.parse.ClassdefStatementNode,
+        gamma: Environment,
+        extensions: Sequence[Callable] | None,
+        source_dir: str,
+    ) -> tuple[Environment, Substitutions]:
+        type_parameters, temp_gamma = self._get_class_params(node, gamma)
+        assert not self._is_in_forward_references_phase
+        _, _, body_attrs = self.infer(
+            temp_gamma,
+            node.body,
+            extensions=extensions,
+            source_dir=source_dir,
+            initial_stack=TypeSequence([]),
+            check_bodies=False,
+        )
+        # TODO: Introduce scopes into the environment object
+        body_attrs = Environment(
+            {
+                name: ty
+                for name, ty in body_attrs.items()
+                if name not in temp_gamma
+            }
+        )
+        ty: Type = ObjectType(
+            attributes=body_attrs,
+        )
+        if type_parameters:
+            ty = GenericType(
+                type_parameters,
+                ty,
+            )
+        ty = NominalType(Brand(node.class_name, ty.kind, []), ty)
+        sub = Substitutions()
+        if node.class_name in gamma:
+            forward_ty = gamma[node.class_name]
+            sub = ty.constrain_and_bind_variables(
+                self,
+                forward_ty,
+                gamma.free_type_variables() - forward_ty.free_type_variables(),
+                [],
+            )
+            fix_former = gamma.get_mutuals(node.class_name)
+            ty = fix_former(gamma, ty)
+        gamma |= Environment({node.class_name: ty})
+        return gamma, sub
+
+    _object_type: SetOnce[Type] = SetOnce()
+
+    @property
+    def object_type(self) -> Type:
+        return self._object_type
+
+    _module_type: SetOnce[Type] = SetOnce()
+
+    @property
+    def module_type(self) -> Type:
+        return self._module_type
+
+    _list_type: SetOnce[Type] = SetOnce()
+
+    @property
+    def list_type(self) -> Type:
+        return self._list_type
+
+    _str_type: SetOnce[Type] = SetOnce()
+
+    @property
+    def str_type(self) -> Type:
+        return self._str_type
+
+    _tuple_type: SetOnce[Type] = SetOnce()
+
+    @property
+    def tuple_type(self) -> Type:
+        return self._tuple_type
+
+    _int_type: SetOnce[Type] = SetOnce()
+
+    @property
+    def int_type(self) -> Type:
+        return self._int_type
+
+    _bool_type: SetOnce[Type] = SetOnce()
+    _none_type: SetOnce[Type] = SetOnce()
+
+    @property
+    def none_type(self) -> Type:
+        return self._none_type
+
+    def check(
+        self,
+        environment: Environment,
+        program: Sequence[concat.parse.Node],
+        source_dir: str = '.',
+        _should_check_bodies: bool = True,
+    ) -> Environment:
+        environment = Environment(
+            {
+                **concat.typecheck.preamble_types.types,
+                **environment,
+            }
+        )
+        res = self.infer(
+            environment,
+            program,
+            None,
+            True,
+            source_dir,
+            check_bodies=_should_check_bodies,
+        )
+
+        return res[2]
+
+    def _generate_type_of_innermost_module(
+        self, qualified_name: str, source_dir: pathlib.Path
+    ) -> StackEffect:
+        stub_path = _find_stub_path(qualified_name.split('.'), source_dir)
+        init_env = self.load_builtins_and_preamble()
+        module_attributes = self._check_stub(stub_path, init_env)
+        module_type_brand = self._module_type.brand
+        brand = Brand(
+            f'type({qualified_name})', IndividualKind, [module_type_brand]
+        )
+        module_t = NominalType(brand, ObjectType(module_attributes))
+        return StackEffect(
+            TypeSequence([_seq_var]), TypeSequence([_seq_var, module_t])
+        )
+
+    def _generate_module_type(
+        self,
+        components: Sequence[str],
+        _full_name: Optional[str] = None,
+        source_dir='.',
+    ) -> 'Type':
+        if _full_name is None:
+            _full_name = '.'.join(components)
+        if len(components) > 1:
+            module_type_brand = self._module_type.unroll().brand  # type: ignore
+            brand = Brand(
+                f'type({_full_name})', IndividualKind, [module_type_brand]
+            )
+            module_t = NominalType(
+                brand,
+                ObjectType(
                     {
-                        name: ty
-                        for name, ty in body_attrs.items()
-                        if name not in temp_gamma
+                        components[1]: self._generate_module_type(
+                            components[1:], _full_name, source_dir
+                        )[_seq_var,],
                     }
-                )
-                ty: Type = NominalType(
-                    Brand(node.class_name, IndividualKind, []),
-                    ObjectType(
-                        attributes=body_attrs,
-                    ),
-                )
-                if type_parameters:
-                    ty = GenericType(
-                        type_parameters, ty, is_variadic=node.is_variadic
-                    )
-                ty = Fix(self_type, ty)
-                gamma |= {node.class_name: ty}
-            # TODO: Type aliases
-            else:
-                raise UnhandledNodeTypeError(
-                    "don't know how to handle '{}'".format(node)
-                )
-        except TypeError as error:
-            error.set_location_if_missing(node.location)
-            raise
-    return current_subs, current_effect, gamma
+                ),
+            )
+            effect = StackEffect(
+                TypeSequence([_seq_var]), TypeSequence([_seq_var, module_t])
+            )
+            return GenericType([_seq_var], effect)
+        innermost_type = self._generate_type_of_innermost_module(
+            _full_name, source_dir=pathlib.Path(source_dir)
+        )
+        return GenericType([_seq_var], innermost_type)
 
 
 def _find_stub_path(
@@ -649,81 +917,6 @@ def _find_stub_path(
     return stub_path
 
 
-_module_namespaces: Dict[pathlib.Path, 'Environment'] = {}
-
-
-def _check_stub_resolved_path(
-    path: pathlib.Path,
-    initial_env: Optional['Environment'] = None,
-) -> 'Environment':
-    if path in _module_namespaces:
-        return _module_namespaces[path]
-    try:
-        source = path.read_text()
-    except FileNotFoundError as e:
-        raise TypeError(f'Type stubs at {path} do not exist') from e
-    except IOError as e:
-        raise TypeError(f'Failed to read type stubs at {path}') from e
-    token_results = concat.lex.tokenize(source)
-    tokens = list[Token]()
-    with path.open() as f:
-        for r in token_results:
-            if r.type == 'token':
-                tokens.append(r.token)
-            elif r.type == 'indent-err':
-                print('Indentation error:')
-                print(
-                    create_indentation_error_message(
-                        f, (r.err.lineno or 1, r.err.offset or 0), r.err.msg
-                    )
-                )
-            elif r.type == 'token-err':
-                print('Lexical error:')
-                print(create_lexical_error_message(f, r.location, str(r.err)))
-            else:
-                assert_never(r)
-    env = initial_env or Environment()
-    from concat.transpile import parse
-
-    try:
-        concat_ast = parse(tokens)
-    except concat.parser_combinators.ParseError as e:
-        print('Parse Error:')
-        with path.open() as file:
-            print(
-                create_parsing_failure_message(
-                    file, tokens, e.args[0].failures
-                )
-            )
-        _module_namespaces[path] = env
-        return env
-    recovered_parsing_failures = concat_ast.parsing_failures
-    with path.open() as file:
-        for failure in recovered_parsing_failures:
-            print('Parse Error:')
-            print(create_parsing_failure_message(file, tokens, failure))
-    try:
-        env = check(
-            env,
-            concat_ast.children,
-            str(path.parent),
-            _should_check_bodies=False,
-        )
-    except StaticAnalysisError as e:
-        e.set_path_if_missing(path)
-        raise
-    _module_namespaces[path] = env
-    return env
-
-
-def _check_stub(
-    path: pathlib.Path,
-    initial_env: Optional['Environment'] = None,
-) -> 'Environment':
-    path = path.resolve()
-    return _check_stub_resolved_path(path, initial_env)
-
-
 # Parsing type annotations
 
 
@@ -760,6 +953,10 @@ class NamedTypeNode(TypeNode):
         if type is None:
             raise NameError(self.name, self.location)
         return type, env
+
+    @property
+    def free_type_level_names(self) -> set[str]:
+        return {self.name}
 
 
 class _GenericTypeNode(IndividualTypeNode):
@@ -1285,53 +1482,6 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
 
 
 _seq_var = SequenceVariable()
-
-
-def _generate_type_of_innermost_module(
-    qualified_name: str, source_dir: pathlib.Path
-) -> StackEffect:
-    stub_path = _find_stub_path(qualified_name.split('.'), source_dir)
-    init_env = load_builtins_and_preamble()
-    module_attributes = _check_stub(stub_path, init_env)
-    module_type_brand = get_module_type().unroll().brand  # type: ignore
-    brand = Brand(
-        f'type({qualified_name})', IndividualKind, [module_type_brand]
-    )
-    module_t = NominalType(brand, ObjectType(module_attributes))
-    return StackEffect(
-        TypeSequence([_seq_var]), TypeSequence([_seq_var, module_t])
-    )
-
-
-def _generate_module_type(
-    components: Sequence[str], _full_name: Optional[str] = None, source_dir='.'
-) -> 'Type':
-    if _full_name is None:
-        _full_name = '.'.join(components)
-    if len(components) > 1:
-        module_type_brand = get_module_type().unroll().brand  # type: ignore
-        brand = Brand(
-            f'type({_full_name})', IndividualKind, [module_type_brand]
-        )
-        module_t = NominalType(
-            brand,
-            ObjectType(
-                {
-                    components[1]: _generate_module_type(
-                        components[1:], _full_name, source_dir
-                    )[_seq_var,],
-                }
-            ),
-        )
-        effect = StackEffect(
-            TypeSequence([_seq_var]), TypeSequence([_seq_var, module_t])
-        )
-        return GenericType([_seq_var], effect)
-    else:
-        innermost_type = _generate_type_of_innermost_module(
-            _full_name, source_dir=pathlib.Path(source_dir)
-        )
-        return GenericType([_seq_var], innermost_type)
 
 
 def _ensure_type(

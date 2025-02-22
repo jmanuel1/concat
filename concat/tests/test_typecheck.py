@@ -2,7 +2,7 @@ import concat.lex as lex
 import concat.parse
 import concat.typecheck
 import concat.parse
-from concat.typecheck import Environment, Substitutions
+from concat.typecheck import Environment, Substitutions, TypeChecker
 from concat.typecheck.errors import TypeError as ConcatTypeError
 from concat.typecheck.types import (
     BoundVariable,
@@ -17,10 +17,7 @@ from concat.typecheck.types import (
     Type as ConcatType,
     TypeSequence,
     float_type,
-    get_object_type,
-    get_int_type,
     no_return_type,
-    get_none_type,
     optional_type,
     py_function_type,
 )
@@ -39,8 +36,8 @@ from hypothesis.strategies import (
     text,
 )
 
-
-default_env = concat.typecheck.load_builtins_and_preamble()
+context = TypeChecker()
+default_env = context.load_builtins_and_preamble()
 
 
 def lex_string(string: str) -> List[concat.lex.Token]:
@@ -64,7 +61,7 @@ def build_parsers() -> concat.parse.ParserDict:
 class TestTypeChecker(unittest.TestCase):
     @given(from_type(concat.parse.AttributeWordNode))
     def test_attribute_word(self, attr_word) -> None:
-        _, type, _ = concat.typecheck.infer(
+        _, type, _ = context.infer(
             concat.typecheck.Environment(),
             [attr_word],
             initial_stack=TypeSequence(
@@ -73,37 +70,45 @@ class TestTypeChecker(unittest.TestCase):
                         {
                             attr_word.value: StackEffect(
                                 TypeSequence([]),
-                                TypeSequence([get_int_type()]),
+                                TypeSequence([context.int_type]),
                             ),
                         },
                     ),
                 ]
             ),
         )
-        self.assertEqual(list(type.output), [get_int_type()])
+        self.assertEqual(len(type.output), 1)
+        self.assertTrue(type.output[0].equals(context, context.int_type))
 
-    def test_add_operator_inference(self) -> None:
+    @staticmethod
+    def test_add_operator_inference() -> None:
         try_prog = '0 0 +\n'
         tree = parse(try_prog)
-        sub, type, _ = concat.typecheck.infer(
+        sub, type, _ = context.infer(
             concat.typecheck.Environment({'+': default_env['+']}),
             tree.children,
             is_top_level=True,
         )
-        print(
-            'explain!:',
-            type
-            == StackEffect(TypeSequence([]), TypeSequence([get_int_type()])),
+        expected = StackEffect(
+            TypeSequence([]), TypeSequence([context.int_type])
         )
-
-        self.assertEqual(
-            type, StackEffect(TypeSequence([]), TypeSequence([get_int_type()]))
+        type.constrain_and_bind_variables(
+            context,
+            expected,
+            set(),
+            []
+        )
+        expected.constrain_and_bind_variables(
+            context,
+            type,
+            set(),
+            []
         )
 
     def test_if_then_inference(self) -> None:
         try_prog = 'True $() if_then\n'
         tree = parse(try_prog)
-        _, type, _ = concat.typecheck.infer(
+        _, type, _ = context.infer(
             concat.typecheck.Environment(
                 {
                     **default_env,
@@ -113,42 +118,51 @@ class TestTypeChecker(unittest.TestCase):
             tree.children,
             is_top_level=True,
         )
-        self.assertEqual(type, StackEffect(TypeSequence([]), TypeSequence([])))
+        self.assertTrue(
+            type.equals(
+                context, StackEffect(TypeSequence([]), TypeSequence([]))
+            )
+        )
 
     def test_call_inference(self) -> None:
         try_prog = '$(42) call\n'
         tree = parse(try_prog)
-        _, type, _ = concat.typecheck.infer(
-            concat.typecheck.load_builtins_and_preamble(),
+        _, type, _ = context.infer(
+            default_env,
             tree.children,
             is_top_level=True,
         )
-        self.assertEqual(
-            type, StackEffect(TypeSequence([]), TypeSequence([get_int_type()]))
+        self.assertTrue(
+            type.equals(
+                context,
+                StackEffect(
+                    TypeSequence([]), TypeSequence([context.int_type])
+                ),
+            )
         )
 
     @given(sampled_from(['None', '...', 'NotImplemented']))
     def test_constants(self, constant_name) -> None:
-        env = concat.typecheck.load_builtins_and_preamble()
-        _, effect, _ = concat.typecheck.infer(
-            env,
+        _, effect, _ = context.infer(
+            default_env,
             [concat.parse.NameWordNode(lex.Token(value=constant_name))],
             initial_stack=TypeSequence([]),
         )
         expected_types = {
-            'None': get_none_type(),
-            'NotImplemented': env['not_implemented'],
-            '...': env['ellipsis'],
+            'None': context.none_type,
+            'NotImplemented': default_env['not_implemented'],
+            '...': default_env['ellipsis'],
         }
         expected_type = expected_types[constant_name]
-        self.assertEqual(list(effect.output), [expected_type])
+        self.assertEqual(len(effect.output), 1)
+        self.assertTrue(effect.output[0].equals(context, expected_type))
 
     def test_function_with_stack_effect(self) -> None:
         funcdef = 'def f(a b -- c): ()\n'
         tree = parse(funcdef)
         self.assertRaises(
             concat.typecheck.TypeError,
-            concat.typecheck.infer,
+            context.infer,
             concat.typecheck.Environment(),
             tree.children,
             None,
@@ -174,21 +188,26 @@ class TestTypeChecker(unittest.TestCase):
                 **concat.typecheck.preamble_types.types,
             }
         )
-        concat.typecheck.infer(env, tree.children, None, True)
+        context.infer(env, tree.children, None, True)
         # If we get here, we passed
 
     def test_cast_word(self) -> None:
         """Test that the type checker properly checks casts."""
         tree = parse('"str" cast (int)')
-        _, type, _ = concat.typecheck.infer(
+        _, type, _ = context.infer(
             Environment(
                 {**default_env, **concat.typecheck.preamble_types.types}
             ),
             tree.children,
             is_top_level=True,
         )
-        self.assertEqual(
-            type, StackEffect(TypeSequence([]), TypeSequence([get_int_type()]))
+        self.assertTrue(
+            type.equals(
+                context,
+                StackEffect(
+                    TypeSequence([]), TypeSequence([context.int_type])
+                ),
+            )
         )
 
 
@@ -211,11 +230,11 @@ class TestStackEffectParser(unittest.TestCase):
             TypeSequence(
                 [
                     _a_bar,
-                    get_object_type(),
-                    get_object_type(),
+                    context.object_type,
+                    context.object_type,
                 ]
             ),
-            TypeSequence([_a_bar, *[get_object_type()] * 2]),
+            TypeSequence([_a_bar, *[context.object_type] * 2]),
         ),
         'a:`t -- a a': StackEffect(
             TypeSequence([_a_bar, _b]), TypeSequence([_a_bar, _b, _b])
@@ -252,11 +271,11 @@ class TestStackEffectParser(unittest.TestCase):
                 )
                 actual = effect.to_type(env)[0].generalized_wrt(env)
                 expected = self.examples[example].generalized_wrt(env)
-                print(str(actual))
-                print(str(expected))
-                self.assertEqual(
-                    actual,
-                    expected,
+                actual.constrain_and_bind_variables(
+                    context, expected, set(), []
+                )
+                self.assertTrue(
+                    actual.equals(context, expected),
                 )
 
 
@@ -289,7 +308,7 @@ class TestNamedTypeNode(unittest.TestCase):
         env = concat.typecheck.Environment({named_type_node.name: type})
         expected_type = named_type_node.to_type(env)[0]
         note(str((expected_type, type)))
-        self.assertEqual(named_type_node.to_type(env)[0], type)
+        self.assertTrue(named_type_node.to_type(env)[0].equals(context, type))
 
 
 class TestDiagnosticInfo(unittest.TestCase):
@@ -297,9 +316,7 @@ class TestDiagnosticInfo(unittest.TestCase):
         bad_code = '5 .attr'
         tree = parse(bad_code)
         try:
-            concat.typecheck.infer(
-                concat.typecheck.Environment(), tree.children
-            )
+            context.infer(concat.typecheck.Environment(), tree.children)
         except concat.typecheck.TypeError as e:
             self.assertEqual(e.location, tree.children[1].location)
         else:
@@ -308,35 +325,40 @@ class TestDiagnosticInfo(unittest.TestCase):
 
 class TestTypeEquality(unittest.TestCase):
     @given(from_type(ConcatType))
-    @example(type=get_int_type().get_type_of_attribute('__add__'))
-    @example(type=get_int_type())
+    @example(type=context.int_type.get_type_of_attribute('__add__'))
+    @example(type=context.int_type)
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_reflexive_equality(self, type):
-        self.assertEqual(type, type)
+        self.assertTrue(type.equals(context, type))
 
 
 class TestSubtyping(unittest.TestCase):
     def test_int_not_subtype_of_float(self) -> None:
         """Differ from Reticulated Python: !(int <= float)."""
         with self.assertRaises(ConcatTypeError):
-            get_int_type().constrain_and_bind_variables(float_type, set(), [])
+            context.int_type.constrain_and_bind_variables(
+                context, float_type, set(), []
+            )
 
     @given(from_type(IndividualType), from_type(IndividualType))
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_stack_effect_subtyping(self, type1, type2) -> None:
         fun1 = StackEffect(TypeSequence([type1]), TypeSequence([type2]))
         fun2 = StackEffect(
-            TypeSequence([no_return_type]), TypeSequence([get_object_type()])
+            TypeSequence([no_return_type]), TypeSequence([context.object_type])
         )
         self.assertEqual(
-            fun1.constrain_and_bind_variables(fun2, set(), []), Substitutions()
+            fun1.constrain_and_bind_variables(context, fun2, set(), []),
+            Substitutions(),
         )
 
     @given(from_type(IndividualType))
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_no_return_is_bottom_type(self, type) -> None:
         self.assertEqual(
-            no_return_type.constrain_and_bind_variables(type, set(), []),
+            no_return_type.constrain_and_bind_variables(
+                context, type, set(), []
+            ),
             Substitutions(),
         )
 
@@ -344,14 +366,16 @@ class TestSubtyping(unittest.TestCase):
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_object_is_top_type(self, type) -> None:
         self.assertEqual(
-            type.constrain_and_bind_variables(get_object_type(), set(), []),
+            type.constrain_and_bind_variables(
+                context, context.object_type, set(), []
+            ),
             Substitutions(),
         )
 
     __attributes_generator = dictionaries(
         text(max_size=25),
         from_type(IndividualType),
-        max_size=5,  # type: ignore
+        max_size=5,
     )
 
     @given(__attributes_generator, __attributes_generator)
@@ -367,7 +391,7 @@ class TestSubtyping(unittest.TestCase):
         object1 = ObjectType({**other_attributes, **attributes})
         object2 = ObjectType(attributes)
         self.assertEqual(
-            object1.constrain_and_bind_variables(object2, set(), []),
+            object1.constrain_and_bind_variables(context, object2, set(), []),
             Substitutions(),
         )
 
@@ -381,7 +405,7 @@ class TestSubtyping(unittest.TestCase):
         note(repr(object1))
         note(repr(object2))
         self.assertEqual(
-            object1.constrain_and_bind_variables(object2, set(), []),
+            object1.constrain_and_bind_variables(context, object2, set(), []),
             Substitutions(),
         )
 
@@ -390,7 +414,7 @@ class TestSubtyping(unittest.TestCase):
     def test_object_subtype_of_stack_effect(self, effect) -> None:
         object = ObjectType({'__call__': effect})
         self.assertEqual(
-            object.constrain_and_bind_variables(effect, set(), []),
+            object.constrain_and_bind_variables(context, effect, set(), []),
             Substitutions(),
         )
 
@@ -405,7 +429,9 @@ class TestSubtyping(unittest.TestCase):
         py_function = py_function_type[TypeSequence([type1]), type2]
         object = ObjectType({'__call__': py_function})
         self.assertEqual(
-            object.constrain_and_bind_variables(py_function, set(), []),
+            object.constrain_and_bind_variables(
+                context, py_function, set(), []
+            ),
             Substitutions(),
         )
 
@@ -418,24 +444,18 @@ class TestSubtyping(unittest.TestCase):
         )
         cls = Fix(x, ClassType({'__init__': unbound_effect}))
         self.assertEqual(
-            cls.constrain_and_bind_variables(effect, set(), []),
+            cls.constrain_and_bind_variables(context, effect, set(), []),
             Substitutions(),
         )
 
     @given(from_type(IndividualType), from_type(IndividualType))
-    @settings(
-        suppress_health_check=(
-            HealthCheck.filter_too_much,
-            HealthCheck.too_slow,
-        )
-    )
     def test_class_subtype_of_py_function(self, type1, type2) -> None:
         x = ItemVariable(IndividualKind)
         py_function = py_function_type[TypeSequence([type1]), type2]
         unbound_py_function = py_function_type[TypeSequence([x, type1]), type2]
         cls = Fix(x, ClassType({'__init__': unbound_py_function}))
         self.assertEqual(
-            cls.constrain_and_bind_variables(py_function, set(), []),
+            cls.constrain_and_bind_variables(context, py_function, set(), []),
             Substitutions(),
         )
 
@@ -443,7 +463,9 @@ class TestSubtyping(unittest.TestCase):
     def test_none_subtype_of_optional(self, ty: IndividualType) -> None:
         opt_ty = optional_type[ty,]
         self.assertEqual(
-            get_none_type().constrain_and_bind_variables(opt_ty, set(), []),
+            context.none_type.constrain_and_bind_variables(
+                context, opt_ty, set(), []
+            ),
             Substitutions(),
         )
 
@@ -451,5 +473,6 @@ class TestSubtyping(unittest.TestCase):
     def test_type_subtype_of_optional(self, ty: IndividualType) -> None:
         opt_ty = optional_type[ty,]
         self.assertEqual(
-            ty.constrain_and_bind_variables(opt_ty, set(), []), Substitutions()
+            ty.constrain_and_bind_variables(context, opt_ty, set(), []),
+            Substitutions(),
         )

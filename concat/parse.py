@@ -19,6 +19,7 @@ extend_with(extension) -- mutates the dictionary by adding the extension
 from __future__ import annotations
 import abc
 import ast
+import functools
 import operator
 from typing import (
     Any,
@@ -56,6 +57,20 @@ class Node(abc.ABC):
         self.location = location
         self.end_location = end_location
         self.children = list(children)
+
+    @property
+    def free_type_level_names(self) -> set[str]:
+        closed_names = {
+            class_def.class_name
+            for class_def in self.children
+            if isinstance(class_def, ClassdefStatementNode)
+        }
+        inner_names: set[str] = functools.reduce(
+            operator.or_,
+            (node.free_type_level_names for node in self.children),
+            set(),
+        )
+        return inner_names - closed_names
 
     def assert_no_parse_errors(self) -> None:
         failures = list(self.parsing_failures)
@@ -335,7 +350,12 @@ class FuncdefStatementNode(StatementNode):
         self.stack_effect = stack_effect
 
     def __repr__(self) -> str:
-        return f'FuncdefStatementNode(decorators={self.decorators!r}, name={self.name!r}, type_parameters={self.type_parameters!r}, annotation={self.annotation!r}, body={self.body!r}, stack_effect={self.stack_effect!r}, location={self.location!r})'
+        return (
+            f'FuncdefStatementNode(decorators={self.decorators!r}, '
+            f'name={self.name!r}, type_parameters={self.type_parameters!r}, '
+            f'annotation={self.annotation!r}, body={self.body!r}, '
+            f'stack_effect={self.stack_effect!r}, location={self.location!r})'
+        )
 
 
 class FromImportStatementNode(ImportStatementNode):
@@ -586,8 +606,8 @@ def extension(parsers: ParserDict) -> None:
     )
 
     # This parses a function definition.
-    # funcdef statement = DEF, NAME, [ type parameters ], stack effect, decorator*,
-    #   [ annotation ], COLON, suite ;
+    # funcdef statement = DEF, NAME, [ type parameters ], stack effect,
+    #   decorator*, [ annotation ], COLON, suite ;
     # decorator = AT, word ;
     # annotation = RARROW, word* ;
     # suite = NEWLINE, INDENT, (word | statement, NEWLINE)+, DEDENT | statement
@@ -718,7 +738,8 @@ def extension(parsers: ParserDict) -> None:
         """This parses a class definition statement.
 
         classdef statement = CLASS, NAME,
-            [ LSQB, ((type variable, (COMMA, type variable)*, [ COMMA ]) | (type variable, NAME=...)), RSQB) ],
+            [ LSQB, ((type variable, (COMMA, type variable)*, [ COMMA ]) |
+                (type variable, NAME=...)), RSQB) ],
             decorator*, [ bases ], keyword arg*,
             COLON, suite ;
         bases = tuple word ;
