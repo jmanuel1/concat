@@ -12,6 +12,10 @@ env:
   VALIDATE_PYTHON_PYINK: false
   VALIDATE_PYTHON_BLACK: false
 
+  PYTHON_MYPY_CONFIG_FILE: mypy.ini
+  PYTHON_RUFF_CONFIG_FILE: pyproject.toml
+  LINTER_RULES_PATH: .
+
 permissions: {}
 
 jobs:
