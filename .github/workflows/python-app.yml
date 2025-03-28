@@ -36,15 +36,7 @@ jobs:
       if: always()
       run: |
         coverage combine
-        coverage xml
         coverage lcov
-    - name: Report test coverage to DeepSource
-      if: always()
-      uses: deepsourcelabs/test-coverage-action@master
-      with:
-        key: python
-        coverage-file: coverage.xml
-        dsn: ${{ secrets.DEEPSOURCE_DSN }}
     - name: Coveralls
       if: always()
       uses: coverallsapp/github-action@master
