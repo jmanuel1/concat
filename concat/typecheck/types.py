@@ -1147,8 +1147,13 @@ class TypeSequence(Type, Iterable[Type]):
         return SequenceKind
 
 
-# TODO: Rename to StackEffect at all use sites.
 class StackEffect(IndividualType):
+    """Types of functions that operate on the stack.
+
+    Consists of an input stack type (sequence-kinded) and an output stack type
+    (sequence-kinded).
+    """
+
     def __init__(
         self,
         input_types: TypeSequence,
