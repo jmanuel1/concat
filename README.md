@@ -50,6 +50,15 @@ concat.tests`. (Make sure you've installed the development dependencies first.)
 enter a `virtualenv` before testing, so you don't end up running the installed
 version.
 
+### CI Linters
+
+To run the linters locally, use:
+
+```pwsh
+# Powershell
+docker run -e RUN_LOCAL=true --env-file .\.github\super-linter.env -v .:/tmp/lint ghcr.io/super-linter/super-linter:latest
+```
+
 ### Building and uploading (on Windows)
 
 Change the version number in `setup.py`. **Upload will fail if you try to push

@@ -7,17 +7,6 @@ on: # yamllint disable-line rule:truthy
   pull_request:
     branches: [ "master" ]
 
-env:
-  VALIDATE_CHECKOV: false
-  VALIDATE_PYTHON_PYLINT: false
-  VALIDATE_PYTHON_FLAKE8: false
-  VALIDATE_PYTHON_PYINK: false
-  VALIDATE_PYTHON_BLACK: false
-
-  PYTHON_MYPY_CONFIG_FILE: mypy.ini
-  PYTHON_RUFF_CONFIG_FILE: pyproject.toml
-  LINTER_RULES_PATH: .
-
 permissions: {}
 
 jobs:
@@ -38,6 +27,13 @@ jobs:
           # super-linter needs the full git history to get the
           # list of files that changed across commits
           fetch-depth: 0
+
+      - name: Load super-linter configuration
+        # Use grep inverse matching to exclude eventual comments in the .env file
+        # because the GitHub Actions command to set environment variables doesn't
+        # support comments.
+        # Ref: https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#setting-an-environment-variable
+        run: grep -v '^#' .github/super-linter.env >> "$GITHUB_ENV"
 
       - name: Super-linter
         uses: super-linter/super-linter@v7.3.0 # x-release-please-version
