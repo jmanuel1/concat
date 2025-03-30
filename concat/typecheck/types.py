@@ -1689,10 +1689,12 @@ class TypeTuple(Type):
             subtyping_assumptions, self, supertype
         ):
             return Substitutions()
-        if not (self.kind <= supertype.kind):
-            # QUESTION: Should I raise normal errors? Tuple types shouldn't be
-            # exposed to the user.
-            raise ConcatTypeError(format_subkinding_error(self, supertype))
+        # NOTE: Don't raise normal errors. Tuple types shouldn't be
+        # exposed to the user.
+        assert self.kind <= supertype.kind, format_subkinding_error(
+            self,
+            supertype,
+        )
         # TODO: Support Fix
         if not isinstance(supertype, TypeTuple):
             raise NotImplementedError(repr(supertype))
@@ -1716,24 +1718,25 @@ class TypeTuple(Type):
 
     @property
     def attributes(self) -> NoReturn:
-        raise ConcatTypeError(format_cannot_have_attributes_error(self))
+        raise TypeError(format_cannot_have_attributes_error(self))
 
     @property
     def kind(self) -> TupleKind:
         return TupleKind([t.kind for t in self._types])
 
     def project(self, n: int) -> Type:
-        if n >= len(self._types):
-            raise ConcatTypeError(
-                format_type_tuple_index_out_of_range_error(self, n)
-            )
+        assert n < len(
+            self._types
+        ), format_type_tuple_index_out_of_range_error(self, n)
         return self._types[n]
 
     def __repr__(self) -> str:
         return f'TypeTuple({self._types!r})'
 
     def force_repr(self) -> str:
-        return f'TypeTuple({_iterable_to_str(t.force_repr() for t in self._types)})'
+        return f'TypeTuple({
+            _iterable_to_str(t.force_repr() for t in self._types)
+        })'
 
 
 class DelayedSubstitution(Type):
