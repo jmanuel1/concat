@@ -1,8 +1,10 @@
+import unittest
+
 from concat.typecheck import (
     TypeChecker,
 )
-from concat.typecheck.substitutions import Substitutions
 from concat.typecheck.errors import TypeError as ConcatTypeError
+from concat.typecheck.substitutions import Substitutions
 from concat.typecheck.types import (
     BoundVariable,
     Fix,
@@ -22,7 +24,6 @@ from concat.typecheck.types import (
     py_function_type,
     py_overloaded_type,
 )
-import unittest
 
 context = TypeChecker()
 context.load_builtins_and_preamble()

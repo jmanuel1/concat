@@ -1,13 +1,38 @@
 from __future__ import annotations
+
 import abc
+import functools
+import logging
+import operator
 from collections.abc import Callable
+from typing import (
+    TYPE_CHECKING,
+    AbstractSet,
+    Any,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Mapping,
+    NoReturn,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+    overload,
+)
+
 from concat.logging import ConcatLogger
 from concat.orderedset import InsertionOrderedSet
+from concat.typecheck.errors import AttributeError as ConcatAttributeError
 from concat.typecheck.errors import (
-    AttributeError as ConcatAttributeError,
     StackMismatchError,
     StaticAnalysisError,
-    TypeError as ConcatTypeError,
+)
+from concat.typecheck.errors import TypeError as ConcatTypeError
+from concat.typecheck.errors import (
     format_attributes_unknown_error,
     format_cannot_have_attributes_error,
     format_generic_type_attributes_error,
@@ -24,28 +49,6 @@ from concat.typecheck.errors import (
     format_wrong_number_of_type_arguments_error,
 )
 from concat.typecheck.substitutions import Substitutions
-import functools
-import logging
-import operator
-from typing import (
-    AbstractSet,
-    Any,
-    Dict,
-    Iterable,
-    Iterator,
-    List,
-    Mapping,
-    NoReturn,
-    Optional,
-    Sequence,
-    TYPE_CHECKING,
-    Tuple,
-    TypeVar,
-    Union,
-    cast,
-    overload,
-)
-
 
 if TYPE_CHECKING:
     from concat.typecheck import TypeChecker
