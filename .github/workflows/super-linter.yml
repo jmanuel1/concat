@@ -3,9 +3,9 @@ name: Lint
 
 on: # yamllint disable-line rule:truthy
   push:
-    branches: [ "master" ]
+    branches: ["master"]
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
 
 permissions: {}
 
@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: read
+      contents: write
       packages: read
       # To report GitHub Actions status checks
       statuses: write
@@ -27,6 +27,7 @@ jobs:
           # super-linter needs the full git history to get the
           # list of files that changed across commits
           fetch-depth: 0
+          token: ${{ secrets.CI_TOKEN }}
 
       - name: Load super-linter configuration
         # Use grep inverse matching to exclude eventual comments in the .env file
@@ -41,3 +42,19 @@ jobs:
           # To report GitHub Actions status checks
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VALIDATE_ALL_CODEBASE: "${{ github.event_name == 'pull_request' && 'false' || 'true' }}"
+
+      - name: Commit and push linting fixes
+        # Run only on:
+        # - Pull requests
+        # - Not on the default branch
+        if: >
+          always() &&
+          github.event_name == 'pull_request' &&
+          github.ref_name != github.event.repository.default_branch
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          branch: ${{ github.event.pull_request.head.ref || github.head_ref || github.ref }}
+          commit_message: "Fix issues found by linters"
+          commit_user_name: super-linter
+          commit_user_email: super-linter@super-linter.dev
+          status_options: "--untracked-files=no"

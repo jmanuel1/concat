@@ -120,3 +120,10 @@ parsetab.py
 
 # file made by mypy
 .mypy_cache/
+
+# Super-linter outputs
+super-linter-output
+super-linter.log
+
+# GitHub Actions leftovers
+github_conf
