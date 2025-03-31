@@ -57,3 +57,4 @@ jobs:
           commit_message: "Fix issues found by linters"
           commit_user_name: super-linter
           commit_user_email: super-linter@super-linter.dev
+          status_options: '--untracked-files=no'
