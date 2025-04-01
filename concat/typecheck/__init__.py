@@ -922,10 +922,8 @@ def _find_stub_path(
     else:
         module_spec = None
         path: Optional[List[str]]
-        if source_dir is not None:
-            path = [str(source_dir)] + sys.path
-        else:
-            path = sys.path
+        path = [str(source_dir)] + sys.path
+
         for module_prefix in itertools.accumulate(
             module_parts, lambda a, b: f'{a}.{b}'
         ):
@@ -1348,9 +1346,17 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         )
 
     @concat.parser_combinators.generate
-    def possibly_nullary_generic_type_parser() -> Generator:
+    def possibly_nullary_generic_type_parser() -> (
+        Generator[
+            concat.parser_combinators.Parser,
+            Any,
+            TypeNode,
+        ]
+    ):
         type_constructor_name = yield named_type_parser
-        left_square_bracket = yield concat.parse.token('LSQB').optional()
+        left_square_bracket: Token | None = yield concat.parse.token(
+            'LSQB'
+        ).optional()
         if left_square_bracket:
             type_arguments = yield parsers['type'].sep_by(
                 concat.parse.token('COMMA'), min=1
