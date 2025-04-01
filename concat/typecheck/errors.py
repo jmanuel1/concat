@@ -33,9 +33,9 @@ class StaticAnalysisError(Exception):
 class TypeError(StaticAnalysisError, builtins.TypeError):
     """Type errors raised by the Concat type checker.
 
-    is_occurs_check_fail is None if it is not applicable to the error (e.g. the
-    two sides of a constraint are not variables). rigid_variables is None when
-    it's irrelevant (e.g. for an attribute error).
+    is_occurs_check_fail is None if it is not applicable to the error (e.g.
+    failure was not caused by the constraint of a variable). rigid_variables is
+    None when it's irrelevant (e.g. for an attribute error).
     """
 
     def __init__(
