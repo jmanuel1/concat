@@ -2,7 +2,7 @@ from __future__ import annotations
 import builtins
 import concat.parse
 import pathlib
-from typing import Optional, Union, TYPE_CHECKING
+from typing import AbstractSet, TYPE_CHECKING
 
 
 if TYPE_CHECKING:
@@ -13,8 +13,8 @@ if TYPE_CHECKING:
 class StaticAnalysisError(Exception):
     def __init__(self, message: str) -> None:
         self.message = message
-        self.location: Optional['concat.astutils.Location'] = None
-        self.path: Optional[pathlib.Path] = None
+        self.location: concat.astutils.Location | None = None
+        self.path: pathlib.Path | None = None
 
     def set_location_if_missing(
         self, location: 'concat.astutils.Location'
@@ -31,14 +31,34 @@ class StaticAnalysisError(Exception):
 
 
 class TypeError(StaticAnalysisError, builtins.TypeError):
-    pass
+    """Type errors raised by the Concat type checker.
+
+    is_occurs_check_fail is None if it is not applicable to the error (e.g. the
+    two sides of a constraint are not variables). rigid_variables is None when
+    it's irrelevant (e.g. for an attribute error).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        is_occurs_check_fail: bool | None,
+        rigid_variables: AbstractSet[Variable] | None,
+    ) -> None:
+        super().__init__(message)
+        self.is_occurs_check_fail = is_occurs_check_fail
+        self.rigid_variables = rigid_variables
+
+    def __repr__(self) -> str:
+        return f'TypeError({self.message!r}, is_occurs_check_fail={
+            self.is_occurs_check_fail!r
+        }, rigid_variables={self.rigid_variables!r})'
 
 
 class NameError(StaticAnalysisError, builtins.NameError):
     def __init__(
         self,
-        name: Union['concat.parse.NameWordNode', str],
-        location: Optional['concat.astutils.Location'] = None,
+        name: concat.parse.NameWordNode | str,
+        location: concat.astutils.Location | None = None,
     ) -> None:
         if isinstance(name, concat.parse.NameWordNode):
             location = name.location
@@ -59,7 +79,9 @@ class AttributeError(TypeError, builtins.AttributeError):
         super().__init__(
             'object of type {} does not have attribute {}'.format(
                 type, attribute
-            )
+            ),
+            is_occurs_check_fail=None,
+            rigid_variables=None,
         )
         self._type = type
         self._attribute = attribute
@@ -67,12 +89,18 @@ class AttributeError(TypeError, builtins.AttributeError):
 
 class StackMismatchError(TypeError):
     def __init__(
-        self, actual: 'TypeSequence', expected: 'TypeSequence'
+        self,
+        actual: TypeSequence,
+        expected: TypeSequence,
+        is_occurs_check_fail: bool | None,
+        rigid_variables: AbstractSet[Variable] | None,
     ) -> None:
         super().__init__(
-            'The stack here is {}, but sequence type {} was expected'.format(
-                actual, expected
-            )
+            f'The stack here is {
+                actual
+            }, but sequence type {expected} was expected',
+            is_occurs_check_fail,
+            rigid_variables,
         )
 
 
@@ -134,7 +162,9 @@ def format_not_generic_type_error(ty: Type) -> str:
 
 
 def format_generic_type_attributes_error(ty: Type) -> str:
-    return f'Generic type {ty} does not have attributes; maybe you forgot type arguments?'
+    return f'Generic type {
+        ty
+    } does not have attributes; maybe you forgot type arguments?'
 
 
 def format_not_allowed_as_overload_error(ty: Type) -> str:
@@ -171,6 +201,10 @@ def format_subkinding_error(sub: Type, sup: Type) -> str:
     )
 
 
+def format_expected_item_kinded_variable_error(name: str, ty: Type) -> str:
+    return f'{name} is not of item kind (has kind {ty.kind})'
+
+
 def format_cannot_have_attributes_error(ty: Type) -> str:
     return f'{ty} cannot have attributes'
 
@@ -193,3 +227,18 @@ def format_unknown_sequence_type(ty: Type) -> str:
 
 def format_not_a_nominal_type_error(ty: Type) -> str:
     return f'{ty} is not a nominal type'
+
+
+def format_must_be_item_type_error(ty: Type) -> str:
+    return f'{ty} must be an item type, but has kind {ty.kind}'
+
+
+def format_cannot_find_module_from_source_dir_error(
+    module: str,
+    source_dir: pathlib.Path,
+) -> str:
+    return f'Cannot find module {module} from source directory {source_dir}'
+
+
+def format_cannot_find_module_path_error(module: str):
+    return f'Cannot find path of module {module}'
