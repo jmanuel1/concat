@@ -5,8 +5,37 @@ The type inference algorithm was originally based on the one described in
 """
 
 from __future__ import annotations
+
+import abc
+import itertools
+import pathlib
+import sys
 from collections.abc import Generator
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    assert_never,
+    cast,
+)
+
 import concat.graph
+import concat.parse
+import concat.parser_combinators
+import concat.typecheck.preamble_types
+from concat.error_reporting import (
+    create_indentation_error_message,
+    create_lexical_error_message,
+    create_parsing_failure_message,
+)
+from concat.lex import Token
 from concat.set_once import SetOnce
 from concat.typecheck.env import Environment
 from concat.typecheck.errors import (
@@ -24,22 +53,7 @@ from concat.typecheck.errors import (
     format_not_generic_type_error,
     format_too_many_params_for_variadic_type_error,
 )
-import concat.typecheck.preamble_types
 from concat.typecheck.substitutions import Substitutions
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    TYPE_CHECKING,
-    Tuple,
-    Union,
-    assert_never,
-    cast,
-)
 from concat.typecheck.types import (
     BoundVariable,
     Brand,
@@ -64,19 +78,6 @@ from concat.typecheck.types import (
     VariableArgumentKind,
     no_return_type,
 )
-import abc
-from concat.error_reporting import (
-    create_indentation_error_message,
-    create_lexical_error_message,
-    create_parsing_failure_message,
-)
-from concat.lex import Token
-import itertools
-import pathlib
-import sys
-import concat.parser_combinators
-import concat.parse
-
 
 if TYPE_CHECKING:
     import concat.astutils

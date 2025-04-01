@@ -1,9 +1,10 @@
 from __future__ import annotations
-import builtins
-import concat.parse
-import pathlib
-from typing import AbstractSet, TYPE_CHECKING
 
+import builtins
+import pathlib
+from typing import TYPE_CHECKING, AbstractSet
+
+import concat.parse
 
 if TYPE_CHECKING:
     import concat.astutils
