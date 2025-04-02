@@ -87,6 +87,11 @@ class AttributeError(TypeError, builtins.AttributeError):
         self._type = type
         self._attribute = attribute
 
+    def __repr__(self) -> str:
+        return f'AttributeError({self._type.force_repr()}, {
+            self._attribute!r
+        })'
+
 
 class StackMismatchError(TypeError):
     def __init__(
@@ -103,6 +108,19 @@ class StackMismatchError(TypeError):
             is_occurs_check_fail,
             rigid_variables,
         )
+        self._actual = actual
+        self._expected = expected
+
+    def __repr__(self) -> str:
+        return f'StackMismatchError(actual={
+            self._actual.force_repr()
+        }, expected={
+            self._expected.force_repr()
+        }, is_occurs_check_fail={
+            self.is_occurs_check_fail!r
+        }, rigid_variables={
+            self.rigid_variables!r
+        })'
 
 
 class UnhandledNodeTypeError(builtins.NotImplementedError):

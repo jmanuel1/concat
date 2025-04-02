@@ -112,8 +112,9 @@ def batch_main():
         else:
             in_path = ' in file ' + str(e.path)
         print(f'Static Analysis Error{in_path}:\n')
-        print(e, 'in line:')
+        print(e, end='')
         if e.location:
+            print(' in line:')
             if e.path is not None:
                 with e.path.open() as f:
                     print(get_line_at(f, e.location), end='')
@@ -121,6 +122,7 @@ def batch_main():
                 print(get_line_at(args.file, e.location), end='')
             print(' ' * e.location[1] + '^')
         if args.verbose:
+            print('error repr:', repr(e))
             raise
     except concat.parser_combinators.ParseError as e:
         print('Parse Error:')

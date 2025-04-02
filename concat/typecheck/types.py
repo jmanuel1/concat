@@ -1813,6 +1813,7 @@ class TypeTuple(Type):
             return Substitutions()
         # NOTE: Don't raise normal errors. Tuple types shouldn't be
         # exposed to the user.
+        # FIXME: Turns out the user can trigger this. :/
         assert self.kind <= supertype.kind, format_subkinding_error(
             self,
             supertype,
@@ -1859,6 +1860,9 @@ class TypeTuple(Type):
         return f'TypeTuple({
             _iterable_to_str(t.force_repr() for t in self._types)
         })'
+
+    def __str__(self) -> str:
+        return f'({','.join(str(t) for t in self._types)})'
 
 
 class DelayedSubstitution(Type):
