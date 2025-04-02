@@ -78,9 +78,7 @@ from concat.typecheck.types import (
     VariableArgumentKind,
     no_return_type,
 )
-
-if TYPE_CHECKING:
-    import concat.astutils
+from concat.location import Location
 
 
 _builtins_stub_path = pathlib.Path(__file__) / '../builtin_stubs/builtins.cati'
@@ -973,8 +971,8 @@ class IndividualTypeNode(TypeNode, abc.ABC):
 class NamedTypeNode(TypeNode):
     def __init__(
         self,
-        location: concat.astutils.Location,
-        end_location: concat.astutils.Location,
+        location: Location,
+        end_location: Location,
         name: str,
     ) -> None:
         super().__init__(location, end_location, [])
@@ -1000,8 +998,8 @@ class NamedTypeNode(TypeNode):
 class _GenericTypeNode(IndividualTypeNode):
     def __init__(
         self,
-        location: concat.astutils.Location,
-        end_location: concat.astutils.Location,
+        location: Location,
+        end_location: Location,
         generic_type: IndividualTypeNode,
         type_arguments: Sequence[IndividualTypeNode],
     ) -> None:
@@ -1087,8 +1085,8 @@ class _TypeSequenceIndividualTypeNode(IndividualTypeNode):
 class TypeSequenceNode(TypeNode):
     def __init__(
         self,
-        location: concat.astutils.Location,
-        end_location: concat.astutils.Location,
+        location: Location,
+        end_location: Location,
         seq_var: Optional['_SequenceVariableNode'],
         individual_type_items: Iterable[_TypeSequenceIndividualTypeNode],
     ) -> None:
@@ -1128,7 +1126,7 @@ class TypeSequenceNode(TypeNode):
 class StackEffectTypeNode(IndividualTypeNode):
     def __init__(
         self,
-        location: concat.astutils.Location,
+        location: Location,
         input: TypeSequenceNode,
         output: TypeSequenceNode,
     ) -> None:
@@ -1280,7 +1278,7 @@ class _ForallTypeNode(TypeNode):
 
     def __init__(
         self,
-        location: 'concat.astutils.Location',
+        location: Location,
         type_variables: Sequence[
             Union[_ItemVariableNode, _SequenceVariableNode]
         ],
@@ -1308,8 +1306,8 @@ class _ObjectTypeNode(IndividualTypeNode):
     def __init__(
         self,
         attribute_type_pairs: Iterable[Tuple[Token, IndividualTypeNode]],
-        location: concat.astutils.Location,
-        end_location: concat.astutils.Location,
+        location: Location,
+        end_location: Location,
     ) -> None:
         super().__init__(
             location, end_location, map(lambda p: p[1], attribute_type_pairs)

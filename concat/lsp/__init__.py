@@ -1,4 +1,4 @@
-from concat.astutils import Location
+from concat.location import Location
 import concat.jsonrpc
 from concat.lex import Token, tokenize
 from concat.logging import ConcatLogger

@@ -7,19 +7,17 @@ from typing import TYPE_CHECKING, AbstractSet
 import concat.parse
 
 if TYPE_CHECKING:
-    import concat.astutils
+    from concat.location import Location
     from concat.typecheck.types import Kind, Type, TypeSequence, Variable
 
 
 class StaticAnalysisError(Exception):
     def __init__(self, message: str) -> None:
         self.message = message
-        self.location: concat.astutils.Location | None = None
+        self.location: Location | None = None
         self.path: pathlib.Path | None = None
 
-    def set_location_if_missing(
-        self, location: 'concat.astutils.Location'
-    ) -> None:
+    def set_location_if_missing(self, location: Location) -> None:
         if not self.location:
             self.location = location
 
@@ -59,7 +57,7 @@ class NameError(StaticAnalysisError, builtins.NameError):
     def __init__(
         self,
         name: concat.parse.NameWordNode | str,
-        location: concat.astutils.Location | None = None,
+        location: Location | None = None,
     ) -> None:
         if isinstance(name, concat.parse.NameWordNode):
             location = name.location

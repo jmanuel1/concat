@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from concat.location import Location, are_on_same_line_and_offset_by
 import dataclasses
 import io
 import json
@@ -13,8 +13,6 @@ from typing import (
     Tuple,
     Union,
 )
-
-from concat.astutils import Location, are_on_same_line_and_offset_by
 
 
 @dataclasses.dataclass
@@ -59,7 +57,7 @@ def tokenize(
     return tokens
 
 
-TokenTuple = Union[
+type TokenTuple = Union[
     Tuple[str, str, Location, Location],
     Tuple[str, str, Location, Location, bool],
 ]

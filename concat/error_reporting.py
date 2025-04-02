@@ -1,11 +1,12 @@
 import concat.astutils
+from concat.location import Location
 import concat.parser_combinators
 import io
 import textwrap
 from typing import Sequence, TextIO
 
 
-def get_line_at(file: TextIO, location: concat.astutils.Location) -> str:
+def get_line_at(file: TextIO, location: Location) -> str:
     file.seek(0, io.SEEK_SET)
     lines = [*file]
     return lines[location[0] - 1]
@@ -34,7 +35,7 @@ def create_parsing_failure_message(
 
 
 def create_lexical_error_message(
-    file: TextIO, location: concat.astutils.Location, message: str
+    file: TextIO, location: Location, message: str
 ) -> str:
     line = get_line_at(file, location)
     message = (
@@ -47,7 +48,7 @@ def create_lexical_error_message(
 
 
 def create_indentation_error_message(
-    file: TextIO, location: concat.astutils.Location, message: str
+    file: TextIO, location: Location, message: str
 ) -> str:
     line = get_line_at(file, location)
     message = (

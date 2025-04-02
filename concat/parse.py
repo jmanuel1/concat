@@ -40,11 +40,12 @@ import concat.astutils
 import concat.parser_combinators
 from concat.parser_combinators.recovery import bracketed, recover, skip_until
 from concat.parser_dict import ParserDict
+from concat.location import Location
 
 if TYPE_CHECKING:
     from concat.lex import Token
     from concat.typecheck import TypeSequenceNode
-    from concat.astutils import Location, Words, WordsOrStatements
+    from concat.astutils import Words, WordsOrStatements
 
 
 class Node(abc.ABC):
@@ -234,9 +235,7 @@ class NameWordNode(WordNode):
 
 
 class AttributeWordNode(WordNode):
-    def __init__(
-        self, location: concat.astutils.Location, attribute: 'concat.lex.Token'
-    ):
+    def __init__(self, location: Location, attribute: 'concat.lex.Token'):
         super().__init__(location, attribute.end, [])
         self.value = attribute.value
         self._name_token = attribute
