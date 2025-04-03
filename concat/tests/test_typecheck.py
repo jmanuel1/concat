@@ -1,7 +1,14 @@
+import unittest
+from textwrap import dedent
+from typing import Dict, List, cast
+
+import concat.astutils
 import concat.lex as lex
 import concat.parse
+import concat.parser_combinators
+import concat.tests.strategies  # for side-effects
 import concat.typecheck
-import concat.parse
+import concat.typecheck.preamble_types
 from concat.typecheck import Environment, Substitutions, TypeChecker
 from concat.typecheck.errors import TypeError as ConcatTypeError
 from concat.typecheck.types import (
@@ -14,21 +21,16 @@ from concat.typecheck.types import (
     ItemVariable,
     ObjectType,
     StackEffect,
-    Type as ConcatType,
+)
+from concat.typecheck.types import Type as ConcatType
+from concat.typecheck.types import (
     TypeSequence,
     float_type,
     no_return_type,
     optional_type,
     py_function_type,
 )
-import concat.typecheck.preamble_types
-import concat.astutils
-import concat.tests.strategies  # for side-effects
-import unittest
-from textwrap import dedent
-from typing import List, Dict, cast
-import concat.parser_combinators
-from hypothesis import HealthCheck, given, example, note, settings
+from hypothesis import HealthCheck, example, given, note, settings
 from hypothesis.strategies import (
     dictionaries,
     from_type,
