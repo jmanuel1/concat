@@ -1,5 +1,4 @@
-# TODO: Upgrade hypothesis so I can use type Location = ...
-Location = tuple[int, int]
+type Location = tuple[int, int]
 
 
 def are_on_same_line_and_offset_by(
