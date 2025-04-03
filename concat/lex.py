@@ -1,5 +1,5 @@
 from __future__ import annotations
-from concat.location import Location, are_on_same_line_and_offset_by
+
 import dataclasses
 import io
 import json
@@ -13,6 +13,8 @@ from typing import (
     Tuple,
     Union,
 )
+
+from concat.location import Location, are_on_same_line_and_offset_by
 
 
 @dataclasses.dataclass

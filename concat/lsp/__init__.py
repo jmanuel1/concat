@@ -1,15 +1,8 @@
-from concat.location import Location
-import concat.jsonrpc
-from concat.lex import Token, tokenize
-from concat.logging import ConcatLogger
-from concat.parser_combinators import ParseError
-from concat.transpile import parse, typecheck
-from concat.typecheck import StaticAnalysisError
+import logging
+import re
 from enum import Enum, IntEnum
 from io import TextIOWrapper
-import logging
 from pathlib import Path
-import re
 from typing import (
     BinaryIO,
     Callable,
@@ -21,10 +14,17 @@ from typing import (
     Union,
     cast,
 )
-from typing_extensions import Self
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 
+import concat.jsonrpc
+from concat.lex import Token, tokenize
+from concat.location import Location
+from concat.logging import ConcatLogger
+from concat.parser_combinators import ParseError
+from concat.transpile import parse, typecheck
+from concat.typecheck import StaticAnalysisError
+from typing_extensions import Self
 
 _python_logger = logging.getLogger(__name__)
 _python_logger.addHandler(logging.NullHandler())

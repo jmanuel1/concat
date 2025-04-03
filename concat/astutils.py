@@ -1,19 +1,20 @@
 from __future__ import annotations
+
+import ast
+import textwrap
 from typing import (
-    Union,
-    List,
-    Tuple,
     Iterable,
+    Iterator,
+    List,
     Optional,
     Sequence,
-    Iterator,
+    Tuple,
+    Union,
     cast,
 )
-import ast
-import concat.visitors
-import concat.parse
-import textwrap
 
+import concat.parse
+import concat.visitors
 
 # Typedefs
 

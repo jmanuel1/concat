@@ -1,9 +1,10 @@
-import concat.astutils
-from concat.location import Location
-import concat.parser_combinators
 import io
 import textwrap
 from typing import Sequence, TextIO
+
+import concat.astutils
+import concat.parser_combinators
+from concat.location import Location
 
 
 def get_line_at(file: TextIO, location: Location) -> str:

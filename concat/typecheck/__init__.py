@@ -36,6 +36,7 @@ from concat.error_reporting import (
     create_parsing_failure_message,
 )
 from concat.lex import Token
+from concat.location import Location
 from concat.set_once import SetOnce
 from concat.typecheck.env import Environment
 from concat.typecheck.errors import (
@@ -78,8 +79,6 @@ from concat.typecheck.types import (
     VariableArgumentKind,
     no_return_type,
 )
-from concat.location import Location
-
 
 _builtins_stub_path = pathlib.Path(__file__) / '../builtin_stubs/builtins.cati'
 
