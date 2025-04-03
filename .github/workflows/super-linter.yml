@@ -36,12 +36,24 @@ jobs:
         # Ref: https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#setting-an-environment-variable
         run: grep -v '^#' .github/super-linter.env >> "$GITHUB_ENV"
 
+      # Collect Python deps so that mypy can see them.
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.12"
+      - name: Create virtualenv in /home/runner/work/_temp/_github_workflow/.venv
+        run: python -m venv /home/runner/work/_temp/_github_workflow/.venv
+      - name: Install test dependencies
+        run: |
+          /home/runner/work/_temp/_github_workflow/.venv/bin/pip install -e .[test]
+
       - name: Super-linter
         uses: super-linter/super-linter@v7.3.0 # x-release-please-version
         env:
           # To report GitHub Actions status checks
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VALIDATE_ALL_CODEBASE: "${{ github.event_name == 'pull_request' && 'false' || 'true' }}"
+          PYTHONPATH: "/github/workspace:/github/workflow/.venv/lib/python3.12/site-packages"
 
       - name: Commit and push linting fixes
         # Run only on:
