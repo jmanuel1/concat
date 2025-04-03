@@ -1,25 +1,25 @@
 """The Concat Implementation."""
 
 import argparse
-from concat.transpile import parse, transpile_ast, typecheck
-from concat.error_reporting import (
-    get_line_at,
-    create_indentation_error_message,
-    create_lexical_error_message,
-    create_parsing_failure_message,
-)
-import concat.execute
-import concat.lex
-from concat.logging.json import JSONFormatter
-import concat.parser_combinators
-import concat.stdlib.repl
-import concat.typecheck
 import json
 import logging
 import os.path
 import sys
-from typing import Callable, IO, AnyStr, assert_never
+from typing import IO, AnyStr, Callable, assert_never
 
+import concat.execute
+import concat.lex
+import concat.parser_combinators
+import concat.stdlib.repl
+import concat.typecheck
+from concat.error_reporting import (
+    create_indentation_error_message,
+    create_lexical_error_message,
+    create_parsing_failure_message,
+    get_line_at,
+)
+from concat.logging.json import JSONFormatter
+from concat.transpile import parse, transpile_ast, typecheck
 
 _log_handler = logging.StreamHandler(sys.stderr)
 _log_handler.setFormatter(JSONFormatter())
@@ -112,8 +112,9 @@ def batch_main():
         else:
             in_path = ' in file ' + str(e.path)
         print(f'Static Analysis Error{in_path}:\n')
-        print(e, 'in line:')
+        print(e, end='')
         if e.location:
+            print(' in line:')
             if e.path is not None:
                 with e.path.open() as f:
                     print(get_line_at(f, e.location), end='')
@@ -121,6 +122,7 @@ def batch_main():
                 print(get_line_at(args.file, e.location), end='')
             print(' ' * e.location[1] + '^')
         if args.verbose:
+            print('error repr:', repr(e))
             raise
     except concat.parser_combinators.ParseError as e:
         print('Parse Error:')

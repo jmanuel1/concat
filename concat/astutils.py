@@ -1,19 +1,20 @@
 from __future__ import annotations
+
+import ast
+import textwrap
 from typing import (
-    Union,
-    List,
-    Tuple,
     Iterable,
+    Iterator,
+    List,
     Optional,
     Sequence,
-    Iterator,
+    Tuple,
+    Union,
     cast,
 )
-import ast
-import concat.visitors
-import concat.parse
-import textwrap
 
+import concat.parse
+import concat.visitors
 
 # Typedefs
 
@@ -21,21 +22,7 @@ WordsOrStatements = Sequence[
     Union['concat.parse.WordNode', 'concat.parse.StatementNode']
 ]
 Words = List['concat.parse.WordNode']
-Location = Tuple[int, int]
 _TranspilerDict = concat.visitors.VisitorDict['concat.parse.Node', ast.AST]
-
-
-# Concat AST Manipulation utilities
-
-
-def are_on_same_line_and_offset_by(
-    location_x: Location, location_y: Location, characters: int
-) -> bool:
-    return (
-        location_x[0] == location_y[0]
-        and location_y[1] - location_x[1] == characters
-    )
-
 
 # Python AST Manipulation utilities
 

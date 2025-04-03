@@ -5,8 +5,38 @@ The type inference algorithm was originally based on the one described in
 """
 
 from __future__ import annotations
+
+import abc
+import itertools
+import pathlib
+import sys
 from collections.abc import Generator
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    assert_never,
+    cast,
+)
+
 import concat.graph
+import concat.parse
+import concat.parser_combinators
+import concat.typecheck.preamble_types
+from concat.error_reporting import (
+    create_indentation_error_message,
+    create_lexical_error_message,
+    create_parsing_failure_message,
+)
+from concat.lex import Token
+from concat.location import Location
 from concat.set_once import SetOnce
 from concat.typecheck.env import Environment
 from concat.typecheck.errors import (
@@ -14,27 +44,17 @@ from concat.typecheck.errors import (
     StaticAnalysisError,
     TypeError,
     UnhandledNodeTypeError,
+    format_cannot_find_module_from_source_dir_error,
+    format_cannot_find_module_path_error,
+    format_decorator_result_kind_error,
+    format_expected_item_kinded_variable_error,
     format_item_type_expected_in_type_sequence_error,
     format_name_reassigned_in_type_sequence_error,
     format_not_a_variable_error,
-    format_decorator_result_kind_error,
+    format_not_generic_type_error,
     format_too_many_params_for_variadic_type_error,
 )
-import concat.typecheck.preamble_types
 from concat.typecheck.substitutions import Substitutions
-from typing import (
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    TYPE_CHECKING,
-    Tuple,
-    Union,
-    assert_never,
-    cast,
-)
 from concat.typecheck.types import (
     BoundVariable,
     Brand,
@@ -59,24 +79,6 @@ from concat.typecheck.types import (
     VariableArgumentKind,
     no_return_type,
 )
-import abc
-from concat.error_reporting import (
-    create_indentation_error_message,
-    create_lexical_error_message,
-    create_parsing_failure_message,
-)
-from concat.lex import Token
-import itertools
-import pathlib
-import sys
-import concat.parser_combinators
-import concat.parse
-
-
-if TYPE_CHECKING:
-    import concat.astutils
-    from collections.abc import Mapping
-
 
 _builtins_stub_path = pathlib.Path(__file__) / '../builtin_stubs/builtins.cati'
 
@@ -119,9 +121,17 @@ class TypeChecker:
         try:
             source = path.read_text()
         except FileNotFoundError as e:
-            raise TypeError(f'Type stubs at {path} do not exist') from e
+            raise TypeError(
+                f'Type stubs at {path} do not exist',
+                is_occurs_check_fail=None,
+                rigid_variables=None,
+            ) from e
         except IOError as e:
-            raise TypeError(f'Failed to read type stubs at {path}') from e
+            raise TypeError(
+                f'Failed to read type stubs at {path}',
+                is_occurs_check_fail=None,
+                rigid_variables=None,
+            ) from e
         token_results = concat.lex.tokenize(source)
         tokens = list[Token]()
         with path.open() as f:
@@ -469,7 +479,9 @@ class TypeChecker:
                         module_path = module_spec.origin
                         if module_path is None:
                             raise TypeError(
-                                f'Cannot find path of module {node.value}'
+                                f'Cannot find path of module {node.value}',
+                                is_occurs_check_fail=None,
+                                rigid_variables=None,
                             )
                         # For now, assume the module's written in Python.
                         stub_path = pathlib.Path(module_path)
@@ -481,7 +493,11 @@ class TypeChecker:
                     imported_type = stub_env.get(node.imported_name)
                     if imported_type is None:
                         raise TypeError(
-                            f'Cannot find {node.imported_name} in module {node.value}'
+                            f'Cannot find {
+                                node.imported_name
+                            } in module {node.value}',
+                            is_occurs_check_fail=None,
+                            rigid_variables=None,
                         )
                     # TODO: Support star imports
                     gamma |= {imported_name: current_subs(imported_type)}
@@ -537,11 +553,14 @@ class TypeChecker:
                         # We want to check that the inferred outputs are subtypes of
                         # the declared outputs. Thus, inferred_type.output should be a subtype
                         # declared_type.output.
+                        rigid_variables = S(
+                            recursion_env
+                        ).free_type_variables()
                         try:
                             S = inferred_type.output.constrain_and_bind_variables(
                                 self,
                                 declared_type.output,
-                                S(recursion_env).free_type_variables(),
+                                rigid_variables,
                                 [],
                             )(S)
                         except TypeError as error:
@@ -550,7 +569,9 @@ class TypeChecker:
                                 'inferred type {}'
                             )
                             raise TypeError(
-                                message.format(declared_type, inferred_type)
+                                message.format(declared_type, inferred_type),
+                                is_occurs_check_fail=error.is_occurs_check_fail,
+                                rigid_variables=rigid_variables,
                             ) from error
                     effect = declared_type
                     # type check decorators
@@ -567,12 +588,19 @@ class TypeChecker:
                     )
                     if len(final_type_stack_output) != 1:
                         raise TypeError(
-                            f'Decorators produce too many stack items: only 1 should be left. Stack: {final_type_stack.output}'
+                            'Decorators produce too many stack items: only 1 '
+                            f'should be left. Stack: {
+                                final_type_stack.output
+                            }',
+                            is_occurs_check_fail=None,
+                            rigid_variables=None,
                         )
                     final_type = final_type_stack_output[0]
                     if not (final_type.kind <= ItemKind):
                         raise TypeError(
-                            format_decorator_result_kind_error(final_type)
+                            format_decorator_result_kind_error(final_type),
+                            is_occurs_check_fail=None,
+                            rigid_variables=None,
                         )
                     gamma |= {
                         name: (
@@ -709,7 +737,9 @@ class TypeChecker:
         if node.is_variadic:
             if len(type_parameters) > 1:
                 raise TypeError(
-                    format_too_many_params_for_variadic_type_error()
+                    format_too_many_params_for_variadic_type_error(),
+                    is_occurs_check_fail=None,
+                    rigid_variables=None,
                 )
             underlying_kind = type_parameters[0].kind
             type_parameters = [
@@ -890,10 +920,8 @@ def _find_stub_path(
     else:
         module_spec = None
         path: Optional[List[str]]
-        if source_dir is not None:
-            path = [str(source_dir)] + sys.path
-        else:
-            path = sys.path
+        path = [str(source_dir)] + sys.path
+
         for module_prefix in itertools.accumulate(
             module_parts, lambda a, b: f'{a}.{b}'
         ):
@@ -904,12 +932,19 @@ def _find_stub_path(
                     break
         if module_spec is None:
             raise TypeError(
-                f'Cannot find module {".".join(module_parts)} from source dir {source_dir}'
+                format_cannot_find_module_from_source_dir_error(
+                    '.'.join(module_parts),
+                    source_dir,
+                ),
+                is_occurs_check_fail=None,
+                rigid_variables=None,
             )
         module_path = module_spec.origin
         if module_path is None:
             raise TypeError(
-                f'Cannot find path of module {".".join(module_parts)}'
+                format_cannot_find_module_path_error('.'.join(module_parts)),
+                is_occurs_check_fail=None,
+                rigid_variables=None,
             )
         # For now, assume the module's written in Python.
         stub_path = pathlib.Path(module_path)
@@ -935,8 +970,8 @@ class IndividualTypeNode(TypeNode, abc.ABC):
 class NamedTypeNode(TypeNode):
     def __init__(
         self,
-        location: concat.astutils.Location,
-        end_location: concat.astutils.Location,
+        location: Location,
+        end_location: Location,
         name: str,
     ) -> None:
         super().__init__(location, end_location, [])
@@ -962,8 +997,8 @@ class NamedTypeNode(TypeNode):
 class _GenericTypeNode(IndividualTypeNode):
     def __init__(
         self,
-        location: concat.astutils.Location,
-        end_location: concat.astutils.Location,
+        location: Location,
+        end_location: Location,
         generic_type: IndividualTypeNode,
         type_arguments: Sequence[IndividualTypeNode],
     ) -> None:
@@ -982,7 +1017,11 @@ class _GenericTypeNode(IndividualTypeNode):
         generic_type, env = self._generic_type.to_type(env)
         if isinstance(generic_type.kind, GenericTypeKind):
             return generic_type[args], env
-        raise TypeError('{} is not a generic type'.format(generic_type))
+        raise TypeError(
+            format_not_generic_type_error(generic_type),
+            is_occurs_check_fail=None,
+            rigid_variables=None,
+        )
 
 
 class _TypeSequenceIndividualTypeNode(IndividualTypeNode):
@@ -1014,7 +1053,9 @@ class _TypeSequenceIndividualTypeNode(IndividualTypeNode):
             if self._name in env:
                 assert self._name is not None
                 raise TypeError(
-                    format_name_reassigned_in_type_sequence_error(self._name)
+                    format_name_reassigned_in_type_sequence_error(self._name),
+                    is_occurs_check_fail=None,
+                    rigid_variables=None,
                 )
             ty, env = self._type.to_type(env)
             if self._name is not None:
@@ -1024,7 +1065,9 @@ class _TypeSequenceIndividualTypeNode(IndividualTypeNode):
             ty = env[self._name]
             if not (ty.kind <= ItemKind):
                 raise TypeError(
-                    format_item_type_expected_in_type_sequence_error(ty)
+                    format_item_type_expected_in_type_sequence_error(ty),
+                    is_occurs_check_fail=None,
+                    rigid_variables=None,
                 )
             return ty, env
         assert False, 'there must be a name or a type'
@@ -1041,8 +1084,8 @@ class _TypeSequenceIndividualTypeNode(IndividualTypeNode):
 class TypeSequenceNode(TypeNode):
     def __init__(
         self,
-        location: concat.astutils.Location,
-        end_location: concat.astutils.Location,
+        location: Location,
+        end_location: Location,
         seq_var: Optional['_SequenceVariableNode'],
         individual_type_items: Iterable[_TypeSequenceIndividualTypeNode],
     ) -> None:
@@ -1082,7 +1125,7 @@ class TypeSequenceNode(TypeNode):
 class StackEffectTypeNode(IndividualTypeNode):
     def __init__(
         self,
-        location: concat.astutils.Location,
+        location: Location,
         input: TypeSequenceNode,
         output: TypeSequenceNode,
     ) -> None:
@@ -1167,12 +1210,21 @@ class _ItemVariableNode(TypeNode):
             ty = env[self._name]
             if not (ty.kind <= ItemKind):
                 error = TypeError(
-                    f'{self._name} is not of item kind (has kind {ty.kind})'
+                    format_expected_item_kinded_variable_error(
+                        self._name,
+                        ty,
+                    ),
+                    is_occurs_check_fail=None,
+                    rigid_variables=None,
                 )
                 error.location = self.location
                 raise error
             if not isinstance(ty, Variable):
-                error = TypeError(format_not_a_variable_error(self._name))
+                error = TypeError(
+                    format_not_a_variable_error(self._name),
+                    is_occurs_check_fail=None,
+                    rigid_variables=None,
+                )
                 error.location = self.location
                 raise error
             return ty, env
@@ -1203,7 +1255,9 @@ class _SequenceVariableNode(TypeNode):
             ty = env[self._name]
             if not isinstance(ty, SequenceVariable):
                 error = TypeError(
-                    f'{self._name} is not an sequence type variable'
+                    f'{self._name} is not an sequence type variable',
+                    is_occurs_check_fail=None,
+                    rigid_variables=None,
                 )
                 error.location = self.location
                 raise error
@@ -1223,7 +1277,7 @@ class _ForallTypeNode(TypeNode):
 
     def __init__(
         self,
-        location: 'concat.astutils.Location',
+        location: Location,
         type_variables: Sequence[
             Union[_ItemVariableNode, _SequenceVariableNode]
         ],
@@ -1251,8 +1305,8 @@ class _ObjectTypeNode(IndividualTypeNode):
     def __init__(
         self,
         attribute_type_pairs: Iterable[Tuple[Token, IndividualTypeNode]],
-        location: concat.astutils.Location,
-        end_location: concat.astutils.Location,
+        location: Location,
+        end_location: Location,
     ) -> None:
         super().__init__(
             location, end_location, map(lambda p: p[1], attribute_type_pairs)
@@ -1290,9 +1344,17 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         )
 
     @concat.parser_combinators.generate
-    def possibly_nullary_generic_type_parser() -> Generator:
+    def possibly_nullary_generic_type_parser() -> (
+        Generator[
+            concat.parser_combinators.Parser,
+            Any,
+            TypeNode,
+        ]
+    ):
         type_constructor_name = yield named_type_parser
-        left_square_bracket = yield concat.parse.token('LSQB').optional()
+        left_square_bracket: Token | None = yield concat.parse.token(
+            'LSQB'
+        ).optional()
         if left_square_bracket:
             type_arguments = yield parsers['type'].sep_by(
                 concat.parse.token('COMMA'), min=1
