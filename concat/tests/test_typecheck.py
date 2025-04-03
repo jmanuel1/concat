@@ -92,18 +92,8 @@ class TestTypeChecker(unittest.TestCase):
         expected = StackEffect(
             TypeSequence([]), TypeSequence([context.int_type])
         )
-        type.constrain_and_bind_variables(
-            context,
-            expected,
-            set(),
-            []
-        )
-        expected.constrain_and_bind_variables(
-            context,
-            type,
-            set(),
-            []
-        )
+        type.constrain_and_bind_variables(context, expected, set(), [])
+        expected.constrain_and_bind_variables(context, type, set(), [])
 
     def test_if_then_inference(self) -> None:
         try_prog = 'True $() if_then\n'
@@ -423,7 +413,8 @@ class TestSubtyping(unittest.TestCase):
         suppress_health_check=(
             HealthCheck.filter_too_much,
             HealthCheck.too_slow,
-        )
+        ),
+        deadline=None,
     )
     def test_object_subtype_of_py_function(self, type1, type2) -> None:
         py_function = py_function_type[TypeSequence([type1]), type2]
