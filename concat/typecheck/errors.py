@@ -222,6 +222,14 @@ def format_expected_item_kinded_variable_error(name: str, ty: Type) -> str:
     return f'{name} is not of item kind (has kind {ty.kind})'
 
 
+def format_expected_seq_kinded_variable_error(name: str, ty: Type) -> str:
+    return f'{name} is not of sequence kind (has kind {ty.kind})'
+
+
+def format_not_a_sequence_type_error(ty: Type) -> str:
+    return f'{ty} is not a sequence type'
+
+
 def format_cannot_have_attributes_error(ty: Type) -> str:
     return f'{ty} cannot have attributes'
 

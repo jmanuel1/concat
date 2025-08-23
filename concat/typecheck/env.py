@@ -9,6 +9,8 @@ from typing import Callable, Optional, TYPE_CHECKING
 
 
 if TYPE_CHECKING:
+    from concat.typecheck import TypeChecker
+
     # circular imports
     from concat.typecheck.types import Type, Variable
 
@@ -26,24 +28,31 @@ class Environment(Mapping[str, 'Type']):
         self._mutuals: dict[str, _FixFormer] = {}
         self._sub_cache = dict[int, Environment]()
 
-    def apply_substitution(self, sub: 'Substitutions') -> 'Environment':
+    def apply_substitution(
+        self, context: TypeChecker, sub: 'Substitutions'
+    ) -> 'Environment':
         # because of caching, environments are immutable structures
         if sub.id not in self._sub_cache:
-            if not (set(sub) & self.free_type_variables()):
+            if not (set(sub) & self.free_type_variables(context)):
                 self._sub_cache[sub.id] = self
             self._sub_cache[sub.id] = Environment(
-                {name: sub(t) for name, t in self.items()}
+                {
+                    name: t.apply_substitution(context, sub)
+                    for name, t in self.items()
+                }
             )
             self._sub_cache[sub.id]._mutuals = {
-                n: lambda e, t, f=f: sub(f(e, t))
+                n: lambda e, t, f=f: f(e, t).apply_substitution(context, sub)
                 for n, f in self._mutuals.items()
             }
         return self._sub_cache[sub.id]
 
-    def free_type_variables(self) -> 'InsertionOrderedSet[Variable]':
+    def free_type_variables(
+        self, context: TypeChecker
+    ) -> 'InsertionOrderedSet[Variable]':
         return reduce(
             or_,
-            map(lambda t: t.free_type_variables(), self.values()),
+            map(lambda t: t.free_type_variables(context), self.values()),
             InsertionOrderedSet([]),
         )
 

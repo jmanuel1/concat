@@ -68,6 +68,7 @@ from concat.typecheck.types import (
     Kind,
     NominalType,
     ObjectType,
+    PythonFunctionType,
     QuotationType,
     SequenceVariable,
     StackEffect,
@@ -87,6 +88,123 @@ class TypeChecker:
     def __init__(self) -> None:
         self._module_namespaces: dict[pathlib.Path, Environment] = {}
         self._is_in_forward_references_phase = False
+
+        _invert_result_var = ItemVariable(ItemKind)
+        self.invertible_type = GenericType(
+            [_invert_result_var],
+            ObjectType(
+                {
+                    '__invert__': PythonFunctionType(
+                        TypeSequence(self, []), _invert_result_var
+                    )
+                },
+            ),
+        )
+        self.invertible_type.set_internal_name('invertible_type')
+
+        _sub_operand_type = BoundVariable(ItemKind)
+        _sub_result_type = BoundVariable(ItemKind)
+        # FIXME: Add reverse_substractable_type for __rsub__
+        self.subtractable_type = GenericType(
+            [_sub_operand_type, _sub_result_type],
+            ObjectType(
+                {
+                    '__sub__': PythonFunctionType(
+                        TypeSequence(self, [_sub_operand_type]),
+                        _sub_result_type,
+                    )
+                },
+            ),
+        )
+        self.subtractable_type.set_internal_name('subtractable_type')
+
+        _add_other_operand_type = BoundVariable(ItemKind)
+        _add_result_type = BoundVariable(ItemKind)
+
+        self.addable_type = GenericType(
+            [_add_other_operand_type, _add_result_type],
+            ObjectType(
+                {
+                    '__add__': PythonFunctionType(
+                        # QUESTION: Should methods include self?
+                        TypeSequence(self, [_add_other_operand_type]),
+                        _add_result_type,
+                    )
+                },
+            ),
+        )
+        self.addable_type.set_internal_name('addable_type')
+
+        # NOTE: Allow comparison methods to return any object. I don't think Python
+        # stops it. Plus, these definitions don't have to depend on bool, which is
+        # defined in builtins.cati.
+
+        self.geq_comparable_type = self._create_comparable_type('ge')
+        self.geq_comparable_type.set_internal_name('geq_comparable_type')
+        self.leq_comparable_type = self._create_comparable_type('le')
+        self.leq_comparable_type.set_internal_name('leq_comparable_type')
+        self.lt_comparable_type = self._create_comparable_type('lt')
+        self.lt_comparable_type.set_internal_name('lt_comparable_type')
+
+        _result_type = BoundVariable(ItemKind)
+        _x = BoundVariable(ItemKind)
+        self.iterator_type = GenericType(
+            [_result_type],
+            Fix(
+                _x,
+                ObjectType(
+                    {
+                        '__iter__': PythonFunctionType(
+                            TypeSequence(self, []), _x
+                        ),
+                        '__next__': PythonFunctionType(
+                            TypeSequence(self, []), _result_type
+                        ),
+                    },
+                ),
+            ),
+        )
+        self.iterator_type.set_internal_name('iterator_type')
+        self.iterable_type = GenericType(
+            [_result_type],
+            ObjectType(
+                {
+                    '__iter__': PythonFunctionType(
+                        TypeSequence(self, []),
+                        self.iterator_type.apply(self, [_result_type]),
+                    )
+                },
+            ),
+        )
+        self.iterable_type.set_internal_name('iterable_type')
+
+        _index_type_var = BoundVariable(ItemKind)
+        _result_type_var = BoundVariable(ItemKind)
+        self.subscriptable_type = GenericType(
+            [_index_type_var, _result_type_var],
+            ObjectType(
+                {
+                    '__getitem__': PythonFunctionType(
+                        TypeSequence(self, [_index_type_var]), _result_type_var
+                    ),
+                },
+            ),
+        )
+
+    def _create_comparable_type(self, comparison: str) -> Type:
+        _other_type = BoundVariable(ItemKind)
+        _return_type = BoundVariable(ItemKind)
+
+        return GenericType(
+            [_other_type, _return_type],
+            ObjectType(
+                {
+                    f'__{comparison}__': PythonFunctionType(
+                        TypeSequence(self, [_other_type]), _return_type
+                    )
+                },
+            ),
+        )
 
     def load_builtins_and_preamble(self) -> Environment:
         env = self._check_stub(
@@ -204,7 +322,7 @@ class TypeChecker:
         current_subs = Substitutions()
         if initial_stack is None:
             initial_stack = TypeSequence(
-                [] if is_top_level else [SequenceVariable()]
+                self, [] if is_top_level else [SequenceVariable()]
             )
         current_effect = StackEffect(initial_stack, initial_stack)
 
@@ -321,15 +439,18 @@ class TypeChecker:
                         should_instantiate = True
                     # special case for pushing an attribute accessor
                     if isinstance(child, concat.parse.AttributeWordNode):
-                        top = o1[-1]
-                        attr_type = top.get_type_of_attribute(child.value)
+                        top = o1.index(self, -1)
+                        attr_type = top.get_type_of_attribute(
+                            self, child.value
+                        )
                         if should_instantiate:
-                            attr_type = attr_type.instantiate()
-                        rest_types = o1[:-1]
+                            attr_type = attr_type.instantiate(self)
+                        rest_types = o1.index(self, slice(None, None, -1))
                         current_subs, current_effect = (
                             S1,
                             StackEffect(
-                                i1, TypeSequence([*rest_types, attr_type])
+                                i1,
+                                TypeSequence(self, [*rest_types, attr_type]),
                             ),
                         )
                     # special case for name words
@@ -340,14 +461,17 @@ class TypeChecker:
                         # FIXME: Statically tell if a name is used before its
                         # definition is executed
                         if should_instantiate:
-                            name_type = name_type.instantiate()
+                            name_type = name_type.instantiate(self)
                         current_effect = StackEffect(
                             current_effect.input,
                             TypeSequence(
+                                self,
                                 [
                                     *current_effect.output,
-                                    current_subs(name_type),
-                                ]
+                                    name_type.apply_substitution(
+                                        self, current_subs
+                                    ),
+                                ],
                             ),
                         )
                     elif isinstance(child, concat.parse.QuoteWordNode):
@@ -358,9 +482,11 @@ class TypeChecker:
                         else:
                             # The majority of quotations I've written don't comsume
                             # anything on the stack, so make that the default.
-                            input_stack = TypeSequence([SequenceVariable()])
+                            input_stack = TypeSequence(
+                                self, [SequenceVariable()]
+                            )
                         S2, fun_type, _ = self.infer(
-                            S1(gamma),
+                            gamma.apply_substitution(self, S1),
                             child.children,
                             extensions=extensions,
                             source_dir=source_dir,
@@ -368,11 +494,15 @@ class TypeChecker:
                             check_bodies=check_bodies,
                         )
                         current_subs, current_effect = (
-                            S2(S1),
+                            S1.apply_substitution(self, S2),
                             StackEffect(
-                                S2(i1),
+                                i1.apply_substitution(self, S2),
                                 TypeSequence(
-                                    [*S2(o1), QuotationType(fun_type)]
+                                    self,
+                                    [
+                                        *o1.apply_substitution(self, S2),
+                                        QuotationType(fun_type),
+                                    ],
                                 ),
                             ),
                         )
