@@ -222,8 +222,7 @@ class Type(abc.ABC):
         self, context: TypeChecker
     ) -> InsertionOrderedSet['Variable']:
         if self._free_type_variables_cached is None:
-            # Break circular references. Recursing into the same type won't add
-            # new FTVs, so we can pretend there are none we finish finding the
+            # new FTVs, so we can pretend there are none until we finish finding the
             # others.
             self._free_type_variables_cached = InsertionOrderedSet([])
             self._free_type_variables_cached = self._free_type_variables(
