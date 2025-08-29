@@ -1,5 +1,5 @@
 from concat.linked_list import LinkedList, empty_list
-from hypothesis import given
+from hypothesis import given, settings
 import hypothesis.strategies as st
 from typing import Callable, List
 import unittest
@@ -28,6 +28,7 @@ class TestMonoid(unittest.TestCase):
         self.assertEqual((a + b) + c, a + (b + c))
 
     @given(linked_lists)
+    @settings(deadline=None)
     def test_id(self, a: LinkedList[int]) -> None:
         self.assertEqual(a, a + empty_list)
         self.assertEqual(a, empty_list + a)

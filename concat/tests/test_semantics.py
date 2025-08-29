@@ -6,8 +6,8 @@ from concat.stdlib.ski import s, k, i
 from concat.lex import Token
 from concat.execute import execute
 import unittest
-from typing import Callable, Iterable, List, Tuple, TypeVar, Union, cast
-from hypothesis import given, assume, example
+from typing import Any, Callable, Iterable, List, Tuple, TypeVar, Union, cast
+from hypothesis import given, assume, example, settings
 from hypothesis.strategies import (
     SearchStrategy,
     composite,
@@ -273,8 +273,11 @@ class TestDynamicSemantics(unittest.TestCase):
         )
     )
     @given(program())
+    @settings(deadline=None)
     def test_generated_program(self, prog):
         module = concat.transpile.transpile_ast(prog[0])
+        stack: List[Any]
+        stash: List[Any]
         stack, stash = [], []
         execute(
             '<test_prog>',

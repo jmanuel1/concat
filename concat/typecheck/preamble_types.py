@@ -9,11 +9,8 @@ from concat.typecheck.types import (
     ObjectType,
     Type,
     TypeSequence,
-    context_manager_type,
     no_return_type,
     optional_type,
-    py_function_type,
-    py_overloaded_type,
 )
 
 if TYPE_CHECKING:
@@ -34,16 +31,16 @@ def types(context: TypeChecker) -> Mapping[str, Type]:
         'NoReturn': no_return_type,
         'subscriptable': context.subscriptable_type,
         'subtractable': context.subtractable_type,
-        'context_manager': context_manager_type,
+        'context_manager': context.context_manager_type,
         'iterator': context.iterator_type,
-        'py_function': py_function_type,
-        'py_overloaded': py_overloaded_type,
+        'py_function': context.py_function_type,
+        'py_overloaded': context.py_overloaded_type,
         'Optional': optional_type,
         'SupportsAbs': GenericType(
             [_a_var],
             ObjectType(
                 {
-                    '__abs__': py_function_type.apply(
+                    '__abs__': context.py_function_type.apply(
                         context, [TypeSequence(context, []), _a_var]
                     ),
                 },

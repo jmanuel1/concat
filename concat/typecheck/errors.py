@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import builtins
+from concat.typecheck.context import current_context
 import pathlib
 from typing import TYPE_CHECKING, AbstractSet
 
@@ -86,7 +87,8 @@ class AttributeError(TypeError, builtins.AttributeError):
         self._attribute = attribute
 
     def __repr__(self) -> str:
-        return f'AttributeError({self._type.force_repr()}, {
+        context = current_context.get()
+        return f'AttributeError({self._type.force_repr(context)}, {
             self._attribute!r
         })'
 
@@ -110,10 +112,11 @@ class StackMismatchError(TypeError):
         self._expected = expected
 
     def __repr__(self) -> str:
+        context = current_context.get()
         return f'StackMismatchError(actual={
-            self._actual.force_repr()
+            self._actual.force_repr(context)
         }, expected={
-            self._expected.force_repr()
+            self._expected.force_repr(context)
         }, is_occurs_check_fail={
             self.is_occurs_check_fail!r
         }, rigid_variables={

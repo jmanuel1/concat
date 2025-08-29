@@ -4,6 +4,7 @@ import sys
 import contextlib
 import concat.parser_combinators
 import concat.typecheck
+from concat.typecheck.context import change_context
 from concat.typecheck.types import SequenceVariable, StackEffect, TypeSequence
 import concat.stdlib.types
 import concat.stdlib.repl
@@ -27,21 +28,28 @@ class TestREPLFunctions(unittest.TestCase):
         seq_var = SequenceVariable()
         # Like in Factor, read_quot will search its caller's scope for objects.
         some, words, here = object(), object(), object()
-        with replace_stdin(io.StringIO('some words here')):
+        context = concat.typecheck.TypeChecker()
+        with (
+            replace_stdin(io.StringIO('some words here')),
+            change_context(context),
+        ):
             concat.stdlib.repl.read_quot(
-                concat.typecheck.TypeChecker(),
+                context,
                 stack,
                 [],
                 extra_env=concat.typecheck.Environment(
                     {
                         'some': StackEffect(
-                            TypeSequence([seq_var]), TypeSequence([])
+                            TypeSequence(context, [seq_var]),
+                            TypeSequence(context, []),
                         ),
                         'words': StackEffect(
-                            TypeSequence([]), TypeSequence([])
+                            TypeSequence(context, []),
+                            TypeSequence(context, []),
                         ),
                         'here': StackEffect(
-                            TypeSequence([]), TypeSequence([])
+                            TypeSequence(context, []),
+                            TypeSequence(context, []),
                         ),
                     }
                 ),
