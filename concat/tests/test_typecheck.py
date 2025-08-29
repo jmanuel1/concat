@@ -10,7 +10,7 @@ import concat.tests.strategies  # for side-effects
 import concat.typecheck
 import concat.typecheck.preamble_types
 from concat.typecheck import Environment, Substitutions, TypeChecker
-from concat.typecheck.context import change_context, current_context
+from concat.typecheck.context import change_context
 from concat.typecheck.errors import TypeError as ConcatTypeError
 from concat.typecheck.types import (
     BoundVariable,
@@ -25,9 +25,6 @@ from concat.typecheck.types import (
 )
 from concat.typecheck.types import (
     TypeSequence,
-    float_type,
-    no_return_type,
-    optional_type,
 )
 from hypothesis import HealthCheck, example, given, note, settings
 from hypothesis.strategies import (
@@ -359,7 +356,7 @@ class TestSubtyping(unittest.TestCase):
         """Differ from Reticulated Python: !(int <= float)."""
         with self.assertRaises(ConcatTypeError):
             context.int_type.constrain_and_bind_variables(
-                context, float_type, set(), []
+                context, context.float_type, set(), []
             )
 
     @given(
@@ -372,7 +369,7 @@ class TestSubtyping(unittest.TestCase):
             TypeSequence(context, [type1]), TypeSequence(context, [type2])
         )
         fun2 = StackEffect(
-            TypeSequence(context, [no_return_type]),
+            TypeSequence(context, [context.no_return_type]),
             TypeSequence(context, [context.object_type]),
         )
         self.assertEqual(
@@ -384,7 +381,7 @@ class TestSubtyping(unittest.TestCase):
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_no_return_is_bottom_type(self, type) -> None:
         self.assertEqual(
-            no_return_type.constrain_and_bind_variables(
+            context.no_return_type.constrain_and_bind_variables(
                 context, type, set(), []
             ),
             Substitutions(),
@@ -504,7 +501,7 @@ class TestSubtyping(unittest.TestCase):
 
     @given(concat.tests.strategies.individual_type_strategy(context))
     def test_none_subtype_of_optional(self, ty: IndividualType) -> None:
-        opt_ty = optional_type.apply(
+        opt_ty = context.optional_type.apply(
             context,
             [
                 ty,
@@ -519,7 +516,7 @@ class TestSubtyping(unittest.TestCase):
 
     @given(concat.tests.strategies.individual_type_strategy(context))
     def test_type_subtype_of_optional(self, ty: IndividualType) -> None:
-        opt_ty = optional_type.apply(
+        opt_ty = context.optional_type.apply(
             context,
             [
                 ty,

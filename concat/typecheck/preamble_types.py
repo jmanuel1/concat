@@ -9,8 +9,6 @@ from concat.typecheck.types import (
     ObjectType,
     Type,
     TypeSequence,
-    no_return_type,
-    optional_type,
 )
 
 if TYPE_CHECKING:
@@ -28,14 +26,14 @@ def types(context: TypeChecker) -> Mapping[str, Type]:
         'geq_comparable': context.geq_comparable_type,
         # TODO: Separate type-check-time environment from runtime environment.
         'iterable': context.iterable_type,
-        'NoReturn': no_return_type,
+        'NoReturn': context.no_return_type,
         'subscriptable': context.subscriptable_type,
         'subtractable': context.subtractable_type,
         'context_manager': context.context_manager_type,
         'iterator': context.iterator_type,
         'py_function': context.py_function_type,
         'py_overloaded': context.py_overloaded_type,
-        'Optional': optional_type,
+        'Optional': context.optional_type,
         'SupportsAbs': GenericType(
             [_a_var],
             ObjectType(

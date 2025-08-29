@@ -1798,8 +1798,11 @@ class ObjectType(IndividualType):
 
     def force(self, context: TypeChecker) -> Type | None:
         for t in self.attributes(context).values():
-            if (t.force(context) or t)._type_id == no_return_type._type_id:
-                return no_return_type
+            if (
+                t.force_if_possible(context)._type_id
+                == context.no_return_type._type_id
+            ):
+                return context.no_return_type
         return None
 
     def force_substitution(
@@ -2673,8 +2676,10 @@ class _PythonOverloadedType(IndividualType):
         #             overloads.append(t)
         if len(overloads) == 1:
             return overloads[0]
-        if any(t._type_id == no_return_type._type_id for t in overloads):
-            return no_return_type
+        if any(
+            t._type_id == context.no_return_type._type_id for t in overloads
+        ):
+            return context.no_return_type
         return None
 
     def force_substitution(
@@ -2982,6 +2987,11 @@ class _OptionalType(IndividualType):
     @property
     def type_arguments(self) -> Sequence[Type]:
         return [self._type_argument]
+
+
+# TODO: Do an actual rename
+NoReturnType = _NoReturnType
+OptionalType = _OptionalType
 
 
 class Kind(abc.ABC):
@@ -3436,15 +3446,3 @@ def _mapping_to_str(mapping: Mapping) -> str:
         )
         + '}'
     )
-
-
-_x = BoundVariable(kind=IndividualKind)
-
-float_type = NominalType(Brand('float', IndividualKind, []), ObjectType({}))
-no_return_type = _NoReturnType()
-
-_optional_type_var = BoundVariable(ItemKind)
-optional_type = GenericType(
-    [_optional_type_var], _OptionalType(_optional_type_var)
-)
-optional_type.set_internal_name('optional_type')

@@ -67,8 +67,10 @@ from concat.typecheck.types import (
     ItemKind,
     ItemVariable,
     Kind,
+    NoReturnType,
     NominalType,
     ObjectType,
+    OptionalType,
     PythonFunctionType,
     PythonOverloadedType,
     QuotationType,
@@ -81,7 +83,6 @@ from concat.typecheck.types import (
     Variable,
     VariableArgumentKind,
     VariableArgumentPack,
-    no_return_type,
 )
 
 _builtins_stub_path = pathlib.Path(__file__) / '../builtin_stubs/builtins.cati'
@@ -227,6 +228,17 @@ class TypeChecker:
                 },
             )
             self.context_manager_type.set_internal_name('context_manager_type')
+
+            self.float_type = NominalType(
+                Brand('float', IndividualKind, []), ObjectType({})
+            )
+            self.no_return_type = NoReturnType()
+
+            _optional_type_var = BoundVariable(ItemKind)
+            self.optional_type = GenericType(
+                [_optional_type_var], OptionalType(_optional_type_var)
+            )
+            self.optional_type.set_internal_name('optional_type')
 
     def _create_comparable_type(self, comparison: str) -> Type:
         _other_type = BoundVariable(ItemKind)
@@ -561,7 +573,7 @@ class TypeChecker:
                 elif isinstance(node, concat.parse.ListWordNode):
                     phi = S
                     collected_type = o
-                    element_type: 'Type' = no_return_type
+                    element_type: 'Type' = self.no_return_type
                     for item in node.list_children:
                         phi1, fun_type, _ = self.infer(
                             gamma.apply_substitution(self, phi),
@@ -574,7 +586,7 @@ class TypeChecker:
                         collected_type = fun_type.output
                         # FIXME: Infer the type of elements in the list based on
                         # ALL the elements.
-                        if element_type == no_return_type:
+                        if element_type == self.no_return_type:
                             assert (
                                 collected_type.index(self, -1).kind <= ItemKind
                             ), f'{collected_type} {collected_type.index(self, -1)}'

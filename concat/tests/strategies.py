@@ -9,12 +9,10 @@ from concat.typecheck.types import (
     SequenceVariable,
     StackEffect,
     Type as ConcatType,
-    TypeApplication,
     TypeSequence,
     _OptionalType,
     PythonOverloadedType,
     VariableArgumentPack,
-    no_return_type,
 )
 from hypothesis.strategies import (
     DrawFn,
@@ -30,7 +28,6 @@ from hypothesis.strategies import (
     text,
     tuples,
 )
-from typing import Type
 
 
 def _type_sequence_strategy(
@@ -105,7 +102,8 @@ def _individual_type_strategy(
     context: TypeChecker,
 ) -> SearchStrategy[ConcatType]:
     return recursive(
-        builds(ItemVariable, just(IndividualKind)) | just(no_return_type),
+        builds(ItemVariable, just(IndividualKind))
+        | just(context.no_return_type),
         lambda children: _stack_effect_strategy(context, children)
         | _object_type_strategy(children)
         | _py_function_strategy(context, children)

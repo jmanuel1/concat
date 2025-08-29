@@ -19,8 +19,6 @@ from concat.typecheck.types import (
     TupleKind,
     TypeSequence,
     TypeTuple,
-    no_return_type,
-    optional_type,
 )
 
 context = TypeChecker()
@@ -170,7 +168,9 @@ class TestFix(unittest.TestCase):
         fix_var = BoundVariable(IndividualKind)
         linked_list = Fix(
             fix_var,
-            optional_type[context.tuple_type[context.object_type, fix_var],],
+            context.optional_type[
+                context.tuple_type[context.object_type, fix_var],
+            ],
         )
 
     def test_unroll_supertype(self) -> None:
@@ -252,7 +252,7 @@ class TestTypeTuples(unittest.TestCase):
     def test_not_subtype(self) -> None:
         with self.assertRaises(ConcatTypeError):
             TypeTuple([context.int_type]).constrain_and_bind_variables(
-                context, TypeTuple([no_return_type]), set(), []
+                context, TypeTuple([context.no_return_type]), set(), []
             )
 
     @staticmethod
