@@ -726,8 +726,7 @@ class TypeChecker:
                 elif isinstance(node, concat.parse.FuncdefStatementNode):
                     S = current_subs
                     name = node.name
-                    # NOTE: To continue the "bidirectional" bent, we will
-                    # require akk type annotation.
+                    # require a type annotation.
                     # TODO: Make the return types optional?
                     declared_type, _ = node.stack_effect.to_type(
                         gamma.apply_substitution(self, S)
