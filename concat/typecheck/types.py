@@ -1354,7 +1354,7 @@ class TypeSequence(Type):
             rigid_variables=None,
         )
 
-    # FIXME: This conflicts with `ty.forced(...) or ty` pattern
+    # FIXME: This conflicts with `ty.force(...) or ty` pattern
     def __bool__(self) -> bool:
         return not self._is_empty()
 
