@@ -1,8 +1,9 @@
 """Substitution representation and operations."""
 
 from __future__ import annotations
-from concat.typecheck.errors import format_substitution_kind_error
+
 from typing import (
+    TYPE_CHECKING,
     Any,
     Iterable,
     Iterator,
@@ -10,10 +11,10 @@ from typing import (
     Mapping,
     Set,
     Tuple,
-    TYPE_CHECKING,
     Union,
 )
 
+from concat.typecheck.errors import format_substitution_kind_error
 
 # circular imports
 if TYPE_CHECKING:

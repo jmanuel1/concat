@@ -6,13 +6,15 @@ from concat.typecheck.types import (
     ItemVariable,
     ObjectType,
     PythonFunctionType,
+    PythonOverloadedType,
     SequenceVariable,
     StackEffect,
-    Type as ConcatType,
+)
+from concat.typecheck.types import Type as ConcatType
+from concat.typecheck.types import (
     TypeSequence,
-    _OptionalType,
-    PythonOverloadedType,
     VariableArgumentPack,
+    _OptionalType,
 )
 from hypothesis.strategies import (
     DrawFn,

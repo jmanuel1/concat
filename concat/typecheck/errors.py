@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import builtins
-from concat.typecheck.context import current_context
 import pathlib
 from typing import TYPE_CHECKING, AbstractSet
 
 import concat.parse
+from concat.typecheck.context import current_context
 
 if TYPE_CHECKING:
     from concat.location import Location

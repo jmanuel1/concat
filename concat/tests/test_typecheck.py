@@ -22,8 +22,6 @@ from concat.typecheck.types import (
     ItemVariable,
     ObjectType,
     StackEffect,
-)
-from concat.typecheck.types import (
     TypeSequence,
 )
 from hypothesis import HealthCheck, example, given, note, settings

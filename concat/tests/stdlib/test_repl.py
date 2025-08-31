@@ -1,14 +1,15 @@
-import unittest
+import contextlib
 import io
 import sys
-import contextlib
+import unittest
+from typing import Iterator, TextIO
+
 import concat.parser_combinators
+import concat.stdlib.repl
+import concat.stdlib.types
 import concat.typecheck
 from concat.typecheck.context import change_context
 from concat.typecheck.types import SequenceVariable, StackEffect, TypeSequence
-import concat.stdlib.types
-import concat.stdlib.repl
-from typing import TextIO, Iterator
 
 
 @contextlib.contextmanager

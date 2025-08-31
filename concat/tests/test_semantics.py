@@ -1,22 +1,22 @@
-import concat.transpile
-import concat.astutils
-import concat.parse
-from concat.parse import AttributeWordNode, NumberWordNode, TopLevelNode
-from concat.stdlib.ski import s, k, i
-from concat.lex import Token
-from concat.execute import execute
 import unittest
 from typing import Any, Callable, Iterable, List, Tuple, TypeVar, Union, cast
-from hypothesis import given, assume, example, settings
+
+import concat.astutils
+import concat.parse
+import concat.transpile
+from concat.execute import execute
+from concat.lex import Token
+from concat.parse import AttributeWordNode, NumberWordNode, TopLevelNode
+from concat.stdlib.ski import i, k, s
+from hypothesis import assume, example, given, settings
 from hypothesis.strategies import (
     SearchStrategy,
     composite,
     integers,
-    text,
     one_of,
     sampled_from,
+    text,
 )
-
 
 ProgramFragment = TypeVar('ProgramFragment', covariant=True)
 ProgramFragmentAndEffect = Tuple[ProgramFragment, List[object], List[object]]

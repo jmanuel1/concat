@@ -1,9 +1,9 @@
+import unittest
+from typing import Callable, List
+
+import hypothesis.strategies as st
 from concat.linked_list import LinkedList, empty_list
 from hypothesis import given, settings
-import hypothesis.strategies as st
-from typing import Callable, List
-import unittest
-
 
 linked_lists = st.lists(st.integers()).map(LinkedList.from_iterable)
 

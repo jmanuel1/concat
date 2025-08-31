@@ -1,8 +1,8 @@
 from __future__ import annotations
+
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Iterator
-
 
 if TYPE_CHECKING:
     from concat.typecheck import TypeChecker

@@ -1,3 +1,6 @@
+import pathlib
+from unittest import TestCase
+
 from concat.parse import ImportStatementNode
 from concat.typecheck import Environment, TypeChecker
 from concat.typecheck.context import change_context
@@ -8,8 +11,6 @@ from concat.typecheck.types import (
     StackEffect,
     TypeSequence,
 )
-import pathlib
-from unittest import TestCase
 
 context = TypeChecker()
 infer = context.infer

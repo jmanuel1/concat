@@ -1,21 +1,22 @@
 """Typing environments."""
 
 from __future__ import annotations
+
 from collections.abc import Iterator, Mapping
-from concat.orderedset import InsertionOrderedSet
 from functools import reduce
 from operator import or_
-from typing import Callable, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Optional
 
+from concat.orderedset import InsertionOrderedSet
 
 if TYPE_CHECKING:
     from concat.typecheck import TypeChecker
 
-    # circular imports
-    from concat.typecheck.types import Type, Variable
-
     # type only
     from concat.typecheck.substitutions import Substitutions
+
+    # circular imports
+    from concat.typecheck.types import Type, Variable
 
     type _FixFormer = Callable[[Environment, Type], Type]
 
