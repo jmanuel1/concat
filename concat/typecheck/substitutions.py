@@ -8,11 +8,9 @@ from typing import (
     Iterator,
     List,
     Mapping,
-    Protocol,
     Set,
     Tuple,
     TYPE_CHECKING,
-    TypeVar,
     Union,
 )
 
@@ -21,15 +19,6 @@ from typing import (
 if TYPE_CHECKING:
     from concat.typecheck import TypeChecker
     from concat.typecheck.types import Type, Variable
-
-
-_Result = TypeVar('_Result', covariant=True)
-
-
-class _Substitutable(Protocol[_Result]):
-    def apply_substitution(self, sub: 'Substitutions') -> _Result:
-        # empty, abstract protocol method
-        pass
 
 
 class Substitutions(Mapping['Variable', 'Type']):

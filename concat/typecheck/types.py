@@ -326,6 +326,7 @@ class Type(abc.ABC):
     def force_project(self, i: int) -> Type:
         return Projection(self, i)
 
+    @_whnf_self
     def brand(self, context: TypeChecker) -> Brand:
         raise ConcatTypeError(
             format_not_a_nominal_type_error(self),
@@ -493,10 +494,11 @@ class Projection(Type):
         self._kind = head.kind.element_kinds[i]
         self._forced: Type | None = None
 
+    @_whnf_self
     def _free_type_variables(
         self, context: TypeChecker
     ) -> InsertionOrderedSet[Variable]:
-        return (self.force(context) or self._head).free_type_variables(context)
+        return self._head.free_type_variables(context)
 
     def force_substitution(
         self, context: TypeChecker, sub: Substitutions
@@ -505,10 +507,8 @@ class Projection(Type):
             context, self._index
         )
 
+    @_whnf_self
     def attributes(self, context: TypeChecker) -> Mapping[str, Type]:
-        forced = self.force(context)
-        if forced:
-            return forced.attributes(context)
         raise ConcatTypeError(
             format_attributes_unknown_error(self),
             is_occurs_check_fail=None,
@@ -569,13 +569,9 @@ class Projection(Type):
         if self.is_redex():
             if not self._forced:
                 self._forced = self._head.force_project(self._index)
-                self._forced = self._forced.force(context) or self._forced
+                self._forced = self._forced.force_if_possible(context)
             return self._forced
         return None
-
-    @_whnf_self
-    def brand(self, context: TypeChecker) -> Brand:
-        return (self.force(context) or cast(Type, super())).brand(context)
 
     def __repr__(self) -> str:
         return f'Projection({self._head!r}, {self._index!r})'
@@ -2076,7 +2072,7 @@ class TypeTuple(Type):
         })'
 
     def to_user_string(self, context: TypeChecker) -> str:
-        return f'({','.join(str(t) for t in self._types)})'
+        return f'({','.join(t.to_user_string(context) for t in self._types)})'
 
 
 class DelayedSubstitution(Type):
