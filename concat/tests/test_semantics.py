@@ -1,22 +1,22 @@
-import concat.transpile
+import unittest
+from typing import Any, Callable, Iterable, List, Tuple, TypeVar, Union, cast
+
 import concat.astutils
 import concat.parse
-from concat.parse import AttributeWordNode, NumberWordNode, TopLevelNode
-from concat.stdlib.ski import s, k, i
-from concat.lex import Token
+import concat.transpile
 from concat.execute import execute
-import unittest
-from typing import Callable, Iterable, List, Tuple, TypeVar, Union, cast
-from hypothesis import given, assume, example
+from concat.lex import Token
+from concat.parse import AttributeWordNode, NumberWordNode, TopLevelNode
+from concat.stdlib.ski import i, k, s
+from hypothesis import assume, example, given, settings
 from hypothesis.strategies import (
     SearchStrategy,
     composite,
     integers,
-    text,
     one_of,
     sampled_from,
+    text,
 )
-
 
 ProgramFragment = TypeVar('ProgramFragment', covariant=True)
 ProgramFragmentAndEffect = Tuple[ProgramFragment, List[object], List[object]]
@@ -273,8 +273,11 @@ class TestDynamicSemantics(unittest.TestCase):
         )
     )
     @given(program())
+    @settings(deadline=None)
     def test_generated_program(self, prog):
         module = concat.transpile.transpile_ast(prog[0])
+        stack: List[Any]
+        stash: List[Any]
         stack, stash = [], []
         execute(
             '<test_prog>',

@@ -5,9 +5,11 @@ import pathlib
 from typing import TYPE_CHECKING, AbstractSet
 
 import concat.parse
+from concat.typecheck.context import current_context
 
 if TYPE_CHECKING:
     from concat.location import Location
+    from concat.typecheck import TypeChecker
     from concat.typecheck.types import Kind, Type, TypeSequence, Variable
 
 
@@ -86,7 +88,8 @@ class AttributeError(TypeError, builtins.AttributeError):
         self._attribute = attribute
 
     def __repr__(self) -> str:
-        return f'AttributeError({self._type.force_repr()}, {
+        context = current_context.get()
+        return f'AttributeError({self._type.force_repr(context)}, {
             self._attribute!r
         })'
 
@@ -110,10 +113,11 @@ class StackMismatchError(TypeError):
         self._expected = expected
 
     def __repr__(self) -> str:
+        context = current_context.get()
         return f'StackMismatchError(actual={
-            self._actual.force_repr()
+            self._actual.force_repr(context)
         }, expected={
-            self._expected.force_repr()
+            self._expected.force_repr(context)
         }, is_occurs_check_fail={
             self.is_occurs_check_fail!r
         }, rigid_variables={
@@ -123,6 +127,9 @@ class StackMismatchError(TypeError):
 
 class UnhandledNodeTypeError(builtins.NotImplementedError):
     pass
+
+
+# FIXME: Use to_user_string in error messages
 
 
 def format_item_type_expected_in_type_sequence_error(ty: Type) -> str:
@@ -145,8 +152,13 @@ def format_too_many_params_for_variadic_type_error() -> str:
     return 'Only one parameter is allowed for a variadic generic type'
 
 
-def format_subtyping_error(subtype: Type, supertype: Type) -> str:
-    return f'{subtype} cannot be a subtype of {supertype}'
+def format_subtyping_error(
+    context: TypeChecker, subtype: Type, supertype: Type
+) -> str:
+    return (
+        f'{subtype.to_user_string(context)} cannot be a subtype of '
+        f'{supertype.to_user_string(context)}'
+    )
 
 
 def format_name_reassigned_in_type_sequence_error(name: str) -> str:
@@ -220,6 +232,14 @@ def format_subkinding_error(sub: Type, sup: Type) -> str:
 
 def format_expected_item_kinded_variable_error(name: str, ty: Type) -> str:
     return f'{name} is not of item kind (has kind {ty.kind})'
+
+
+def format_expected_seq_kinded_variable_error(name: str, ty: Type) -> str:
+    return f'{name} is not of sequence kind (has kind {ty.kind})'
+
+
+def format_not_a_sequence_type_error(context: TypeChecker, ty: Type) -> str:
+    return f'{ty.to_user_string(context)} is not a sequence type'
 
 
 def format_cannot_have_attributes_error(ty: Type) -> str:
