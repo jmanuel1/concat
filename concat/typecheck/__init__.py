@@ -12,7 +12,6 @@ import pathlib
 import sys
 from collections.abc import Generator
 from typing import (
-    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -142,10 +141,6 @@ class TypeChecker:
             )
             self.addable_type.set_internal_name('addable_type')
 
-            # NOTE: Allow comparison methods to return any object. I don't think Python
-            # stops it. Plus, these definitions don't have to depend on bool, which is
-            # defined in builtins.cati.
-
             self.geq_comparable_type = self._create_comparable_type('ge')
             self.geq_comparable_type.set_internal_name('geq_comparable_type')
             self.leq_comparable_type = self._create_comparable_type('le')
@@ -221,8 +216,8 @@ class TypeChecker:
 
             self.context_manager_type = ObjectType(
                 {
-                    # TODO: Add argument and return types. I think I'll need a special
-                    # py_function representation for that.
+                    # TODO: Add argument and return types. I think I'll need a
+                    # special py_function representation for that.
                     '__enter__': self.py_function_type,
                     '__exit__': self.py_function_type,
                 },
@@ -363,7 +358,7 @@ class TypeChecker:
         extensions: Optional[Tuple[Callable]] = None,
         is_top_level=False,
         source_dir='.',
-        initial_stack: Optional[TypeSequence] = None,
+        initial_stack: Optional[Type] = None,
         check_bodies: bool = True,
     ) -> Tuple[Substitutions, StackEffect, Environment]:
         """The infer function described by Kleffner."""
@@ -536,8 +531,9 @@ class TypeChecker:
                                 gamma
                             )
                         else:
-                            # The majority of quotations I've written don't comsume
-                            # anything on the stack, so make that the default.
+                            # The majority of quotations I've written don't
+                            # comsume anything on the stack, so make that the
+                            # default.
                             input_stack = TypeSequence(
                                 self, [SequenceVariable()]
                             )
@@ -552,13 +548,15 @@ class TypeChecker:
                         current_subs, current_effect = (
                             S1.apply_substitution(self, S2),
                             StackEffect(
-                                i1.apply_substitution(self, S2),
+                                current_effect.input.apply_substitution(
+                                    self, S2
+                                ),
                                 TypeSequence(
                                     self,
                                     [
-                                        *o1.apply_substitution(
+                                        *current_effect.output.apply_substitution(
                                             self, S2
-                                        ).to_iterator(context),
+                                        ).as_sequence(),
                                         QuotationType(fun_type),
                                     ],
                                 ),
@@ -573,7 +571,7 @@ class TypeChecker:
                 elif isinstance(node, concat.parse.ListWordNode):
                     phi = S
                     collected_type = o
-                    element_type: 'Type' = self.no_return_type
+                    element_type: 'Type' = self.object_type
                     for item in node.list_children:
                         phi1, fun_type, _ = self.infer(
                             gamma.apply_substitution(self, phi),
@@ -584,24 +582,35 @@ class TypeChecker:
                             check_bodies=check_bodies,
                         )
                         collected_type = fun_type.output
-                        # FIXME: Infer the type of elements in the list based on
-                        # ALL the elements.
-                        if element_type == self.no_return_type:
-                            assert (
-                                collected_type.index(self, -1).kind <= ItemKind
-                            ), f'{collected_type} {collected_type.index(self, -1)}'
-                            element_type = collected_type.index(self, -1)
+                        # FIXME: Infer the type of elements in the list based
+                        # on ALL the elements.
+                        collected_type_rest = SequenceVariable()
+                        collected_type_target = TypeSequence(
+                            self,
+                            [collected_type_rest, element_type],
+                        )
+                        collect_sub = (
+                            collected_type.constrain_and_bind_variables(
+                                self,
+                                collected_type_target,
+                                gamma.free_type_variables(self),
+                                [],
+                            )
+                        )
+                        phi1 = phi1.apply_substitution(self, collect_sub)
                         # drop the top of the stack to use as the item
-                        collected_type = collected_type.index(self, slice(-1))
+                        collected_type = (
+                            collected_type_rest.apply_substitution(self, phi1)
+                        )
                         phi = phi.apply_substitution(self, phi1)
                     current_subs, current_effect = (
                         phi,
                         StackEffect(
-                            i,
+                            current_effect.input.apply_substitution(self, phi),
                             TypeSequence(
                                 self,
                                 [
-                                    *collected_type.to_iterator(self),
+                                    *collected_type.as_sequence(),
                                     self._list_type.apply(
                                         self,
                                         [
@@ -609,8 +618,8 @@ class TypeChecker:
                                         ],
                                     ),
                                 ],
-                            ),
-                        ).apply_substitution(self, phi),
+                            ).apply_substitution(self, phi),
+                        ),
                     )
                 elif isinstance(node, concat.parse.TupleWordNode):
                     phi = S
@@ -700,8 +709,8 @@ class TypeChecker:
                 elif isinstance(node, concat.parse.ImportStatementNode):
                     # TODO: Support all types of import correctly.
                     if node.asname is not None:
-                        gamma |= {
-                            node.asname: self._generate_type_of_innermost_module(
+                        ty = (
+                            self._generate_type_of_innermost_module(
                                 node.value,
                                 source_dir=pathlib.Path(source_dir),
                             )
@@ -709,14 +718,17 @@ class TypeChecker:
                                 self,
                                 gamma.apply_substitution(self, current_subs),
                             )
-                            .apply_substitution(self, current_subs),
+                            .apply_substitution(self, current_subs)
+                        )
+                        gamma |= {
+                            node.asname: ty,
                         }
                     else:
                         imported_name = node.value
-                        # mutate type environment
                         components = node.value.split('.')
-                        # FIXME: This replaces whatever was previously imported. I really
-                        # should implement namespaces properly.
+                        # FIXME: This replaces whatever was previously
+                        # imported. I really should implement namespaces
+                        # properly.
                         gamma |= {
                             components[0]: self._generate_module_type(
                                 components,
@@ -728,14 +740,13 @@ class TypeChecker:
                     name = node.name
                     # require a type annotation.
                     # TODO: Make the return types optional?
-                    declared_type, _ = node.stack_effect.to_type(
+                    declared_type = node.stack_effect.to_type(
                         gamma.apply_substitution(self, S)
+                    )[0]
+                    declared_type = StackEffect(
+                        declared_type.input.apply_substitution(self, S),
+                        declared_type.output.apply_substitution(self, S),
                     )
-                    declared_type = declared_type.apply_substitution(self, S)
-                    if not isinstance(declared_type, StackEffect):
-                        raise TypeError(
-                            f'declared type of {name} must be a stack effect, got {declared_type}'
-                        )
                     recursion_env = gamma | {
                         name: declared_type.generalized_wrt(
                             self, gamma.apply_substitution(self, S)
@@ -750,8 +761,9 @@ class TypeChecker:
                             initial_stack=declared_type.input,
                             check_bodies=check_bodies,
                         )
-                        # We want to check that the inferred outputs are subtypes of
-                        # the declared outputs. Thus, inferred_type.output should be a subtype
+                        # We want to check that the inferred outputs are
+                        # subtypes of the declared outputs. Thus,
+                        # inferred_type.output should be a subtype
                         # declared_type.output.
                         rigid_variables = recursion_env.apply_substitution(
                             self, S
@@ -768,11 +780,12 @@ class TypeChecker:
                             )
                         except TypeError as error:
                             message = (
-                                'declared function type {} is not compatible with '
-                                'inferred type {}'
+                                f'declared function type {declared_type} is '
+                                'not compatible with inferred type '
+                                f'{inferred_type}'
                             )
                             raise TypeError(
-                                message.format(declared_type, inferred_type),
+                                message,
                                 is_occurs_check_fail=error.is_occurs_check_fail,
                                 rigid_variables=rigid_variables,
                             ) from error
@@ -817,15 +830,15 @@ class TypeChecker:
                 elif isinstance(node, concat.parse.NumberWordNode):
                     if isinstance(node.value, int):
                         current_effect = StackEffect(
-                            i,
+                            current_effect.input,
                             TypeSequence(
-                                self, [*o.to_iterator(self), self._int_type]
+                                self, [*o.as_sequence(), self._int_type]
                             ),
                         )
                     else:
                         raise UnhandledNodeTypeError
                 elif isinstance(node, concat.parse.NameWordNode):
-                    i1, o1 = current_effect.input, current_effect.output
+                    o1 = current_effect.output
                     if node.value not in gamma.apply_substitution(
                         self, current_subs
                     ):
@@ -850,8 +863,8 @@ class TypeChecker:
                         self, constraint_subs
                     )
                     current_effect = StackEffect(
-                        i1, fun.output
-                    ).apply_substitution(self, current_subs)
+                        current_effect.input, fun.output
+                    ).force_substitution(self, current_subs)
                 elif isinstance(node, concat.parse.QuoteWordNode):
                     quotation = cast(concat.parse.QuoteWordNode, node)
                     # make sure any annotation matches the current stack

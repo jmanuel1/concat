@@ -222,8 +222,8 @@ class Type(abc.ABC):
         self, context: TypeChecker
     ) -> InsertionOrderedSet['Variable']:
         if self._free_type_variables_cached is None:
-            # new FTVs, so we can pretend there are none until we finish finding the
-            # others.
+            # In the case of self-recursion, there will be no new FTVs, so we
+            # can pretend there are none until we finish finding the others.
             self._free_type_variables_cached = InsertionOrderedSet([])
             self._free_type_variables_cached = self._free_type_variables(
                 context
@@ -306,7 +306,7 @@ class Type(abc.ABC):
 
     def index(self, context: TypeChecker, i: int | slice) -> Type:
         raise ConcatTypeError(
-            format_not_a_sequence_type_error(self),
+            format_not_a_sequence_type_error(context, self),
             is_occurs_check_fail=None,
             rigid_variables=None,
         )
@@ -327,16 +327,29 @@ class Type(abc.ABC):
         return Projection(self, i)
 
     @_whnf_self
-    def brand(self, context: TypeChecker) -> Brand:
+    def brand(self, _context: TypeChecker) -> Brand:
         raise ConcatTypeError(
             format_not_a_nominal_type_error(self),
             is_occurs_check_fail=None,
             rigid_variables=None,
         )
 
+    # TODO: Remove this method, which is only used from tests
+    @_whnf_self
     def length(self, context: TypeChecker) -> int:
         raise ConcatTypeError(
-            format_not_a_sequence_type_error(self),
+            format_not_a_sequence_type_error(context, self),
+            is_occurs_check_fail=False,
+            rigid_variables=None,
+        )
+
+    def as_sequence(self) -> Sequence[Type]:
+        context = current_context.get()
+        forced = self.force(context)
+        if forced is not None:
+            return forced.as_sequence()
+        raise ConcatTypeError(
+            format_not_a_sequence_type_error(context, self),
             is_occurs_check_fail=False,
             rigid_variables=None,
         )
@@ -468,7 +481,10 @@ class TypeApplication(Type):
 
     @_whnf_self
     def force_repr(self, context: TypeChecker) -> str:
-        return f'TypeApplication({self._head.force_repr(context)}, {[a.force_repr(context) for a in self._args]})'
+        return (
+            f'TypeApplication({self._head.force_repr(context)}, '
+            f'{[a.force_repr(context) for a in self._args]})'
+        )
 
     def _free_type_variables(
         self, context: TypeChecker
@@ -531,12 +547,13 @@ class Projection(Type):
                 subtyping_assumptions,
             )
             assert self._index == supertype._index, format_subtyping_error(
+                context,
                 self,
                 supertype,
             )
             return sub
         raise ConcatTypeError(
-            format_subtyping_error(self, supertype),
+            format_subtyping_error(context, self, supertype),
             is_occurs_check_fail=None,
             rigid_variables=rigid_variables,
         )
@@ -851,6 +868,9 @@ class SequenceVariable(Variable):
     def freshen(self) -> 'SequenceVariable':
         return SequenceVariable()
 
+    def as_sequence(self) -> Sequence[Type]:
+        return [self]
+
 
 class VariableArgumentVariable(Variable):
     """Type variables that stand for variable-length lists of types."""
@@ -887,7 +907,7 @@ class VariableArgumentVariable(Variable):
         ):
             return Substitutions([(supertype, self)])
         raise ConcatTypeError(
-            format_subtyping_error(self, supertype),
+            format_subtyping_error(context, self, supertype),
             is_occurs_check_fail=False,
             rigid_variables=rigid_variables,
         )
@@ -938,7 +958,9 @@ class GenericType(Type):
         pass
 
     def force_repr(self, context: TypeChecker) -> str:
-        return f'GenericType({_iterable_to_str(t.force_repr(context) for t in self._type_parameters)}, {self._body.force_repr(context)})'
+        return f'GenericType({_iterable_to_str(
+            t.force_repr(context) for t in self._type_parameters
+        )}, {self._body.force_repr(context)})'
 
     def apply(
         self, context: TypeChecker, type_arguments: 'TypeArguments'
@@ -1509,7 +1531,10 @@ class StackEffect(IndividualType):
         pass
 
     def force_repr(self, context: TypeChecker) -> str:
-        return f'StackEffect({self.input.force_repr(context)}, {self.output.force_repr(context)})'
+        return (
+            f'StackEffect({self.input.force_repr(context)}, '
+            f' {self.output.force_repr(context)})'
+        )
 
     def to_user_string(self, context: TypeChecker) -> str:
         in_types = self.input.to_string_for_stack_effect(context)
@@ -1566,17 +1591,18 @@ class QuotationType(StackEffect):
                 context, supertype, rigid_variables, subtyping_assumptions
             )
 
-    @_sub_cache
-    def apply_substitution(
+    def force_substitution(
         self, context: TypeChecker, sub: Substitutions
     ) -> 'QuotationType':
-        return QuotationType(super().apply_substitution(context, sub))
+        return QuotationType(super().force_substitution(context, sub))
 
     def __repr__(self) -> str:
         return f'QuotationType({StackEffect(self.input, self.output)!r})'
 
     def force_repr(self, context: TypeChecker) -> str:
-        return f'QuotationType({StackEffect(self.input, self.output).force_repr(context)})'
+        return f'QuotationType({
+            StackEffect(self.input, self.output).force_repr(context)
+        })'
 
 
 StackItemType = Union[SequenceVariable, IndividualType]
@@ -1629,7 +1655,9 @@ class Brand:
         return self._user_name
 
     def __repr__(self) -> str:
-        return f'Brand({self._user_name!r}, {self.kind!r}, {self._superbrands!r})@{id(self)}'
+        return f'Brand({self._user_name!r}, {self.kind!r}, {
+            self._superbrands!r
+        })@{id(self)}'
 
     def is_subrand_of(self, context: TypeChecker, other: Brand) -> bool:
         object_brand = context.object_type.brand
@@ -1701,7 +1729,7 @@ class NominalType(Type):
             if self._brand.is_subrand_of(context, supertype._brand):
                 return Substitutions()
             raise ConcatTypeError(
-                f'{self} is not a subtype of {supertype}',
+                format_subtyping_error(context, self, supertype),
                 is_occurs_check_fail=None,
                 rigid_variables=rigid_variables,
             )
@@ -1770,7 +1798,7 @@ class NominalType(Type):
         return self._brand
 
     def to_user_string(self, _context: TypeChecker) -> str:
-        return str(self._brand)
+        return self._brand.to_user_string()
 
     def __repr__(self) -> str:
         return f'NominalType({self._brand!r}, {self._ty!r})'
@@ -1901,7 +1929,7 @@ class ObjectType(IndividualType):
                 return sub
         if isinstance(supertype, _NoReturnType):
             raise ConcatTypeError(
-                format_subtyping_error(self, supertype),
+                format_subtyping_error(context, self, supertype),
                 is_occurs_check_fail=None,
                 rigid_variables=rigid_variables,
             )
@@ -1918,7 +1946,7 @@ class ObjectType(IndividualType):
         # Don't forget that there's nominal subtyping too.
         if isinstance(supertype, NominalType):
             raise ConcatTypeError(
-                f'{format_subtyping_error(self, supertype)}, {
+                f'{format_subtyping_error(context, self, supertype)}, {
                     format_not_a_nominal_type_error(self)
                 }',
                 is_occurs_check_fail=None,
@@ -2234,7 +2262,9 @@ class VariableArgumentPack(Type):
         self._types = types
 
     def to_user_string(self, _context: TypeChecker) -> str:
-        return f'variable-length arguments {', '.join(str(t) for t in self._types)}'
+        return f'variable-length arguments {
+            ', '.join(str(t) for t in self._types)
+        }'
 
     def __repr__(self) -> str:
         return f'VariableArgumentPack({self._types!r})'
@@ -2243,7 +2273,9 @@ class VariableArgumentPack(Type):
         pass
 
     def force_repr(self, context: TypeChecker) -> str:
-        return f'VariableArgumentPack({_iterable_to_str(t.force_repr(context) for t in self._types)})'
+        return f'VariableArgumentPack({
+            _iterable_to_str(t.force_repr(context) for t in self._types)
+        })'
 
     @property
     def arguments(self) -> Sequence[Type]:
@@ -2354,7 +2386,10 @@ class VariableArgumentPack(Type):
 
 # QUESTION: Should this exist, or should I use ObjectType?
 class ClassType(ObjectType):
-    """The representation of types of classes, like in "Design and Evaluation of Gradual Typing for Python" (Vitousek et al. 2014)."""
+    """The representation of types of classes.
+
+    This is based to some degree on "Design and Evaluation of Gradual Typing
+    for Python" (Vitousek et al. 2014)."""
 
     def constrain_and_bind_variables(
         self,
@@ -2406,7 +2441,8 @@ class PythonFunctionType(IndividualType):
                 is_occurs_check_fail=None,
                 rigid_variables=None,
             )
-        # HACK: Sequence variables are introduced by the type sequence AST nodes
+        # HACK: Sequence variables are introduced by the type sequence AST
+        # nodes
         if (
             isinstance(i, TypeSequence)
             and i
@@ -2654,7 +2690,9 @@ class _PythonOverloadedType(IndividualType):
             return context.object_type
         # for i, t in enumerate(self._overloads.arguments):
         #     try:
-        #         sub = t.constrain_and_bind_variables(context, no_return_type, set(), [])
+        #         sub = t.constrain_and_bind_variables(
+        #             context, no_return_type, set(), []
+        #         )
         #     except ConcatTypeError:
         #         pass
         #     if set(sub) & t.free_type_variables():
@@ -2663,11 +2701,15 @@ class _PythonOverloadedType(IndividualType):
         #     # isomorphic types.
         #     for s in self._overloads.arguments[i + 1:]:
         #         try:
-        #             sub = t.constrain_and_bind_variables(context, s, set(), [])
+        #             sub = t.constrain_and_bind_variables(
+        #                 context, s, set(), []
+        #             )
         #         except ConcatTypeError:
         #             overloads.append(t)
         #             continue
-        #         if set(sub) & (t.free_type_variables() | s.free_type_variables()):
+        #         if set(sub) & (
+        #             t.free_type_variables() | s.free_type_variables()
+        #         ):
         #             overloads.append(t)
         if len(overloads) == 1:
             return overloads[0]
@@ -2811,7 +2853,9 @@ class _PythonOverloadedType(IndividualType):
         )
 
     def to_user_string(self, context: TypeChecker) -> str:
-        return f'py_overloaded[{', '.join(str(t) for t in self._overloads.arguments)}]'
+        return f'py_overloaded[{
+            ', '.join(str(t) for t in self._overloads.arguments)
+        }]'
 
     def __repr__(self) -> str:
         return f'_PythonOverloadedType({self._overloads!r})'
@@ -3294,7 +3338,9 @@ class GenericTypeKind(Kind):
         return BottomKind
 
     def __str__(self) -> str:
-        return f'Generic[{", ".join(map(str, self.parameter_kinds))}, {self.result_kind}]'
+        return f'Generic[{
+            ', '.join(map(str, self.parameter_kinds))
+        }, {self.result_kind}]'
 
     def __repr__(self) -> str:
         return (

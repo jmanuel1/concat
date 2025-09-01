@@ -68,7 +68,7 @@ quote-style = "single"
 
 [tool.ruff.lint]
 select = ["E", "F", "C90"]
-ignore = ["F402"]
+ignore = ["E741", "F402"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 14 # max allowed, mccabe equivalent setting would be 15 for warrning *at* 15
