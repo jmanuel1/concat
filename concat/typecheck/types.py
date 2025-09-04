@@ -334,15 +334,6 @@ class Type(abc.ABC):
             rigid_variables=None,
         )
 
-    # TODO: Remove this method, which is only used from tests
-    @_whnf_self
-    def length(self, context: TypeChecker) -> int:
-        raise ConcatTypeError(
-            format_not_a_sequence_type_error(context, self),
-            is_occurs_check_fail=False,
-            rigid_variables=None,
-        )
-
     def as_sequence(self) -> Sequence[Type]:
         context = current_context.get()
         forced = self.force(context)
@@ -1379,9 +1370,6 @@ class TypeSequence(Type):
     def __len__(self) -> int:
         return len(self.as_sequence())
 
-    def length(self, _context: TypeChecker) -> int:
-        return len(self)
-
     def _is_empty(self) -> bool:
         return self._rest is None and not self._individual_types
 
@@ -2140,9 +2128,6 @@ class DelayedSubstitution(Type):
 
     def apply_is_redex(self) -> bool:
         return True
-
-    def length(self, context: TypeChecker) -> int:
-        return self.force(context).length(context)
 
     def __bool__(self) -> bool:
         return True

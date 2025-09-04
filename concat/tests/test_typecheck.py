@@ -78,7 +78,7 @@ class TestTypeChecker(unittest.TestCase):
                 ],
             ),
         )
-        self.assertEqual(type.output.length(context), 1)
+        self.assertEqual(len(type.output.as_sequence()), 1)
         self.assertTrue(
             type.output.index(context, 0).equals(context, context.int_type)
         )
@@ -150,7 +150,7 @@ class TestTypeChecker(unittest.TestCase):
             '...': default_env['ellipsis'],
         }
         expected_type = expected_types[constant_name]
-        self.assertEqual(effect.output.length(context), 1)
+        self.assertEqual(len(effect.output.as_sequence()), 1)
         self.assertTrue(
             effect.output.index(context, 0).equals(context, expected_type)
         )
