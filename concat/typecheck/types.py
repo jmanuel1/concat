@@ -29,18 +29,17 @@ from typing import (
 from concat.logging import ConcatLogger
 from concat.orderedset import InsertionOrderedSet
 from concat.typecheck.context import current_context
-from concat.typecheck.errors import AttributeError as ConcatAttributeError
 from concat.typecheck.errors import (
+    AttributeError as ConcatAttributeError,
     StackMismatchError,
     StaticAnalysisError,
-)
-from concat.typecheck.errors import TypeError as ConcatTypeError
-from concat.typecheck.errors import (
+    TypeError as ConcatTypeError,
     format_attributes_unknown_error,
     format_cannot_have_attributes_error,
     format_generic_type_attributes_error,
     format_item_type_expected_in_type_sequence_error,
     format_must_be_item_type_error,
+    format_not_a_list_of_type_arguments_error,
     format_not_a_nominal_type_error,
     format_not_a_sequence_type_error,
     format_not_allowed_as_overload_error,
@@ -304,6 +303,12 @@ class Type(abc.ABC):
             rigid_variables=None,
         )
 
+    @overload
+    def index(self, context: TypeChecker, i: int) -> Type: ...
+
+    @overload
+    def index(self, context: TypeChecker, i: slice) -> TypeSequence: ...
+
     def index(self, context: TypeChecker, i: int | slice) -> Type:
         raise ConcatTypeError(
             format_not_a_sequence_type_error(context, self),
@@ -341,6 +346,18 @@ class Type(abc.ABC):
             return forced.as_sequence()
         raise ConcatTypeError(
             format_not_a_sequence_type_error(context, self),
+            is_occurs_check_fail=False,
+            rigid_variables=None,
+        )
+
+    @property
+    def arguments(self) -> Sequence[Type]:
+        context = current_context.get()
+        forced = self.force(context)
+        if forced is not None:
+            return forced.arguments
+        raise ConcatTypeError(
+            format_not_a_list_of_type_arguments_error(context, self),
             is_occurs_check_fail=False,
             rigid_variables=None,
         )
@@ -2604,9 +2621,7 @@ class PythonFunctionType(IndividualType):
 
 
 class _PythonOverloadedType(IndividualType):
-    def __init__(
-        self, overloads: VariableArgumentPack | DelayedSubstitution
-    ) -> None:
+    def __init__(self, overloads: Type) -> None:
         super().__init__()
         _fixed_overloads: List[Type] = []
         context = current_context.get()
@@ -2628,7 +2643,8 @@ class _PythonOverloadedType(IndividualType):
                     rigid_variables=None,
                 )
             i, o = overload.input, overload.output
-            # HACK: Sequence variables are introduced by the type sequence AST nodes
+            # HACK: Sequence variables are introduced by the type sequence AST
+            # nodes
             if (
                 isinstance(i, TypeSequence)
                 and i
