@@ -29,11 +29,13 @@ from typing import (
 from concat.logging import ConcatLogger
 from concat.orderedset import InsertionOrderedSet
 from concat.typecheck.context import current_context
+from concat.typecheck.errors import AttributeError as ConcatAttributeError
 from concat.typecheck.errors import (
-    AttributeError as ConcatAttributeError,
     StackMismatchError,
     StaticAnalysisError,
-    TypeError as ConcatTypeError,
+)
+from concat.typecheck.errors import TypeError as ConcatTypeError
+from concat.typecheck.errors import (
     format_attributes_unknown_error,
     format_cannot_have_attributes_error,
     format_generic_type_attributes_error,
