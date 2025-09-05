@@ -148,6 +148,15 @@ def format_wrong_number_of_type_arguments_error(
     )
 
 
+def format_not_a_list_of_type_arguments_error(
+    context: TypeChecker,
+    ty: Type,
+) -> str:
+    return f'{
+        ty.to_user_string(context)
+    } does not represent a list of type-level arguments'
+
+
 def format_too_many_params_for_variadic_type_error() -> str:
     return 'Only one parameter is allowed for a variadic generic type'
 

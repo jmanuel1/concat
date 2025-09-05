@@ -41,6 +41,7 @@ from concat.typecheck.errors import (
     format_generic_type_attributes_error,
     format_item_type_expected_in_type_sequence_error,
     format_must_be_item_type_error,
+    format_not_a_list_of_type_arguments_error,
     format_not_a_nominal_type_error,
     format_not_a_sequence_type_error,
     format_not_allowed_as_overload_error,
@@ -304,7 +305,16 @@ class Type(abc.ABC):
             rigid_variables=None,
         )
 
+    @overload
+    def index(self, context: TypeChecker, i: int) -> Type: ...
+
+    @overload
+    def index(self, context: TypeChecker, i: slice) -> TypeSequence: ...
+
     def index(self, context: TypeChecker, i: int | slice) -> Type:
+        forced = self.force(context)
+        if forced is not None:
+            return forced.index(context, i)
         raise ConcatTypeError(
             format_not_a_sequence_type_error(context, self),
             is_occurs_check_fail=None,
@@ -334,15 +344,6 @@ class Type(abc.ABC):
             rigid_variables=None,
         )
 
-    # TODO: Remove this method, which is only used from tests
-    @_whnf_self
-    def length(self, context: TypeChecker) -> int:
-        raise ConcatTypeError(
-            format_not_a_sequence_type_error(context, self),
-            is_occurs_check_fail=False,
-            rigid_variables=None,
-        )
-
     def as_sequence(self) -> Sequence[Type]:
         context = current_context.get()
         forced = self.force(context)
@@ -350,6 +351,18 @@ class Type(abc.ABC):
             return forced.as_sequence()
         raise ConcatTypeError(
             format_not_a_sequence_type_error(context, self),
+            is_occurs_check_fail=False,
+            rigid_variables=None,
+        )
+
+    @property
+    def arguments(self) -> Sequence[Type]:
+        context = current_context.get()
+        forced = self.force(context)
+        if forced is not None:
+            return forced.arguments
+        raise ConcatTypeError(
+            format_not_a_list_of_type_arguments_error(context, self),
             is_occurs_check_fail=False,
             rigid_variables=None,
         )
@@ -1379,9 +1392,6 @@ class TypeSequence(Type):
     def __len__(self) -> int:
         return len(self.as_sequence())
 
-    def length(self, _context: TypeChecker) -> int:
-        return len(self)
-
     def _is_empty(self) -> bool:
         return self._rest is None and not self._individual_types
 
@@ -2135,14 +2145,8 @@ class DelayedSubstitution(Type):
             context, self._sub, self._ty.apply(context, x)
         )
 
-    def index(self, context: TypeChecker, x: int | slice) -> Type:
-        return self.force(context).index(context, x)
-
     def apply_is_redex(self) -> bool:
         return True
-
-    def length(self, context: TypeChecker) -> int:
-        return self.force(context).length(context)
 
     def __bool__(self) -> bool:
         return True
@@ -2619,9 +2623,7 @@ class PythonFunctionType(IndividualType):
 
 
 class _PythonOverloadedType(IndividualType):
-    def __init__(
-        self, overloads: VariableArgumentPack | DelayedSubstitution
-    ) -> None:
+    def __init__(self, overloads: Type) -> None:
         super().__init__()
         _fixed_overloads: List[Type] = []
         context = current_context.get()
@@ -2643,7 +2645,8 @@ class _PythonOverloadedType(IndividualType):
                     rigid_variables=None,
                 )
             i, o = overload.input, overload.output
-            # HACK: Sequence variables are introduced by the type sequence AST nodes
+            # HACK: Sequence variables are introduced by the type sequence AST
+            # nodes
             if (
                 isinstance(i, TypeSequence)
                 and i
