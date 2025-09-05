@@ -312,6 +312,9 @@ class Type(abc.ABC):
     def index(self, context: TypeChecker, i: slice) -> TypeSequence: ...
 
     def index(self, context: TypeChecker, i: int | slice) -> Type:
+        forced = self.force(context)
+        if forced is not None:
+            return forced.index(context, i)
         raise ConcatTypeError(
             format_not_a_sequence_type_error(context, self),
             is_occurs_check_fail=None,
@@ -2141,9 +2144,6 @@ class DelayedSubstitution(Type):
         return DelayedSubstitution(
             context, self._sub, self._ty.apply(context, x)
         )
-
-    def index(self, context: TypeChecker, x: int | slice) -> Type:
-        return self.force(context).index(context, x)
 
     def apply_is_redex(self) -> bool:
         return True
