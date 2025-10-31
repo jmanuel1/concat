@@ -101,7 +101,7 @@ def _constrain_on_whnf[T: Type](f: _ConstrainFn[T]) -> _ConstrainFn[T]:
     ) -> 'Substitutions':
         forced = self.force(context)
         supertype = supertype.force_if_possible(context)
-        if forced:
+        if forced is not None:
             return forced.constrain_and_bind_variables(
                 context,
                 supertype,
