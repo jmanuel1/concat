@@ -70,6 +70,7 @@ def _sub_cache[T: Type, R](
 ) -> Callable[[T, TypeChecker, Substitutions], T | R]:
     _sub_cache = dict[tuple[int, int], T | R]()
 
+    @functools.wraps(f)
     def apply_substitution(
         self: T, context: TypeChecker, sub: Substitutions
     ) -> T | R:
@@ -90,6 +91,7 @@ type _ConstrainFn[T] = Callable[
 
 
 def _constrain_on_whnf[T: Type](f: _ConstrainFn[T]) -> _ConstrainFn[T]:
+    @functools.wraps(f)
     def constrain_and_bind_variables(
         self,
         context: TypeChecker,
@@ -120,6 +122,7 @@ def _constrain_on_whnf[T: Type](f: _ConstrainFn[T]) -> _ConstrainFn[T]:
 def _whnf_self[T: Type, **K, R](
     f: Callable[Concatenate[T, TypeChecker, K], R],
 ) -> Callable[Concatenate[T, TypeChecker, K], R]:
+    @functools.wraps(f)
     def g(
         self: T, context: TypeChecker, *args: K.args, **kwargs: K.kwargs
     ) -> R:
