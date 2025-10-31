@@ -85,7 +85,7 @@ def _sub_cache[T: Type, R](
 
 
 type _ConstrainFn[T] = Callable[
-    [T, TypeChecker, Type, AbstractSet[Variable], list[tuple[Type, Type]]],
+    [T, TypeChecker, Type, AbstractSet[Variable], Sequence[tuple[Type, Type]]],
     Substitutions,
 ]
 
@@ -97,7 +97,7 @@ def _constrain_on_whnf[T: Type](f: _ConstrainFn[T]) -> _ConstrainFn[T]:
         context: TypeChecker,
         supertype: Type,
         rigid_variables: AbstractSet['Variable'],
-        subtyping_assumptions: List[Tuple['Type', 'Type']],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
     ) -> 'Substitutions':
         forced = self.force(context)
         supertype = supertype.force_if_possible(context)
@@ -250,10 +250,10 @@ class Type(abc.ABC):
     def constrain_and_bind_variables(
         self,
         context: TypeChecker,
-        supertype: 'Type',
-        rigid_variables: AbstractSet['Variable'],
-        subtyping_assumptions: List[Tuple['Type', 'Type']],
-    ) -> 'Substitutions':
+        supertype: Type,
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
+    ) -> Substitutions:
         raise NotImplementedError
 
     def instantiate(self, context: TypeChecker) -> 'Type':
@@ -750,8 +750,8 @@ class ItemVariable(Variable):
         self,
         context: TypeChecker,
         supertype: Type,
-        rigid_variables: AbstractSet['Variable'],
-        subtyping_assumptions: List[Tuple['Type', 'Type']],
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
     ) -> 'Substitutions':
         if (
             self._type_id == supertype._type_id
@@ -834,8 +834,8 @@ class SequenceVariable(Variable):
         self,
         context: TypeChecker,
         supertype: Type,
-        rigid_variables: AbstractSet['Variable'],
-        subtyping_assumptions: List[Tuple['Type', 'Type']],
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
     ) -> 'Substitutions':
         if not (supertype.kind <= SequenceKind):
             raise ConcatTypeError(
@@ -1037,8 +1037,8 @@ class GenericType(Type):
         self,
         context: TypeChecker,
         supertype: 'Type',
-        rigid_variables: AbstractSet['Variable'],
-        subtyping_assumptions: List[Tuple['Type', 'Type']],
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
     ) -> 'Substitutions':
         if self is supertype or _contains_assumption(
             subtyping_assumptions, self, supertype
@@ -1231,8 +1231,8 @@ class TypeSequence(Type):
         self,
         context: TypeChecker,
         supertype: Type,
-        rigid_variables: AbstractSet['Variable'],
-        subtyping_assumptions: List[Tuple['Type', 'Type']],
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
     ) -> 'Substitutions':
         """Check that self is a subtype of supertype.
 
@@ -1484,8 +1484,8 @@ class StackEffect(IndividualType):
         self,
         context: TypeChecker,
         supertype: Type,
-        rigid_variables: AbstractSet['Variable'],
-        subtyping_assumptions: List[Tuple['Type', 'Type']],
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
     ) -> 'Substitutions':
         if (
             self is supertype
@@ -1579,8 +1579,8 @@ class QuotationType(StackEffect):
         self,
         context: TypeChecker,
         supertype: Type,
-        rigid_variables: AbstractSet['Variable'],
-        subtyping_assumptions: List[Tuple['Type', 'Type']],
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
     ) -> 'Substitutions':
         try:
             # FIXME: Don't present new variables every time.
@@ -1864,8 +1864,8 @@ class ObjectType(IndividualType):
         self,
         context: TypeChecker,
         supertype: Type,
-        rigid_variables: AbstractSet['Variable'],
-        subtyping_assumptions: List[Tuple['Type', 'Type']],
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
     ) -> 'Substitutions':
         _logger.debug('{} <:? {}', self, supertype)
         # every object type is a subtype of object_type
@@ -2532,8 +2532,8 @@ class PythonFunctionType(IndividualType):
         self,
         context: TypeChecker,
         supertype: Type,
-        rigid_variables: AbstractSet['Variable'],
-        subtyping_assumptions: List[Tuple['Type', 'Type']],
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
     ) -> 'Substitutions':
         if isinstance(supertype, DelayedSubstitution):
             supertype = supertype.force(context)
@@ -2737,8 +2737,8 @@ class _PythonOverloadedType(IndividualType):
         self,
         context: TypeChecker,
         supertype: 'Type',
-        rigid_variables: AbstractSet['Variable'],
-        subtyping_assumptions: List[Tuple['Type', 'Type']],
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
     ) -> 'Substitutions':
         if isinstance(supertype, DelayedSubstitution):
             supertype = supertype.force(context)
