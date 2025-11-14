@@ -438,6 +438,8 @@ class Type(abc.ABC):
         forced = self.force(context)
         if forced is not None:
             return forced.arguments
+        if self.kind <= VariableArgumentKind(TopKind):
+            return [self]
         raise ConcatTypeError(
             format_not_a_list_of_type_arguments_error(context, self),
             is_occurs_check_fail=False,
@@ -461,8 +463,8 @@ class TypeApplication(Type):
                 is_occurs_check_fail=None,
                 rigid_variables=None,
             )
-        if len(head.kind.parameter_kinds) == 1 and isinstance(
-            head.kind.parameter_kinds[0], VariableArgumentKind
+        if len(head.kind.parameter_kinds) == 1 and (
+            head.kind.parameter_kinds[0] <= VariableArgumentKind(TopKind)
         ):
             args = [VariableArgumentPack.collect_arguments(context, args)]
         if len(args) != len(head.kind.parameter_kinds):
@@ -2502,10 +2504,8 @@ class VariableArgumentPack(Type):
     ) -> VariableArgumentPack:
         flattened_args: list[Type] = []
         for arg in args:
-            if isinstance(arg, DelayedSubstitution):
-                arg = arg.force(context)
-            if isinstance(arg, VariableArgumentPack):
-                flattened_args += arg._types
+            if arg.kind <= VariableArgumentKind(TopKind):
+                flattened_args += arg.arguments
                 continue
             flattened_args.append(arg)
         return VariableArgumentPack(flattened_args)
