@@ -521,7 +521,7 @@ class TypeApplication(Type):
             self._type_id == supertype._type_id
             or (
                 self._result_kind <= IndividualKind
-                and supertype._type_id == context.object_type._type_id
+                and supertype.is_object_type(context)
             )
             or _contains_assumption(subtyping_assumptions, self, supertype)
         ):
@@ -3051,7 +3051,7 @@ class _PythonOverloadedType(IndividualType):
         if (
             self is supertype
             or _contains_assumption(subtyping_assumptions, self, supertype)
-            or supertype == context.object_type
+            or supertype.is_object_type(context)
         ):
             sub = Substitutions()
             sub.add_subtyping_provenance((self, supertype))
