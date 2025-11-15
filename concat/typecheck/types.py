@@ -2443,32 +2443,6 @@ class DelayedSubstitution(Type):
             ), f'{self._ty!r}, {self._forced}'
         return self._forced
 
-    def to_iterator(
-        self, context: TypeChecker
-    ) -> Iterator[DelayedSubstitution]:
-        assert isinstance(self._ty, (StackEffect, TypeSequence))
-        for component in self._ty.to_iterator(context):
-            yield DelayedSubstitution(context, self._sub, component)
-
-    @property
-    def input(self) -> DelayedSubstitution:
-        assert isinstance(self._ty, (StackEffect, PythonFunctionType))
-        context = current_context.get()
-        return DelayedSubstitution(context, self._sub, self._ty.input)
-
-    @property
-    def output(self) -> DelayedSubstitution:
-        assert isinstance(self._ty, (StackEffect, PythonFunctionType))
-        context = current_context.get()
-        return DelayedSubstitution(context, self._sub, self._ty.output)
-
-    @property
-    def arguments(self) -> Sequence[Type]:
-        context = current_context.get()
-        ty = self.force(context)
-        assert isinstance(ty, VariableArgumentPack)
-        return ty.arguments
-
 
 class VariableArgumentPack(Type):
     """List of types passed as an argument in a variable-length argument \
