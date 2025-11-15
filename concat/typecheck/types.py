@@ -259,6 +259,15 @@ class Type(abc.ABC):
     # I don't use functools.singledispatch because of static typing issues. For
     # example, see https://github.com/microsoft/pylance-release/issues/4277.
 
+    def _constrain_as_supertype_of_variable_argument_pack(
+        self,
+        context: TypeChecker,
+        subtype: VariableArgumentPack,
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
+    ) -> Substitutions:
+        raise NotImplementedError
+
     def _constrain_as_supertype_of_object_type(
         self,
         context: TypeChecker,
@@ -796,6 +805,25 @@ class Variable(Type, abc.ABC):
     def apply(self, context: TypeChecker, args: 'TypeArguments') -> Type:
         # TypeApplication will do kind checking
         return TypeApplication(self, args)
+
+    def _constrain_as_supertype_of_variable_argument_pack(
+        self,
+        context: TypeChecker,
+        subtype: VariableArgumentPack,
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
+    ) -> Substitutions:
+        if (
+            self not in rigid_variables
+            # occurs check!
+            and self not in subtype.free_type_variables(context)
+        ):
+            return Substitutions([(self, subtype)])
+        raise ConcatTypeError(
+            format_subtyping_error(context, subtype, self),
+            is_occurs_check_fail=None,
+            rigid_variables=rigid_variables,
+        )
 
     def _constrain_as_supertype_of_object_type(
         self,
@@ -2452,6 +2480,7 @@ class VariableArgumentPack(Type):
         super().__init__()
         self._types = types
 
+    @_whnf_self
     def to_user_string(self, _context: TypeChecker) -> str:
         return f'variable-length arguments {
             ', '.join(str(t) for t in self._types)
@@ -2460,9 +2489,14 @@ class VariableArgumentPack(Type):
     def __repr__(self) -> str:
         return f'VariableArgumentPack({self._types!r})'
 
-    def force(self, context: TypeChecker) -> None:
-        pass
+    def force(self, context: TypeChecker) -> Type | None:
+        if len(self._types) == 1 and self._types[
+            0
+        ].kind <= VariableArgumentKind(TopKind):
+            return self._types[0].force(context)
+        return None
 
+    @_whnf_self
     def force_repr(self, context: TypeChecker) -> str:
         return f'VariableArgumentPack({
             _iterable_to_str(t.force_repr(context) for t in self._types)
@@ -2484,6 +2518,7 @@ class VariableArgumentPack(Type):
             flattened_args.append(arg)
         return VariableArgumentPack(flattened_args)
 
+    @_constrain_on_whnf
     def constrain_and_bind_variables(
         self,
         context: TypeChecker,
@@ -2501,23 +2536,28 @@ class VariableArgumentPack(Type):
                 is_occurs_check_fail=None,
                 rigid_variables=rigid_variables,
             )
-        if len(self._types) == 1 and isinstance(
-            self._types[0].kind, VariableArgumentKind
-        ):
-            return self._types[0].constrain_and_bind_variables(
-                context, supertype, rigid_variables, subtyping_assumptions
+        return supertype._constrain_as_supertype_of_variable_argument_pack(
+            context,
+            self,
+            rigid_variables,
+            subtyping_assumptions,
+        )
+
+    def _constrain_as_supertype_of_variable_argument_pack(
+        self,
+        context: TypeChecker,
+        subtype: VariableArgumentPack,
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
+    ) -> Substitutions:
+        if len(subtype._types) != len(self._types):
+            raise ConcatTypeError(
+                format_subtyping_error(context, subtype, self),
+                is_occurs_check_fail=False,
+                rigid_variables=rigid_variables,
             )
-        if (
-            isinstance(supertype, Variable)
-            and supertype not in rigid_variables
-            # occurs check!
-            and supertype not in self.free_type_variables(context)
-        ):
-            return Substitutions([(supertype, self)])
-        if not isinstance(supertype, VariableArgumentPack):
-            raise NotImplementedError
         sub = Substitutions()
-        for subty, superty in zip(self._types, supertype._types):
+        for subty, superty in zip(subtype._types, self._types):
             sub = sub.apply_substitution(
                 context,
                 subty.apply_substitution(
@@ -2529,7 +2569,7 @@ class VariableArgumentPack(Type):
                     subtyping_assumptions,
                 ),
             )
-        sub.add_subtyping_provenance((self, supertype))
+        sub.add_subtyping_provenance((subtype, self))
         return sub
 
     def _constrain_as_supertype_of_type_sequence(
@@ -2579,6 +2619,7 @@ class VariableArgumentPack(Type):
             ),
         )
 
+    # FIXME: Should be method on kinds
     @staticmethod
     def _underlying_kind(kind: Kind) -> Kind:
         if isinstance(kind, VariableArgumentKind):
