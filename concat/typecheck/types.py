@@ -2634,15 +2634,14 @@ class ClassType(ObjectType):
     This is based to some degree on "Design and Evaluation of Gradual Typing
     for Python" (Vitousek et al. 2014)."""
 
+    @_constrain_on_whnf
     def constrain_and_bind_variables(
         self,
         context: TypeChecker,
         supertype: Type,
-        rigid_variables,
-        subtyping_assumptions,
-    ) -> 'Substitutions':
-        if isinstance(supertype, DelayedSubstitution):
-            supertype = supertype.force(context)
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
+    ) -> Substitutions:
         if (
             not supertype.has_attribute(context, '__call__')
             or '__init__' not in self._attributes
@@ -2662,7 +2661,7 @@ class ClassType(ObjectType):
             context,
             supertype.get_type_of_attribute(context, '__call__'),
             rigid_variables,
-            subtyping_assumptions + [(self, supertype)],
+            [*subtyping_assumptions, (self, supertype)],
         )
         sub.add_subtyping_provenance((self, supertype))
         return sub
