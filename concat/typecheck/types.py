@@ -268,6 +268,21 @@ class Type(abc.ABC):
     ) -> Substitutions:
         raise NotImplementedError
 
+    def _constrain_as_supertype_of_py_function_type(
+        self,
+        context: TypeChecker,
+        subtype: PythonFunctionType,
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
+    ) -> Substitutions:
+        if not (subtype.kind <= self.kind):
+            raise ConcatTypeError(
+                format_subkinding_error(subtype, self),
+                is_occurs_check_fail=False,
+                rigid_variables=rigid_variables,
+            )
+        raise NotImplementedError
+
     def _constrain_as_supertype_of_object_type(
         self,
         context: TypeChecker,
@@ -805,6 +820,29 @@ class Variable(Type, abc.ABC):
     def apply(self, context: TypeChecker, args: 'TypeArguments') -> Type:
         # TypeApplication will do kind checking
         return TypeApplication(self, args)
+
+    def _constrain_as_supertype_of_py_function_type(
+        self,
+        context: TypeChecker,
+        subtype: PythonFunctionType,
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
+    ) -> Substitutions:
+        if self.kind <= ItemKind and self not in rigid_variables:
+            if self in subtype.free_type_variables(context):
+                raise ConcatTypeError(
+                    format_occurs_error(self, subtype),
+                    is_occurs_check_fail=True,
+                    rigid_variables=rigid_variables,
+                )
+            sub = Substitutions([(self, subtype)])
+            sub.add_subtyping_provenance((subtype, self))
+            return sub
+        raise ConcatTypeError(
+            format_subtyping_error(context, subtype, self),
+            is_occurs_check_fail=False,
+            rigid_variables=rigid_variables,
+        )
 
     def _constrain_as_supertype_of_variable_argument_pack(
         self,
@@ -2229,7 +2267,7 @@ class ObjectType(IndividualType):
     def _constrain_as_supertype_of_py_overloaded_type(
         self,
         context: TypeChecker,
-        subtype: PythonOverloadedType,
+        subtype: PythonOverloadedType | PythonFunctionType,
         rigid_variables: AbstractSet[Variable],
         subtyping_assumptions: Sequence[tuple[Type, Type]],
     ) -> Substitutions:
@@ -2249,6 +2287,10 @@ class ObjectType(IndividualType):
             )
         sub.add_subtyping_provenance((subtype, self))
         return sub
+
+    _constrain_as_supertype_of_py_function_type = (
+        _constrain_as_supertype_of_py_overloaded_type
+    )
 
     def __repr__(self) -> str:
         return f'{type(self).__qualname__}(attributes={self._attributes!r})'
@@ -2785,80 +2827,41 @@ class PythonFunctionType(IndividualType):
                 is_occurs_check_fail=None,
                 rigid_variables=rigid_variables,
             )
-        if supertype._type_id in (
-            context.object_type._type_id,
-            context.py_overloaded_type.apply(context, ())._type_id,
-        ):
-            sub = Substitutions()
-            sub.add_subtyping_provenance((self, supertype))
-            return sub
-        if (
-            isinstance(supertype, Variable)
-            and supertype.kind <= ItemKind
-            and supertype not in rigid_variables
-        ):
-            if supertype in self.free_type_variables(context):
-                raise ConcatTypeError(
-                    format_occurs_error(supertype, self),
-                    is_occurs_check_fail=True,
-                    rigid_variables=rigid_variables,
-                )
-            sub = Substitutions([(supertype, self)])
-            sub.add_subtyping_provenance((self, supertype))
-            return sub
-        if isinstance(supertype, _OptionalType):
-            sub = self.constrain_and_bind_variables(
-                context,
-                supertype.type_arguments[0],
-                rigid_variables,
-                subtyping_assumptions,
-            )
-            sub.add_subtyping_provenance((self, supertype))
-            return sub
-        if isinstance(supertype, ObjectType):
-            sub = Substitutions()
-            for attr in supertype.attributes(context):
-                self_attr_type = self.get_type_of_attribute(
-                    context, attr
-                ).apply_substitution(context, sub)
-                supertype_attr_type = supertype.get_type_of_attribute(
-                    context, attr
-                ).apply_substitution(context, sub)
-                sub = self_attr_type.constrain_and_bind_variables(
-                    context,
-                    supertype_attr_type,
-                    rigid_variables,
-                    subtyping_assumptions,
-                )
-            sub.add_subtyping_provenance((self, supertype))
-            return sub
-        if isinstance(supertype, PythonFunctionType):
-            self_input_types = self.input
-            supertype_input_types = supertype.input
-            sub = supertype_input_types.constrain_and_bind_variables(
-                context,
-                self_input_types,
-                rigid_variables,
-                subtyping_assumptions,
-            )
-            sub = sub.apply_substitution(
-                context,
-                self.output.apply_substitution(
-                    context, sub
-                ).constrain_and_bind_variables(
-                    context,
-                    supertype.output.apply_substitution(context, sub),
-                    rigid_variables,
-                    subtyping_assumptions,
-                ),
-            )
-            sub.add_subtyping_provenance((self, supertype))
-            return sub
-        raise ConcatTypeError(
-            f'{self} is not a subtype of {supertype}',
-            is_occurs_check_fail=False,
-            rigid_variables=rigid_variables,
+        return supertype._constrain_as_supertype_of_py_function_type(
+            context,
+            self,
+            rigid_variables,
+            subtyping_assumptions,
         )
+
+    def _constrain_as_supertype_of_py_function_type(
+        self,
+        context: TypeChecker,
+        subtype: PythonFunctionType,
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
+    ) -> Substitutions:
+        subtype_input_types = subtype.input
+        supertype_input_types = self.input
+        sub = supertype_input_types.constrain_and_bind_variables(
+            context,
+            subtype_input_types,
+            rigid_variables,
+            subtyping_assumptions,
+        )
+        sub = sub.apply_substitution(
+            context,
+            subtype.output.apply_substitution(
+                context, sub
+            ).constrain_and_bind_variables(
+                context,
+                self.output.apply_substitution(context, sub),
+                rigid_variables,
+                subtyping_assumptions,
+            ),
+        )
+        sub.add_subtyping_provenance((subtype, self))
+        return sub
 
     def _constrain_as_supertype_of_object_type(
         self,
@@ -3291,10 +3294,10 @@ class _OptionalType(IndividualType):
         )
         return sub
 
-    def _constrain_as_supertype_of_object_type(
+    def __constrain_param_as_supertype(
         self,
         context: TypeChecker,
-        subtype: ObjectType,
+        subtype: Type,
         rigid_variables: AbstractSet[Variable],
         subtyping_assumptions: Sequence[tuple[Type, Type]],
     ) -> Substitutions:
@@ -3306,6 +3309,12 @@ class _OptionalType(IndividualType):
         )
         sub.add_subtyping_provenance((subtype, self))
         return sub
+
+    _constrain_as_supertype_of_object_type = __constrain_param_as_supertype
+
+    _constrain_as_supertype_of_py_function_type = (
+        __constrain_param_as_supertype
+    )
 
     def _constrain_as_supertype_of_nominal_type(
         self,
@@ -3329,21 +3338,9 @@ class _OptionalType(IndividualType):
                 subtyping_assumptions,
             )
 
-    def _constrain_as_supertype_of_py_overloaded_type(
-        self,
-        context: TypeChecker,
-        subtype: PythonOverloadedType,
-        rigid_variables: AbstractSet[Variable],
-        subtyping_assumptions: Sequence[tuple[Type, Type]],
-    ) -> Substitutions:
-        sub = subtype.constrain_and_bind_variables(
-            context,
-            self.type_arguments[0],
-            rigid_variables,
-            subtyping_assumptions,
-        )
-        sub.add_subtyping_provenance((subtype, self))
-        return sub
+    _constrain_as_supertype_of_py_overloaded_type = (
+        __constrain_param_as_supertype
+    )
 
     def force_substitution(
         self, context: TypeChecker, sub: Substitutions
