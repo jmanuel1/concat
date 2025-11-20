@@ -952,6 +952,7 @@ class BoundVariable(Variable):
     def kind(self) -> 'Kind':
         return self._kind
 
+    @_constrain_on_whnf
     def constrain_and_bind_variables(
         self, context, supertype, rigid_variables, subtyping_assumptions
     ) -> 'Substitutions':
@@ -959,7 +960,7 @@ class BoundVariable(Variable):
             self._type_id == supertype._type_id
             or (
                 self.kind >= IndividualKind
-                and supertype._type_id == context.object_type._type_id
+                and supertype.is_object_type(context)
             )
             or (self, supertype) in subtyping_assumptions
         ):
@@ -2324,6 +2325,7 @@ class TypeTuple(Type):
         super().__init__()
         self._types = types
 
+    @_constrain_on_whnf
     def constrain_and_bind_variables(
         self,
         context: TypeChecker,
@@ -2331,8 +2333,6 @@ class TypeTuple(Type):
         rigid_variables,
         subtyping_assumptions,
     ) -> Substitutions:
-        if isinstance(supertype, DelayedSubstitution):
-            supertype = supertype.force(context) or supertype
         if self._type_id == supertype._type_id or _contains_assumption(
             subtyping_assumptions, self, supertype
         ):
@@ -2813,8 +2813,6 @@ class PythonFunctionType(IndividualType):
         rigid_variables: AbstractSet[Variable],
         subtyping_assumptions: Sequence[tuple[Type, Type]],
     ) -> 'Substitutions':
-        if isinstance(supertype, DelayedSubstitution):
-            supertype = supertype.force(context)
         if self._type_id == supertype._type_id or _contains_assumption(
             subtyping_assumptions, self, supertype
         ):
@@ -3063,8 +3061,6 @@ class _PythonOverloadedType(IndividualType):
         rigid_variables: AbstractSet[Variable],
         subtyping_assumptions: Sequence[tuple[Type, Type]],
     ) -> 'Substitutions':
-        if isinstance(supertype, DelayedSubstitution):
-            supertype = supertype.force(context)
         if (
             self is supertype
             or _contains_assumption(subtyping_assumptions, self, supertype)
@@ -3239,6 +3235,7 @@ class _OptionalType(IndividualType):
             return self._type_argument == other._type_argument
         return super().__eq__(other)
 
+    @_constrain_on_whnf
     def constrain_and_bind_variables(
         self,
         context: TypeChecker,
@@ -3767,6 +3764,7 @@ class Fix(Type):
             [*subtyping_assumptions, (subtype, self)],
         )
 
+    @_constrain_on_whnf
     def constrain_and_bind_variables(
         self,
         context: TypeChecker,
@@ -3775,8 +3773,6 @@ class Fix(Type):
         subtyping_assumptions,
     ) -> 'Substitutions':
         _logger.debug('{} <:? {}', self, supertype)
-        if isinstance(supertype, DelayedSubstitution):
-            supertype = supertype.force(context)
         if (
             supertype._type_id == context.object_type._type_id
             or _contains_assumption(subtyping_assumptions, self, supertype)
