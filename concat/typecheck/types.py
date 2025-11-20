@@ -2813,8 +2813,10 @@ class PythonFunctionType(IndividualType):
         rigid_variables: AbstractSet[Variable],
         subtyping_assumptions: Sequence[tuple[Type, Type]],
     ) -> 'Substitutions':
-        if self._type_id == supertype._type_id or _contains_assumption(
-            subtyping_assumptions, self, supertype
+        if (
+            self._type_id == supertype._type_id
+            or supertype.is_object_type(context)
+            or _contains_assumption(subtyping_assumptions, self, supertype)
         ):
             sub = Substitutions()
             sub.add_subtyping_provenance((self, supertype))
