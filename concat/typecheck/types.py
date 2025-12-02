@@ -150,7 +150,7 @@ class Type(abc.ABC):
         self._type_id = identifier
 
     def is_object_type(self, context: TypeChecker) -> bool:
-        ty = self.force(context) or self
+        ty = self.force_if_possible(context)
         try:
             brand = ty.brand(context)
         except ConcatTypeError:
@@ -531,7 +531,7 @@ class TypeApplication(Type):
         forced = self._head.force_substitution(context, sub).apply(
             context, [t.apply_substitution(context, sub) for t in self._args]
         )
-        return forced.force(context) or forced
+        return forced.force_if_possible(context)
 
     @_constrain_on_whnf
     def constrain_and_bind_variables(
@@ -598,7 +598,7 @@ class TypeApplication(Type):
         if self.is_redex():
             if not self._forced:
                 self._forced = self._head.force_apply(context, self._args)
-            return self._forced.force(context) or self._forced
+            return self._forced.force_if_possible(context)
         return None
 
     def __str__(self) -> str:
@@ -779,7 +779,7 @@ class Variable(Type, abc.ABC):
         self, context: TypeChecker, sub: Substitutions
     ) -> Type:
         result = self.apply_substitution(context, sub)
-        return result.force(context) or result
+        return result.force_if_possible(context)
 
     def _free_type_variables(
         self, context: TypeChecker
@@ -3214,7 +3214,7 @@ class _OptionalType(IndividualType):
         while isinstance(type_argument, _OptionalType):
             type_argument = type_argument._type_argument
         if (
-            type_argument.force(context) or type_argument
+            type_argument.force_if_possible(context)
         )._type_id == context.none_type._type_id:
             return context.none_type
         if type_argument._type_id == self._type_argument._type_id:
@@ -3688,7 +3688,7 @@ class Fix(Type):
     def force(self, context: TypeChecker) -> Type | None:
         if self._var in self._body.free_type_variables(context):
             return None
-        return self._body.force(context) or self._body
+        return self._body.force_if_possible(context)
 
     def force_repr(self, context: TypeChecker) -> str:
         return f'Fix({self._var!r}, {self._body.force_repr(context)})'
