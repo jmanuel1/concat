@@ -328,6 +328,26 @@ class Type(abc.ABC):
             rigid_variables=rigid_variables,
         )
 
+    def _constrain_as_supertype_of_optional_type(
+        self,
+        context: TypeChecker,
+        subtype: OptionalType,
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
+    ) -> Substitutions:
+        sub = context.none_type.constrain_and_bind_variables(
+            context, self, rigid_variables, subtyping_assumptions
+        )
+        sub = subtype._type_argument.apply_substitution(
+            context, sub
+        ).constrain_and_bind_variables(
+            context,
+            self.apply_substitution(context, sub),
+            rigid_variables,
+            subtyping_assumptions,
+        )
+        return sub
+
     def _constrain_as_supertype_of_projection(
         self,
         context: TypeChecker,
@@ -3241,57 +3261,43 @@ class _OptionalType(IndividualType):
     def constrain_and_bind_variables(
         self,
         context: TypeChecker,
-        supertype,
+        supertype: Type,
         rigid_variables,
         subtyping_assumptions,
     ) -> 'Substitutions':
         if (
-            self is supertype
+            self._type_id == supertype._type_id
             or _contains_assumption(subtyping_assumptions, self, supertype)
-            or supertype is context.object_type
+            or supertype.is_object_type(context)
         ):
             return Substitutions()
-        # A special case for better resuls (I think)
-        if isinstance(supertype, _OptionalType):
-            return self._type_argument.constrain_and_bind_variables(
-                context,
-                supertype._type_argument,
-                rigid_variables,
-                subtyping_assumptions,
-            )
         if not (self.kind <= supertype.kind):
             raise ConcatTypeError(
                 format_subkinding_error(self, supertype),
                 is_occurs_check_fail=None,
                 rigid_variables=rigid_variables,
             )
-        # FIXME: optional[none] should simplify to none
-        if (
-            self._type_argument is context.none_type
-            and supertype is context.none_type
-        ):
-            return Substitutions()
-
-        if isinstance(supertype, Fix):
-            return self.constrain_and_bind_variables(
-                context,
-                supertype.unroll(context),
-                rigid_variables,
-                subtyping_assumptions + [(self, supertype)],
-            )
-
-        sub = context.none_type.constrain_and_bind_variables(
-            context, supertype, rigid_variables, subtyping_assumptions
-        )
-        sub = self._type_argument.apply_substitution(
-            context, sub
-        ).constrain_and_bind_variables(
+        return supertype._constrain_as_supertype_of_optional_type(
             context,
-            supertype.apply_substitution(context, sub),
+            self,
             rigid_variables,
             subtyping_assumptions,
         )
-        return sub
+
+    # A special case for better results (I think)
+    def _constrain_as_supertype_of_optional_type(
+        self,
+        context: TypeChecker,
+        subtype: OptionalType,
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
+    ) -> Substitutions:
+        return subtype._type_argument.constrain_and_bind_variables(
+            context,
+            self._type_argument,
+            rigid_variables,
+            subtyping_assumptions,
+        )
 
     def __constrain_param_as_supertype(
         self,
@@ -3734,6 +3740,20 @@ class Fix(Type):
 
     def attributes(self, context: TypeChecker) -> Mapping[str, Type]:
         return self.unroll(context).attributes(context)
+
+    def _constrain_as_supertype_of_optional_type(
+        self,
+        context: TypeChecker,
+        subtype: OptionalType,
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
+    ) -> Substitutions:
+        return subtype.constrain_and_bind_variables(
+            context,
+            self.unroll(context),
+            rigid_variables,
+            [*subtyping_assumptions, (subtype, self)],
+        )
 
     def _constrain_as_supertype_of_object_type(
         self,
