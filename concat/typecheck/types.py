@@ -268,6 +268,22 @@ class Type(abc.ABC):
     ) -> Substitutions:
         raise NotImplementedError
 
+    def _constrain_as_supertype_of_fixpoint(
+        self,
+        context: TypeChecker,
+        subtype: Fix,
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
+    ) -> Substitutions:
+        sub = subtype.unroll(context).constrain_and_bind_variables(
+            context,
+            self,
+            rigid_variables,
+            [*subtyping_assumptions, (subtype, self)],
+        )
+        sub.add_subtyping_provenance((subtype, self))
+        return sub
+
     def _constrain_as_supertype_of_py_function_type(
         self,
         context: TypeChecker,
@@ -3790,37 +3806,38 @@ class Fix(Type):
     def constrain_and_bind_variables(
         self,
         context: TypeChecker,
-        supertype,
+        supertype: Type,
         rigid_variables,
         subtyping_assumptions,
     ) -> 'Substitutions':
         _logger.debug('{} <:? {}', self, supertype)
         if (
-            supertype._type_id == context.object_type._type_id
+            self._type_id == supertype._type_id
+            or supertype.is_object_type(context)
             or _contains_assumption(subtyping_assumptions, self, supertype)
         ):
             sub = Substitutions()
             sub.add_subtyping_provenance((self, supertype))
             return sub
-
-        if isinstance(supertype, Fix):
-            unrolled = supertype.unroll(context)
-            sub = self.unroll(context).constrain_and_bind_variables(
-                context,
-                unrolled,
-                rigid_variables,
-                subtyping_assumptions + [(self, supertype)],
-            )
-            sub.add_subtyping_provenance((self, supertype))
-            return sub
-
-        sub = self.unroll(context).constrain_and_bind_variables(
-            context,
-            supertype,
-            rigid_variables,
-            subtyping_assumptions + [(self, supertype)],
+        return supertype._constrain_as_supertype_of_fixpoint(
+            context, self, rigid_variables, subtyping_assumptions
         )
-        sub.add_subtyping_provenance((self, supertype))
+
+    def _constrain_as_supertype_of_fixpoint(
+        self,
+        context: TypeChecker,
+        subtype: Fix,
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
+    ) -> Substitutions:
+        unrolled = self.unroll(context)
+        sub = subtype.unroll(context).constrain_and_bind_variables(
+            context,
+            unrolled,
+            rigid_variables,
+            [*subtyping_assumptions, (subtype, self)],
+        )
+        sub.add_subtyping_provenance((subtype, self))
         return sub
 
     @property
