@@ -2526,12 +2526,12 @@ class DelayedSubstitution(Type):
     def constrain_and_bind_variables(
         self, context, supertype, rigid_variables, subtyping_assumptions
     ) -> Substitutions:
-        assert False, 'DelayedSubstitution is never whnf'
+        raise AssertionError('DelayedSubstitution is never whnf')
 
     def _constrain_as_supertype_of_type_sequence(
         self, context, subtype, rigid_variables, subtyping_assumptions
     ) -> Substitutions:
-        assert False, 'DelayedSubstitution is never whnf'
+        raise AssertionError('DelayedSubstitution is never whnf')
 
     @property
     def kind(self) -> Kind:
