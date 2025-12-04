@@ -593,12 +593,6 @@ class TypeApplication(Type):
             subtyping_assumptions,
         )
 
-        raise ConcatTypeError(
-            f'Cannot deduce that {self} is a subtype of {supertype} here',
-            is_occurs_check_fail=False,
-            rigid_variables=rigid_variables,
-        )
-
     def _constrain_as_supertype_of_type_sequence(
         self,
         context: TypeChecker,
