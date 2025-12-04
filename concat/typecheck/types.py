@@ -2295,7 +2295,7 @@ class ObjectType(IndividualType):
         sub.add_subtyping_provenance((subtype, self))
         return sub
 
-    def _constrain_as_supertype_of_py_overloaded_type(
+    def __constrain_as_supertype_of_py_function_or_overloaded_type(
         self,
         context: TypeChecker,
         subtype: PythonOverloadedType | PythonFunctionType,
@@ -2320,7 +2320,11 @@ class ObjectType(IndividualType):
         return sub
 
     _constrain_as_supertype_of_py_function_type = (
-        _constrain_as_supertype_of_py_overloaded_type
+        __constrain_as_supertype_of_py_function_or_overloaded_type
+    )
+
+    _constrain_as_supertype_of_py_overloaded_type = (
+        __constrain_as_supertype_of_py_function_or_overloaded_type
     )
 
     def __repr__(self) -> str:
