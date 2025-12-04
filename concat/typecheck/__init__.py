@@ -131,7 +131,9 @@ class TypeChecker:
                 ObjectType(
                     {
                         '__add__': PythonFunctionType(
-                            # QUESTION: Should methods include self?
+                            # Should methods include self? No, because this
+                            # type here is the interface that the object
+                            # presents, not the type of the implementation.
                             self,
                             TypeSequence(self, [_add_other_operand_type]),
                             _add_result_type,
