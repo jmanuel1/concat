@@ -150,9 +150,11 @@ class TestTypeChecker(unittest.TestCase):
             '...': default_env['ellipsis'],
         }
         expected_type = expected_types[constant_name]
-        self.assertEqual(len(effect.output.as_sequence()), 1)
+        effect_output = effect.output.force_if_possible(context)
+        note(effect_output)
+        self.assertEqual(len(effect_output.as_sequence()), 1)
         self.assertTrue(
-            effect.output.index(context, 0).equals(context, expected_type)
+            effect_output.index(context, 0).equals(context, expected_type)
         )
 
     def test_function_with_stack_effect(self) -> None:
@@ -370,28 +372,34 @@ class TestSubtyping(unittest.TestCase):
             TypeSequence(context, [context.no_return_type]),
             TypeSequence(context, [context.object_type]),
         )
+        with context.substitutions.push() as subs:
+            fun1.constrain_and_bind_variables(context, fun2, set(), [])
         self.assertEqual(
-            fun1.constrain_and_bind_variables(context, fun2, set(), []),
+            subs,
             Substitutions(),
         )
 
     @given(concat.tests.strategies.individual_type_strategy(context))
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_no_return_is_bottom_type(self, type) -> None:
-        self.assertEqual(
+        with context.substitutions.push() as subs:
             context.no_return_type.constrain_and_bind_variables(
                 context, type, set(), []
-            ),
+            )
+        self.assertEqual(
+            subs,
             Substitutions(),
         )
 
     @given(concat.tests.strategies.individual_type_strategy(context))
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_object_is_top_type(self, type) -> None:
-        self.assertEqual(
+        with context.substitutions.push() as subs:
             type.constrain_and_bind_variables(
                 context, context.object_type, set(), []
-            ),
+            )
+        self.assertEqual(
+            subs,
             Substitutions(),
         )
 
@@ -413,8 +421,10 @@ class TestSubtyping(unittest.TestCase):
     ) -> None:
         object1 = ObjectType({**other_attributes, **attributes})
         object2 = ObjectType(attributes)
+        with context.substitutions.push() as subs:
+            object1.constrain_and_bind_variables(context, object2, set(), [])
         self.assertEqual(
-            object1.constrain_and_bind_variables(context, object2, set(), []),
+            subs,
             Substitutions(),
         )
 
@@ -429,8 +439,10 @@ class TestSubtyping(unittest.TestCase):
         object2 = ClassType(attributes)
         note(repr(object1))
         note(repr(object2))
+        with context.substitutions.push() as subs:
+            object1.constrain_and_bind_variables(context, object2, set(), [])
         self.assertEqual(
-            object1.constrain_and_bind_variables(context, object2, set(), []),
+            subs,
             Substitutions(),
         )
 
@@ -438,8 +450,10 @@ class TestSubtyping(unittest.TestCase):
     @settings(suppress_health_check=(HealthCheck.filter_too_much,))
     def test_object_subtype_of_stack_effect(self, effect) -> None:
         object = ObjectType({'__call__': effect})
+        with context.substitutions.push() as subs:
+            object.constrain_and_bind_variables(context, effect, set(), [])
         self.assertEqual(
-            object.constrain_and_bind_variables(context, effect, set(), []),
+            subs,
             Substitutions(),
         )
 
@@ -459,10 +473,12 @@ class TestSubtyping(unittest.TestCase):
             context, [TypeSequence(context, [type1]), type2]
         )
         object = ObjectType({'__call__': py_function})
-        self.assertEqual(
+        with context.substitutions.push() as subs:
             object.constrain_and_bind_variables(
                 context, py_function, set(), []
-            ),
+            )
+        self.assertEqual(
+            subs,
             Substitutions(),
         )
 
@@ -474,8 +490,10 @@ class TestSubtyping(unittest.TestCase):
             TypeSequence(context, [*effect.input, x]), effect.output
         )
         cls = Fix(x, ClassType({'__init__': unbound_effect}))
+        with context.substitutions.push() as subs:
+            cls.constrain_and_bind_variables(context, effect, set(), [])
         self.assertEqual(
-            cls.constrain_and_bind_variables(context, effect, set(), []),
+            subs,
             Substitutions(),
         )
 
@@ -492,8 +510,10 @@ class TestSubtyping(unittest.TestCase):
             context, [TypeSequence(context, [x, type1]), type2]
         )
         cls = Fix(x, ClassType({'__init__': unbound_py_function}))
+        with context.substitutions.push() as subs:
+            cls.constrain_and_bind_variables(context, py_function, set(), [])
         self.assertEqual(
-            cls.constrain_and_bind_variables(context, py_function, set(), []),
+            subs,
             Substitutions(),
         )
 
@@ -505,10 +525,12 @@ class TestSubtyping(unittest.TestCase):
                 ty,
             ],
         )
-        self.assertEqual(
+        with context.substitutions.push() as subs:
             context.none_type.constrain_and_bind_variables(
                 context, opt_ty, set(), []
-            ),
+            )
+        self.assertEqual(
+            subs,
             Substitutions(),
         )
 
@@ -520,7 +542,9 @@ class TestSubtyping(unittest.TestCase):
                 ty,
             ],
         )
+        with context.substitutions.push() as subs:
+            ty.constrain_and_bind_variables(context, opt_ty, set(), [])
         self.assertEqual(
-            ty.constrain_and_bind_variables(context, opt_ty, set(), []),
+            subs,
             Substitutions(),
         )

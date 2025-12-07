@@ -54,7 +54,7 @@ from concat.typecheck.errors import (
     format_not_generic_type_error,
     format_too_many_params_for_variadic_type_error,
 )
-from concat.typecheck.substitutions import Substitutions
+from concat.typecheck.substitutions import MutableSubstitutions, Substitutions
 from concat.typecheck.types import (
     BoundVariable,
     Brand,
@@ -91,6 +91,7 @@ class TypeChecker:
     def __init__(self) -> None:
         self._module_namespaces: dict[pathlib.Path, Environment] = {}
         self._is_in_forward_references_phase = False
+        self.substitutions = MutableSubstitutions()
 
         with change_context(self):
             _invert_result_var = ItemVariable(ItemKind)
@@ -480,7 +481,7 @@ class TypeChecker:
                         name = node.args[0]
                         self._module_type = gamma[name]
                 elif isinstance(node, concat.parse.PushWordNode):
-                    S1, (i1, o1) = S, (i, o)
+                    S1, (_, o1) = S, (i, o)
                     child = node.children[0]
                     if isinstance(child, concat.parse.FreezeWordNode):
                         should_instantiate = False
@@ -489,21 +490,22 @@ class TypeChecker:
                         should_instantiate = True
                     # special case for pushing an attribute accessor
                     if isinstance(child, concat.parse.AttributeWordNode):
-                        top = o1.index(self, -1)
-                        attr_type = top.get_type_of_attribute(
-                            self, child.value
+                        attr_type: Type = ItemVariable(ItemKind)
+                        top = ObjectType({child.value: attr_type})
+                        rest_types = SequenceVariable()
+                        o1.constrain_and_bind_variables(
+                            self,
+                            TypeSequence(self, [rest_types, top]),
+                            gamma.free_type_variables(self),
+                            [],
                         )
                         if should_instantiate:
                             attr_type = attr_type.instantiate(self)
-                        rest_types = o1.index(self, slice(-1))
-                        current_subs, current_effect = (
-                            S1,
-                            StackEffect(
-                                current_effect.input,
-                                TypeSequence(
-                                    self,
-                                    [*rest_types.as_sequence(), attr_type],
-                                ),
+                        current_effect = StackEffect(
+                            current_effect.input,
+                            TypeSequence(
+                                self,
+                                [*rest_types.as_sequence(), attr_type],
                             ),
                         )
                     # special case for name words
@@ -591,15 +593,12 @@ class TypeChecker:
                             self,
                             [collected_type_rest, element_type],
                         )
-                        collect_sub = (
-                            collected_type.constrain_and_bind_variables(
-                                self,
-                                collected_type_target,
-                                gamma.free_type_variables(self),
-                                [],
-                            )
+                        collected_type.constrain_and_bind_variables(
+                            self,
+                            collected_type_target,
+                            gamma.free_type_variables(self),
+                            [],
                         )
-                        phi1 = phi1.apply_substitution(self, collect_sub)
                         # drop the top of the stack to use as the item
                         collected_type = (
                             collected_type_rest.apply_substitution(self, phi1)
@@ -769,14 +768,11 @@ class TypeChecker:
                             self, S
                         ).free_type_variables(self)
                         try:
-                            S = S.apply_substitution(
+                            inferred_type.output.constrain_and_bind_variables(
                                 self,
-                                inferred_type.output.constrain_and_bind_variables(
-                                    self,
-                                    declared_type.output,
-                                    rigid_variables,
-                                    [],
-                                ),
+                                declared_type.output,
+                                rigid_variables,
+                                [],
                             )
                         except TypeError as error:
                             message = (
@@ -854,17 +850,12 @@ class TypeChecker:
                     ).instantiate(self)
                     out = SequenceVariable()
                     fun = StackEffect(o1, TypeSequence(self, [out]))
-                    constraint_subs = (
-                        type_of_name.constrain_and_bind_variables(
-                            self, fun, set(), []
-                        )
-                    )
-                    current_subs = current_subs.apply_substitution(
-                        self, constraint_subs
+                    type_of_name.constrain_and_bind_variables(
+                        self, fun, set(), []
                     )
                     current_effect = StackEffect(
                         current_effect.input, fun.output
-                    ).force_substitution(self, current_subs)
+                    )
                 elif isinstance(node, concat.parse.QuoteWordNode):
                     quotation = cast(concat.parse.QuoteWordNode, node)
                     # make sure any annotation matches the current stack
@@ -874,11 +865,8 @@ class TypeChecker:
                         quotation_input_stack = quote_input_stack_node.to_type(
                             gamma
                         )[0]
-                        S = S.apply_substitution(
-                            self,
-                            o.constrain_and_bind_variables(
-                                self, input_stack, set(), []
-                            ),
+                        o.constrain_and_bind_variables(
+                            self, input_stack, set(), []
                         )
                     else:
                         quotation_input_stack = current_effect.output
@@ -918,7 +906,7 @@ class TypeChecker:
                         self, node.value
                     ).instantiate(self)
                     attr_function_type_output = SequenceVariable()
-                    R = attr_function_type.constrain_and_bind_variables(
+                    attr_function_type.constrain_and_bind_variables(
                         self,
                         StackEffect(
                             out_types,
@@ -927,11 +915,8 @@ class TypeChecker:
                         set(),
                         [],
                     )
-                    current_subs, current_effect = (
-                        S.apply_substitution(self, R),
-                        StackEffect(
-                            current_effect.input, attr_function_type_output
-                        ).force_substitution(self, R),
+                    current_effect = StackEffect(
+                        current_effect.input, attr_function_type_output
                     )
                 elif isinstance(node, concat.parse.CastWordNode):
                     new_type, _ = node.type.to_type(gamma)
@@ -948,13 +933,8 @@ class TypeChecker:
                 elif not check_bodies and isinstance(
                     node, concat.parse.ClassdefStatementNode
                 ):
-                    gamma, sub = self._infer_class(
+                    gamma = self._infer_class(
                         node, gamma, extensions, source_dir
-                    )
-                    current_subs = current_subs.apply_substitution(self, sub)
-                    gamma = gamma.apply_substitution(self, sub)
-                    current_effect = current_effect.apply_substitution(
-                        self, sub
                     )
                 # TODO: Type aliases
                 else:
@@ -996,7 +976,7 @@ class TypeChecker:
         gamma: Environment,
         extensions: Sequence[Callable] | None,
         source_dir: str,
-    ) -> tuple[Environment, Substitutions]:
+    ) -> Environment:
         type_parameters, temp_gamma = self._get_class_params(node, gamma)
         assert not self._is_in_forward_references_phase
         _, _, body_attrs = self.infer(
@@ -1024,10 +1004,9 @@ class TypeChecker:
                 ty,
             )
         ty = NominalType(Brand(node.class_name, ty.kind, []), ty)
-        sub = Substitutions()
         if node.class_name in gamma:
             forward_ty = gamma[node.class_name]
-            sub = ty.constrain_and_bind_variables(
+            ty.constrain_and_bind_variables(
                 self,
                 forward_ty,
                 gamma.free_type_variables(self)
@@ -1037,7 +1016,7 @@ class TypeChecker:
             fix_former = gamma.get_mutuals(node.class_name)
             ty = fix_former(gamma, ty)
         gamma |= Environment({node.class_name: ty})
-        return gamma, sub
+        return gamma
 
     _object_type: SetOnce[Type] = SetOnce()
 
