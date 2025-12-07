@@ -41,12 +41,12 @@ from concat.typecheck.context import change_context, current_context
 from concat.typecheck.env import Environment
 from concat.typecheck.errors import (
     NameError,
+    StackMismatchError,
     StaticAnalysisError,
     TypeError,
     UnhandledNodeTypeError,
     format_cannot_find_module_from_source_dir_error,
     format_cannot_find_module_path_error,
-    format_decorator_result_kind_error,
     format_expected_item_kinded_variable_error,
     format_item_type_expected_in_type_sequence_error,
     format_name_reassigned_in_type_sequence_error,
@@ -636,9 +636,20 @@ class TypeChecker:
                             check_bodies=check_bodies,
                         )
                         collected_type = fun_type.output
-                        element_types.append(collected_type.index(self, -1))
+                        element_type = ItemVariable(ItemKind)
+                        next_collected_type = SequenceVariable()
+                        collected_type.constrain_and_bind_variables(
+                            self,
+                            TypeSequence(
+                                self,
+                                [next_collected_type, element_type],
+                            ),
+                            gamma.free_type_variables(self),
+                            [],
+                        )
+                        element_types.append(element_type)
                         # drop the top of the stack to use as the item
-                        collected_type = collected_type.index(self, slice(-1))
+                        collected_type = next_collected_type
                         phi = phi.apply_substitution(self, phi1)
                     current_subs, current_effect = (
                         phi,
@@ -795,32 +806,31 @@ class TypeChecker:
                         initial_stack=TypeSequence(self, [effect]),
                         check_bodies=check_bodies,
                     )
-                    final_type_stack_output = (
-                        final_type_stack.output.as_sequence()
-                    )
-                    if len(final_type_stack_output) != 1:
+                    final_type = ItemVariable(ItemKind)
+                    try:
+                        final_type_stack.output.constrain_and_bind_variables(
+                            self,
+                            TypeSequence(self, [final_type]),
+                            gamma.free_type_variables(self),
+                            [],
+                        )
+                    except StackMismatchError:
                         raise TypeError(
-                            'Decorators produce too many stack items: only 1 '
-                            f'should be left. Stack: {
-                                final_type_stack.output
+                            'Decorators must produce exactly one stack item. '
+                            f'Stack: {
+                                final_type_stack.output.to_user_string(self)
                             }',
                             is_occurs_check_fail=None,
                             rigid_variables=None,
                         )
-                    final_type = final_type_stack_output[0]
-                    if not (final_type.kind <= ItemKind):
-                        raise TypeError(
-                            format_decorator_result_kind_error(final_type),
-                            is_occurs_check_fail=None,
-                            rigid_variables=None,
-                        )
+                    final_type_forced = final_type.force_if_possible(self)
                     gamma |= {
                         name: (
-                            final_type.generalized_wrt(
+                            final_type_forced.generalized_wrt(
                                 self, gamma.apply_substitution(self, S)
                             )
-                            if isinstance(final_type, StackEffect)
-                            else final_type
+                            if isinstance(final_type_forced, StackEffect)
+                            else final_type_forced
                         ),
                     }
                 elif isinstance(node, concat.parse.NumberWordNode):
@@ -900,11 +910,19 @@ class TypeChecker:
                         ),
                     )
                 elif isinstance(node, concat.parse.AttributeWordNode):
-                    stack_top_type = o.index(self, -1)
-                    out_types = o.index(self, slice(-1))
-                    attr_function_type = stack_top_type.get_type_of_attribute(
-                        self, node.value
-                    ).instantiate(self)
+                    attr_function_type = ItemVariable(ItemKind)
+                    stack_top_type = ObjectType(
+                        {
+                            node.value: attr_function_type,
+                        }
+                    )
+                    out_types = SequenceVariable()
+                    current_effect.output.constrain_and_bind_variables(
+                        self,
+                        TypeSequence(self, [out_types, stack_top_type]),
+                        gamma.free_type_variables(self),
+                        [],
+                    )
                     attr_function_type_output = SequenceVariable()
                     attr_function_type.constrain_and_bind_variables(
                         self,
@@ -920,10 +938,16 @@ class TypeChecker:
                     )
                 elif isinstance(node, concat.parse.CastWordNode):
                     new_type, _ = node.type.to_type(gamma)
-                    rest = current_effect.output.index(self, slice(-1))
+                    rest = SequenceVariable()
+                    current_effect.output.constrain_and_bind_variables(
+                        self,
+                        TypeSequence(self, [rest, self.object_type]),
+                        gamma.free_type_variables(self),
+                        [],
+                    )
                     current_effect = StackEffect(
                         current_effect.input,
-                        TypeSequence(self, [*rest.as_sequence(), new_type]),
+                        TypeSequence(self, [rest, new_type]),
                     ).force_substitution(self, current_subs)
                 elif isinstance(node, concat.parse.ParseError):
                     current_effect = StackEffect(

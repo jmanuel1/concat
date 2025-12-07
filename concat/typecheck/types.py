@@ -551,6 +551,13 @@ class Type(abc.ABC):
             rigid_variables=None,
         )
 
+    # FIXME: delete `index` because it's not safe. Its answer can change over
+    # time in ways that cause bugs, for example:
+
+    # 1. [*s].index(-1) = *s
+    # 2. constrain *s <: [*t, int]
+    # 3. now, [*s].index(-1) = int
+
     @overload
     def index(self, context: TypeChecker, i: int) -> Type: ...
 
@@ -1851,8 +1858,6 @@ class TypeSequence(Type):
                 )
                 return
             except StackMismatchError as e:
-                # TODO: Add info about occurs check and rigid
-                # variables.
                 raise StackMismatchError(
                     subtype,
                     self,
