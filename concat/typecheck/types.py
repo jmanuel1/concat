@@ -2591,16 +2591,7 @@ class DelayedSubstitution(Type):
     def _free_type_variables(
         self, context: TypeChecker
     ) -> InsertionOrderedSet[Variable]:
-        return functools.reduce(
-            operator.or_,
-            (
-                v.apply_substitution(context, self._sub).free_type_variables(
-                    context
-                )
-                for v in self._ty.free_type_variables(context)
-            ),
-            InsertionOrderedSet([]),
-        )
+        raise AssertionError('DelayedSubstitution is never whnf')
 
     @_sub_cache
     def apply_substitution(
