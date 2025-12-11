@@ -54,7 +54,7 @@ from concat.typecheck.errors import (
     format_not_generic_type_error,
     format_too_many_params_for_variadic_type_error,
 )
-from concat.typecheck.substitutions import MutableSubstitutions, Substitutions
+from concat.typecheck.substitutions import MutableSubstitutions
 from concat.typecheck.types import (
     BoundVariable,
     Brand,
@@ -364,7 +364,7 @@ class TypeChecker:
         source_dir='.',
         initial_stack: Optional[Type] = None,
         check_bodies: bool = True,
-    ) -> Tuple[Substitutions, StackEffect, Environment]:
+    ) -> Tuple[StackEffect, Environment]:
         """The infer function described by Kleffner."""
         e = list(e)
         if initial_stack is None:
@@ -538,7 +538,7 @@ class TypeChecker:
                             input_stack = TypeSequence(
                                 self, [SequenceVariable()]
                             )
-                        S2, fun_type, _ = self.infer(
+                        fun_type, _ = self.infer(
                             gamma,
                             child.children,
                             extensions=extensions,
@@ -547,13 +547,11 @@ class TypeChecker:
                             check_bodies=check_bodies,
                         )
                         current_effect = StackEffect(
-                            current_effect.input.apply_substitution(self, S2),
+                            current_effect.input,
                             TypeSequence(
                                 self,
                                 [
-                                    *current_effect.output.apply_substitution(
-                                        self, S2
-                                    ).as_sequence(),
+                                    *current_effect.output.as_sequence(),
                                     QuotationType(fun_type),
                                 ],
                             ),
@@ -568,7 +566,7 @@ class TypeChecker:
                     collected_type = o
                     element_type: 'Type' = self.object_type
                     for item in node.list_children:
-                        phi1, fun_type, _ = self.infer(
+                        fun_type, _ = self.infer(
                             gamma,
                             item,
                             extensions=extensions,
@@ -591,9 +589,7 @@ class TypeChecker:
                             [],
                         )
                         # drop the top of the stack to use as the item
-                        collected_type = (
-                            collected_type_rest.apply_substitution(self, phi1)
-                        )
+                        collected_type = collected_type_rest
                     current_effect = StackEffect(
                         current_effect.input,
                         TypeSequence(
@@ -613,7 +609,7 @@ class TypeChecker:
                     collected_type = current_effect.output
                     element_types: List[Type] = []
                     for item in node.tuple_children:
-                        phi1, fun_type, _ = self.infer(
+                        fun_type, _ = self.infer(
                             gamma,
                             item,
                             extensions=extensions,
@@ -728,7 +724,7 @@ class TypeChecker:
                         name: declared_type.generalized_wrt(self, gamma)
                     }
                     if check_bodies:
-                        phi1, inferred_type, _ = self.infer(
+                        inferred_type, _ = self.infer(
                             recursion_env,
                             node.body,
                             is_top_level=False,
@@ -763,7 +759,7 @@ class TypeChecker:
                             ) from error
                     effect = declared_type
                     # type check decorators
-                    _, final_type_stack, _ = self.infer(
+                    final_type_stack, _ = self.infer(
                         gamma,
                         list(node.decorators),
                         is_top_level=False,
@@ -839,7 +835,7 @@ class TypeChecker:
                         )
                     else:
                         quotation_input_stack = current_effect.output
-                    S1, effect1, _ = self.infer(
+                    effect1, _ = self.infer(
                         gamma,
                         [*quotation.children],
                         extensions=extensions,
@@ -848,9 +844,7 @@ class TypeChecker:
                         check_bodies=check_bodies,
                     )
                     o1 = effect1.output
-                    current_effect = StackEffect(
-                        current_effect.input, o1
-                    ).force_substitution(self, S1)
+                    current_effect = StackEffect(current_effect.input, o1)
                 elif isinstance(node, concat.parse.StringWordNode):
                     current_effect = StackEffect(
                         current_effect.input,
@@ -921,7 +915,7 @@ class TypeChecker:
             except TypeError as error:
                 error.set_location_if_missing(node.location)
                 raise
-        return Substitutions(self.substitutions), current_effect, gamma
+        return current_effect, gamma
 
     @staticmethod
     def _get_class_params(
@@ -956,7 +950,7 @@ class TypeChecker:
     ) -> Environment:
         type_parameters, temp_gamma = self._get_class_params(node, gamma)
         assert not self._is_in_forward_references_phase
-        _, _, body_attrs = self.infer(
+        _, body_attrs = self.infer(
             temp_gamma,
             node.body,
             extensions=extensions,
@@ -1061,7 +1055,7 @@ class TypeChecker:
                 check_bodies=_should_check_bodies,
             )
 
-        return res[2]
+        return res[1]
 
     def _generate_type_of_innermost_module(
         self, qualified_name: str, source_dir: pathlib.Path

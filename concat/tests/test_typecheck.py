@@ -9,9 +9,10 @@ import concat.parser_combinators
 import concat.tests.strategies  # for side-effects
 import concat.typecheck
 import concat.typecheck.preamble_types
-from concat.typecheck import Environment, Substitutions, TypeChecker
+from concat.typecheck import Environment, TypeChecker
 from concat.typecheck.context import change_context
 from concat.typecheck.errors import TypeError as ConcatTypeError
+from concat.typecheck.substitutions import Substitutions
 from concat.typecheck.types import (
     BoundVariable,
     ClassType,
@@ -61,7 +62,7 @@ def build_parsers() -> concat.parse.ParserDict:
 class TestTypeChecker(unittest.TestCase):
     @given(from_type(concat.parse.AttributeWordNode))
     def test_attribute_word(self, attr_word) -> None:
-        _, type, _ = context.infer(
+        ty, _ = context.infer(
             concat.typecheck.Environment(),
             [attr_word],
             initial_stack=TypeSequence(
@@ -78,16 +79,16 @@ class TestTypeChecker(unittest.TestCase):
                 ],
             ),
         )
-        self.assertEqual(len(type.output.as_sequence()), 1)
+        self.assertEqual(len(ty.output.as_sequence()), 1)
         self.assertTrue(
-            type.output.index(context, 0).equals(context, context.int_type)
+            ty.output.index(context, 0).equals(context, context.int_type)
         )
 
     @staticmethod
     def test_add_operator_inference() -> None:
         try_prog = '0 0 +\n'
         tree = parse(try_prog)
-        sub, type, _ = context.infer(
+        ty, _ = context.infer(
             concat.typecheck.Environment({'+': default_env['+']}),
             tree.children,
             is_top_level=True,
@@ -96,13 +97,13 @@ class TestTypeChecker(unittest.TestCase):
             TypeSequence(context, []),
             TypeSequence(context, [context.int_type]),
         )
-        type.constrain_and_bind_variables(context, expected, set(), [])
-        expected.constrain_and_bind_variables(context, type, set(), [])
+        ty.constrain_and_bind_variables(context, expected, set(), [])
+        expected.constrain_and_bind_variables(context, ty, set(), [])
 
     def test_if_then_inference(self) -> None:
         try_prog = 'True $() if_then\n'
         tree = parse(try_prog)
-        _, type, _ = context.infer(
+        ty, _ = context.infer(
             concat.typecheck.Environment(
                 {
                     **default_env,
@@ -112,23 +113,22 @@ class TestTypeChecker(unittest.TestCase):
             tree.children,
             is_top_level=True,
         )
-        print(type)
         expected = StackEffect(
             TypeSequence(context, []), TypeSequence(context, [])
         )
-        type.constrain_and_bind_variables(context, expected, set(), [])
-        expected.constrain_and_bind_variables(context, type, set(), [])
+        ty.constrain_and_bind_variables(context, expected, set(), [])
+        expected.constrain_and_bind_variables(context, ty, set(), [])
 
     def test_call_inference(self) -> None:
         try_prog = '$(42) call\n'
         tree = parse(try_prog)
-        _, type, _ = context.infer(
+        ty, _ = context.infer(
             default_env,
             tree.children,
             is_top_level=True,
         )
         self.assertTrue(
-            type.equals(
+            ty.equals(
                 context,
                 StackEffect(
                     TypeSequence(context, []),
@@ -139,7 +139,7 @@ class TestTypeChecker(unittest.TestCase):
 
     @given(sampled_from(['None', '...', 'NotImplemented']))
     def test_constants(self, constant_name) -> None:
-        _, effect, _ = context.infer(
+        effect, _ = context.infer(
             default_env,
             [concat.parse.NameWordNode(lex.Token(value=constant_name))],
             initial_stack=TypeSequence(context, []),
@@ -194,7 +194,7 @@ class TestTypeChecker(unittest.TestCase):
     def test_cast_word(self) -> None:
         """Test that the type checker properly checks casts."""
         tree = parse('"str" cast (int)')
-        _, type, _ = context.infer(
+        ty, _ = context.infer(
             Environment(
                 {
                     **default_env,
@@ -205,7 +205,7 @@ class TestTypeChecker(unittest.TestCase):
             is_top_level=True,
         )
         self.assertTrue(
-            type.equals(
+            ty.equals(
                 context,
                 StackEffect(
                     TypeSequence(context, []),
