@@ -216,6 +216,7 @@ class Type(abc.ABC):
     ) -> InsertionOrderedSet['Variable']:
         pass
 
+    @_whnf_self
     def free_type_variables(
         self, context: TypeChecker
     ) -> InsertionOrderedSet['Variable']:
