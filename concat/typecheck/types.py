@@ -2999,7 +2999,8 @@ class PythonFunctionType(IndividualType):
         if (
             subtype._overloads.arguments
             and isinstance(subtype._overloads.arguments[0], Variable)
-            and subtype._overloads.arguments[0].kind <= SequenceKind
+            and subtype._overloads.arguments[0].kind
+            <= VariableArgumentKind(TopKind)
         ):
             return subtype._overloads.arguments[
                 0
