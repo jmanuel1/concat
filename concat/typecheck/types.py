@@ -410,7 +410,7 @@ class Type(abc.ABC):
                 is_occurs_check_fail=False,
                 rigid_variables=rigid_variables,
             )
-        raise NotImplementedError
+        raise NotImplementedError(repr(self))
 
     def _constrain_as_supertype_of_object_type(
         self,
@@ -450,7 +450,7 @@ class Type(abc.ABC):
         subtyping_assumptions: Sequence[tuple[Type, Type]],
     ) -> None:
         if self.kind >= subtype.kind:
-            raise NotImplementedError
+            raise NotImplementedError(repr(self))
         raise ConcatTypeError(
             format_subkinding_error(subtype, self),
             is_occurs_check_fail=False,
@@ -1229,10 +1229,10 @@ class ItemVariable(Variable):
             subtyping_assumptions,
         )
 
-    def _constrain_as_supertype_of_stack_effect(
+    def __constrain_as_supertype_of_individual_type(
         self,
         context: TypeChecker,
-        subtype: StackEffect,
+        subtype: Type,
         rigid_variables: AbstractSet[Variable],
         subtyping_assumptions: Sequence[tuple[Type, Type]],
     ) -> None:
@@ -1256,27 +1256,15 @@ class ItemVariable(Variable):
             )
         context.substitutions[self] = subtype
 
-    def _constrain_as_supertype_of_py_overloaded_type(
-        self,
-        context: TypeChecker,
-        subtype: PythonOverloadedType,
-        rigid_variables: AbstractSet[Variable],
-        subtyping_assumptions: Sequence[tuple[Type, Type]],
-    ) -> None:
-        if self not in rigid_variables:
-            if self in subtype.free_type_variables(context):
-                raise ConcatTypeError(
-                    format_occurs_error(self, subtype),
-                    is_occurs_check_fail=True,
-                    rigid_variables=rigid_variables,
-                )
-            context.substitutions[self] = subtype
-            return
-        raise ConcatTypeError(
-            format_rigid_variable_error(self, subtype),
-            is_occurs_check_fail=False,
-            rigid_variables=rigid_variables,
-        )
+    _constrain_as_supertype_of_stack_effect = (
+        __constrain_as_supertype_of_individual_type
+    )
+    _constrain_as_supertype_of_py_overloaded_type = (
+        __constrain_as_supertype_of_individual_type
+    )
+    _constrain_as_supertype_of_py_function_type = (
+        __constrain_as_supertype_of_individual_type
+    )
 
     def _constrain_as_supertype_of_type_sequence(
         self,
@@ -1290,6 +1278,14 @@ class ItemVariable(Variable):
             is_occurs_check_fail=False,
             rigid_variables=rigid_variables,
         )
+
+    # this is needed to respect the possibility of binding a variable to an
+    # optional type when the variable is the supertype
+    _constrain_as_supertype_of_optional_type = (
+        __constrain_as_supertype_of_individual_type
+    )
+
+    # FIXME: generic subtypes
 
     def to_user_string(self, context: TypeChecker) -> str:
         return 't_{}'.format(id(self))
@@ -2035,10 +2031,10 @@ class StackEffect(IndividualType):
             subtyping_assumptions,
         )
 
-    def _constrain_as_supertype_of_type_sequence(
+    def __constrain_raise_subtyping_error(
         self,
         context: TypeChecker,
-        subtype: TypeSequence,
+        subtype: Type,
         rigid_variables: AbstractSet[Variable],
         subtyping_assumptions: Sequence[tuple[Type, Type]],
     ) -> None:
@@ -2047,6 +2043,16 @@ class StackEffect(IndividualType):
             is_occurs_check_fail=None,
             rigid_variables=rigid_variables,
         )
+
+    _constrain_as_supertype_of_type_sequence = (
+        __constrain_raise_subtyping_error
+    )
+    _constrain_as_supertype_of_py_function_type = (
+        __constrain_raise_subtyping_error
+    )
+    _constrain_as_supertype_of_py_overloaded_type = (
+        __constrain_raise_subtyping_error
+    )
 
     def _free_type_variables(
         self, context: TypeChecker
@@ -2139,9 +2145,6 @@ class QuotationType(StackEffect):
         })'
 
 
-StackItemType = Union[SequenceVariable, IndividualType]
-
-
 def free_type_variables_of_mapping(
     context: TypeChecker,
     attributes: Mapping[str, Type],
@@ -2217,6 +2220,7 @@ class NominalType(Type):
     def _free_type_variables(
         self, context: TypeChecker
     ) -> InsertionOrderedSet[Variable]:
+        # QUESTION: Include supertypes?
         return self._ty.free_type_variables(context)
 
     def force(self, context: TypeChecker) -> None:
@@ -2444,7 +2448,6 @@ class ObjectType(IndividualType):
         self, context: TypeChecker
     ) -> InsertionOrderedSet[Variable]:
         ftv = free_type_variables_of_mapping(context, self.attributes(context))
-        # QUESTION: Include supertypes?
         return ftv
 
     def to_user_string(self, _context: TypeChecker) -> str:

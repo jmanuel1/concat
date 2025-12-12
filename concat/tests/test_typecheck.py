@@ -29,7 +29,7 @@ from concat.typecheck.types import (
     Type,
     TypeSequence,
 )
-from hypothesis import HealthCheck, example, given, note, settings
+from hypothesis import HealthCheck, assume, example, given, note, settings
 from hypothesis.strategies import (
     dictionaries,
     from_type,
@@ -92,6 +92,59 @@ class TestTypeChecker(unittest.TestCase):
         self.assertTrue(
             ty.output.index(context, 0).equals(context, attr_ret_ty)
         )
+
+    @given(
+        from_type(concat.parse.AttributeWordNode),
+        strategies.individual_type_strategy(context),
+    )
+    def test_push_attribute_word(
+        self, attr_word: concat.parse.AttributeWordNode, attr_ty: Type
+    ) -> None:
+        ty, _ = context.infer(
+            concat.typecheck.Environment(),
+            [concat.parse.PushWordNode((0, 0), attr_word)],
+            initial_stack=TypeSequence(
+                context,
+                [
+                    ObjectType(
+                        {
+                            attr_word.value: attr_ty,
+                        },
+                    ),
+                ],
+            ),
+        )
+        note(ty.output.to_user_string(context))
+        ty.output.constrain_and_bind_variables(
+            context, TypeSequence(context, [attr_ty]), set(), []
+        )
+
+    @given(
+        from_type(concat.parse.AttributeWordNode),
+        strategies.individual_type_strategy(context),
+    )
+    def test_attribute_word_error(
+        self, attr_word: concat.parse.AttributeWordNode, attr_ty: Type
+    ) -> None:
+        try:
+            context.infer(
+                concat.typecheck.Environment(),
+                [attr_word],
+                initial_stack=TypeSequence(
+                    context,
+                    [
+                        ObjectType(
+                            {
+                                attr_word.value: attr_ty,
+                            },
+                        ),
+                    ],
+                ),
+            )
+        except StaticAnalysisError:
+            pass
+        else:
+            assume(False)
 
     @staticmethod
     def test_add_operator_inference() -> None:
