@@ -174,19 +174,16 @@ class Type(abc.ABC):
         self = self.force_if_possible(context)
         other = other.force_if_possible(context)
         # QUESTION: Define == separately from subtyping code?
-        ftv = self.free_type_variables(context) | other.free_type_variables(
-            context
-        )
         with context.substitutions.push() as new_subs:
             try:
                 self.constrain_and_bind_variables(context, other, set(), [])
                 other.constrain_and_bind_variables(context, self, set(), [])
             except StaticAnalysisError:
                 return False
-        new_subs = Substitutions(
-            {v: t for v, t in new_subs.items() if v in ftv}
+        ftv = self.free_type_variables(context) | other.free_type_variables(
+            context
         )
-        return not new_subs
+        return not any(v in ftv for v in new_subs)
 
     # NOTE: Avoid hashing types. I'm having correctness issues related to
     # hashing that I'd rather avoid entirely. Maybe one day I'll introduce hash
