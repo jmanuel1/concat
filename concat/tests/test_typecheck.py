@@ -6,12 +6,15 @@ import concat.astutils
 import concat.lex as lex
 import concat.parse
 import concat.parser_combinators
-import concat.tests.strategies  # for side-effects
+import concat.tests.strategies as strategies
 import concat.typecheck
 import concat.typecheck.preamble_types
 from concat.typecheck import Environment, TypeChecker
 from concat.typecheck.context import change_context
-from concat.typecheck.errors import TypeError as ConcatTypeError
+from concat.typecheck.errors import (
+    StaticAnalysisError,
+    TypeError as ConcatTypeError,
+)
 from concat.typecheck.substitutions import Substitutions
 from concat.typecheck.types import (
     BoundVariable,
@@ -23,6 +26,7 @@ from concat.typecheck.types import (
     ItemVariable,
     ObjectType,
     StackEffect,
+    Type,
     TypeSequence,
 )
 from hypothesis import HealthCheck, example, given, note, settings
@@ -60,8 +64,13 @@ def build_parsers() -> concat.parse.ParserDict:
 
 
 class TestTypeChecker(unittest.TestCase):
-    @given(from_type(concat.parse.AttributeWordNode))
-    def test_attribute_word(self, attr_word) -> None:
+    @given(
+        from_type(concat.parse.AttributeWordNode),
+        strategies.individual_type_strategy(context),
+    )
+    def test_attribute_word(
+        self, attr_word: concat.parse.AttributeWordNode, attr_ret_ty: Type
+    ) -> None:
         ty, _ = context.infer(
             concat.typecheck.Environment(),
             [attr_word],
@@ -72,7 +81,7 @@ class TestTypeChecker(unittest.TestCase):
                         {
                             attr_word.value: StackEffect(
                                 TypeSequence(context, []),
-                                TypeSequence(context, [context.int_type]),
+                                TypeSequence(context, [attr_ret_ty]),
                             ),
                         },
                     ),
@@ -81,7 +90,7 @@ class TestTypeChecker(unittest.TestCase):
         )
         self.assertEqual(len(ty.output.as_sequence()), 1)
         self.assertTrue(
-            ty.output.index(context, 0).equals(context, context.int_type)
+            ty.output.index(context, 0).equals(context, attr_ret_ty)
         )
 
     @staticmethod
