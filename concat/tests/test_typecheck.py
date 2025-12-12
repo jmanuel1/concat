@@ -13,8 +13,8 @@ from concat.typecheck import Environment, TypeChecker
 from concat.typecheck.context import change_context
 from concat.typecheck.errors import (
     StaticAnalysisError,
-    TypeError as ConcatTypeError,
 )
+from concat.typecheck.errors import TypeError as ConcatTypeError
 from concat.typecheck.substitutions import Substitutions
 from concat.typecheck.types import (
     BoundVariable,
