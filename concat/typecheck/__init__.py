@@ -62,7 +62,6 @@ from concat.typecheck.types import (
     GenericType,
     GenericTypeKind,
     IndividualKind,
-    IndividualType,
     ItemKind,
     ItemVariable,
     Kind,
@@ -359,7 +358,7 @@ class TypeChecker:
         self,
         gamma: Environment,
         e: Sequence[concat.parse.Node],
-        extensions: Optional[Tuple[Callable]] = None,
+        extensions: Optional[Sequence[Callable]] = None,
         is_top_level=False,
         source_dir='.',
         initial_stack: Optional[Type] = None,
@@ -445,11 +444,6 @@ class TypeChecker:
 
         for node in e:
             try:
-                i, o = (
-                    current_effect.input,
-                    current_effect.output,
-                )
-
                 if isinstance(node, concat.parse.PragmaNode):
                     namespace = 'concat.typecheck.'
                     if node.pragma.startswith(namespace):
@@ -480,7 +474,6 @@ class TypeChecker:
                         name = node.args[0]
                         self._module_type = gamma[name]
                 elif isinstance(node, concat.parse.PushWordNode):
-                    (_, o1) = (i, o)
                     child = node.children[0]
                     if isinstance(child, concat.parse.FreezeWordNode):
                         should_instantiate = False
@@ -492,7 +485,7 @@ class TypeChecker:
                         attr_type: Type = ItemVariable(ItemKind)
                         top = ObjectType({child.value: attr_type})
                         rest_types = SequenceVariable()
-                        o1.constrain_and_bind_variables(
+                        current_effect.output.constrain_and_bind_variables(
                             self,
                             TypeSequence(self, [rest_types, top]),
                             gamma.free_type_variables(self),
@@ -563,7 +556,7 @@ class TypeChecker:
                             )
                         )
                 elif isinstance(node, concat.parse.ListWordNode):
-                    collected_type = o
+                    collected_type = current_effect.output
                     element_type: 'Type' = self.object_type
                     for item in node.list_children:
                         fun_type, _ = self.infer(
@@ -797,7 +790,11 @@ class TypeChecker:
                         current_effect = StackEffect(
                             current_effect.input,
                             TypeSequence(
-                                self, [*o.as_sequence(), self._int_type]
+                                self,
+                                [
+                                    *current_effect.output.as_sequence(),
+                                    self._int_type,
+                                ],
                             ),
                         )
                     else:
@@ -830,7 +827,7 @@ class TypeChecker:
                         quotation_input_stack = quote_input_stack_node.to_type(
                             gamma
                         )[0]
-                        o.constrain_and_bind_variables(
+                        current_effect.output.constrain_and_bind_variables(
                             self, input_stack, set(), []
                         )
                     else:
@@ -924,7 +921,9 @@ class TypeChecker:
         type_parameters: List[Variable] = []
         temp_gamma = gamma
         for param_node in node.type_parameters:
-            if not isinstance(param_node, TypeNode):
+            if not isinstance(
+                param_node, (_ItemVariableNode, _SequenceVariableNode)
+            ):
                 raise UnhandledNodeTypeError(param_node)
             param, temp_gamma = param_node.to_type(temp_gamma)
             type_parameters.append(param)
@@ -1158,10 +1157,6 @@ class TypeNode(concat.parse.Node, abc.ABC):
         pass
 
 
-class IndividualTypeNode(TypeNode, abc.ABC):
-    pass
-
-
 # A dataclass is not used here because making this a subclass of an abstract
 # class does not work without overriding __init__ even when it's a dataclass.
 class NamedTypeNode(TypeNode):
@@ -1191,13 +1186,13 @@ class NamedTypeNode(TypeNode):
         return {self.name}
 
 
-class _GenericTypeNode(IndividualTypeNode):
+class _GenericTypeNode(TypeNode):
     def __init__(
         self,
         location: Location,
         end_location: Location,
-        generic_type: IndividualTypeNode,
-        type_arguments: Sequence[IndividualTypeNode],
+        generic_type: TypeNode,
+        type_arguments: Sequence[TypeNode],
     ) -> None:
         super().__init__(
             location, end_location, [generic_type] + list(type_arguments)
@@ -1206,7 +1201,7 @@ class _GenericTypeNode(IndividualTypeNode):
         self._type_arguments = type_arguments
         self.end_location = end_location
 
-    def to_type(self, env: Environment) -> Tuple[IndividualType, Environment]:
+    def to_type(self, env: Environment) -> Tuple[Type, Environment]:
         args = []
         for arg in self._type_arguments:
             arg_as_type, env = arg.to_type(env)
@@ -1222,7 +1217,7 @@ class _GenericTypeNode(IndividualTypeNode):
         )
 
 
-class _TypeSequenceIndividualTypeNode(IndividualTypeNode):
+class _TypeSequenceIndividualTypeNode(TypeNode):
     def __init__(
         self,
         args: Tuple[concat.lex.Token, Optional[TypeNode]]
@@ -1321,7 +1316,7 @@ class TypeSequenceNode(TypeNode):
         return self._individual_type_items
 
 
-class StackEffectTypeNode(IndividualTypeNode):
+class StackEffectTypeNode(TypeNode):
     def __init__(
         self,
         location: Location,
@@ -1499,12 +1494,12 @@ class _ForallTypeNode(TypeNode):
         return forall_type, env
 
 
-class _ObjectTypeNode(IndividualTypeNode):
+class _ObjectTypeNode(TypeNode):
     """The AST type for anonymous structural object types."""
 
     def __init__(
         self,
-        attribute_type_pairs: Iterable[Tuple[Token, IndividualTypeNode]],
+        attribute_type_pairs: Iterable[Tuple[Token, TypeNode]],
         location: Location,
         end_location: Location,
     ) -> None:
