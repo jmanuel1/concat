@@ -27,7 +27,7 @@ class TestImports(TestCase):
             [ImportStatementNode('imported_module', (0, 0), (0, 0))],
             is_top_level=True,
             source_dir=test_module_path,
-        )[2]
+        )[1]
         ty = env['imported_module']
         with change_context(context):
             seq_var = BoundVariable(kind=SequenceKind)

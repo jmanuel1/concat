@@ -132,7 +132,7 @@ class WordNode(Node, abc.ABC):
 
 class CastWordNode(WordNode):
     def __init__(
-        self, type: 'concat.typecheck.IndividualTypeNode', location: 'Location'
+        self, type: 'concat.typecheck.TypeNode', location: 'Location'
     ):
         super().__init__(location, type.end_location, [type])
         self.type = type

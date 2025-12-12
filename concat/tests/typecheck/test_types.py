@@ -33,14 +33,14 @@ class TestIndividualVariableConstrain(unittest.TestCase):
     def test_individual_variable_subtype(self) -> None:
         v = ItemVariable(IndividualKind)
         ty = context.int_type
-        sub = v.constrain_and_bind_variables(context, ty, set(), [])
-        self.assertTrue(ty.equals(context, v.apply_substitution(context, sub)))
+        v.constrain_and_bind_variables(context, ty, set(), [])
+        self.assertTrue(ty.equals(context, v))
 
     def test_individual_variable_supertype(self) -> None:
         v = ItemVariable(IndividualKind)
         ty = context.int_type
-        sub = ty.constrain_and_bind_variables(context, v, set(), [])
-        self.assertTrue(ty.equals(context, v.apply_substitution(context, sub)))
+        ty.constrain_and_bind_variables(context, v, set(), [])
+        self.assertTrue(ty.equals(context, v))
 
     def test_attribute_subtype(self) -> None:
         v = ItemVariable(IndividualKind)
@@ -53,11 +53,9 @@ class TestIndividualVariableConstrain(unittest.TestCase):
         v = ItemVariable(IndividualKind)
         attr_ty = ObjectType({'__add__': v})
         ty = context.int_type
-        sub = ty.constrain_and_bind_variables(context, attr_ty, set(), [])
+        ty.constrain_and_bind_variables(context, attr_ty, set(), [])
         self.assertTrue(
-            ty.get_type_of_attribute(context, '__add__').equals(
-                context, v.apply_substitution(context, sub)
-            )
+            ty.get_type_of_attribute(context, '__add__').equals(context, v)
         )
 
     def test_py_function_return_subtype(self) -> None:
@@ -66,12 +64,8 @@ class TestIndividualVariableConstrain(unittest.TestCase):
             context, [TypeSequence(context, [context.int_type]), v]
         )
         ty = context.int_type.get_type_of_attribute(context, '__add__')
-        sub = py_fun_ty.constrain_and_bind_variables(context, ty, set(), [])
-        self.assertTrue(
-            context.int_type.equals(
-                context, v.apply_substitution(context, sub)
-            )
-        )
+        py_fun_ty.constrain_and_bind_variables(context, ty, set(), [])
+        self.assertTrue(context.int_type.equals(context, v))
 
     def test_py_function_return_supertype(self) -> None:
         v = ItemVariable(IndividualKind)
@@ -79,45 +73,29 @@ class TestIndividualVariableConstrain(unittest.TestCase):
             TypeSequence(context, [context.int_type]), v
         ]
         ty = context.int_type.get_type_of_attribute(context, '__add__')
-        sub = ty.constrain_and_bind_variables(context, py_fun_ty, set(), [])
-        self.assertTrue(
-            context.int_type.equals(
-                context, v.apply_substitution(context, sub)
-            )
-        )
+        ty.constrain_and_bind_variables(context, py_fun_ty, set(), [])
+        self.assertTrue(context.int_type.equals(context, v))
 
     def test_type_sequence_subtype(self) -> None:
         v = ItemVariable(IndividualKind)
         seq_ty = TypeSequence(context, [v])
         ty = TypeSequence(context, [context.int_type])
-        sub = seq_ty.constrain_and_bind_variables(context, ty, set(), [])
-        self.assertTrue(
-            context.int_type.equals(
-                context, v.apply_substitution(context, sub)
-            )
-        )
+        seq_ty.constrain_and_bind_variables(context, ty, set(), [])
+        self.assertTrue(context.int_type.equals(context, v))
 
     def test_type_sequence_supertype(self) -> None:
         v = ItemVariable(IndividualKind)
         seq_ty = TypeSequence(context, [v])
         ty = TypeSequence(context, [context.int_type])
-        sub = ty.constrain_and_bind_variables(context, seq_ty, set(), [])
-        self.assertTrue(
-            context.int_type.equals(
-                context, v.apply_substitution(context, sub)
-            )
-        )
+        ty.constrain_and_bind_variables(context, seq_ty, set(), [])
+        self.assertTrue(context.int_type.equals(context, v))
 
     def test_int_addable(self) -> None:
         v = ItemVariable(IndividualKind)
-        sub = context.int_type.constrain_and_bind_variables(
+        context.int_type.constrain_and_bind_variables(
             context, context.addable_type[v, v], set(), []
         )
-        self.assertTrue(
-            context.int_type.equals(
-                context, v.apply_substitution(context, sub)
-            )
-        )
+        self.assertTrue(context.int_type.equals(context, v))
 
     def test_int__add__addable__add__(self) -> None:
         v = ItemVariable(IndividualKind)
@@ -125,14 +103,8 @@ class TestIndividualVariableConstrain(unittest.TestCase):
         addable_add = context.addable_type[v, v].get_type_of_attribute(
             context, '__add__'
         )
-        sub = int_add.constrain_and_bind_variables(
-            context, addable_add, set(), []
-        )
-        self.assertTrue(
-            context.int_type.equals(
-                context, v.apply_substitution(context, sub)
-            )
-        )
+        int_add.constrain_and_bind_variables(context, addable_add, set(), [])
+        self.assertTrue(context.int_type.equals(context, v))
 
 
 class TestSequenceVariableConstrain(unittest.TestCase):
@@ -142,12 +114,8 @@ class TestSequenceVariableConstrain(unittest.TestCase):
             TypeSequence(context, [v]), TypeSequence(context, [])
         )
         ty = StackEffect(TypeSequence(context, []), TypeSequence(context, []))
-        sub = effect_ty.constrain_and_bind_variables(context, ty, set(), [])
-        self.assertTrue(
-            TypeSequence(context, []).equals(
-                context, v.apply_substitution(context, sub)
-            )
-        )
+        effect_ty.constrain_and_bind_variables(context, ty, set(), [])
+        self.assertTrue(TypeSequence(context, []).equals(context, v))
 
     def test_stack_effect_input_supertype(self) -> None:
         v = SequenceVariable()
@@ -155,12 +123,8 @@ class TestSequenceVariableConstrain(unittest.TestCase):
             TypeSequence(context, [v]), TypeSequence(context, [])
         )
         ty = StackEffect(TypeSequence(context, []), TypeSequence(context, []))
-        sub = ty.constrain_and_bind_variables(context, effect_ty, set(), [])
-        self.assertTrue(
-            TypeSequence(context, []).equals(
-                context, v.apply_substitution(context, sub)
-            )
-        )
+        ty.constrain_and_bind_variables(context, effect_ty, set(), [])
+        self.assertTrue(TypeSequence(context, []).equals(context, v))
 
 
 class TestFix(unittest.TestCase):
@@ -174,19 +138,23 @@ class TestFix(unittest.TestCase):
         )
 
     def test_unroll_supertype(self) -> None:
-        self.assertEqual(
-            Substitutions(),
+        with context.substitutions.push() as subs:
             self.linked_list.constrain_and_bind_variables(
                 context, self.linked_list.unroll(context), set(), []
-            ),
+            )
+        self.assertEqual(
+            Substitutions(),
+            subs,
         )
 
     def test_unroll_subtype(self) -> None:
-        self.assertEqual(
-            Substitutions(),
+        with context.substitutions.push() as subs:
             self.linked_list.unroll(context).constrain_and_bind_variables(
                 context, self.linked_list, set(), []
-            ),
+            )
+        self.assertEqual(
+            Substitutions(),
+            subs,
         )
 
     def test_unroll_equal(self) -> None:
@@ -200,11 +168,13 @@ class TestFix(unittest.TestCase):
 
 class TestTypeSequence(unittest.TestCase):
     def test_constrain_empty(self) -> None:
-        self.assertEqual(
-            Substitutions(),
+        with context.substitutions.push() as subs:
             TypeSequence(context, []).constrain_and_bind_variables(
                 context, TypeSequence(context, []), set(), []
-            ),
+            )
+        self.assertEqual(
+            Substitutions(),
+            subs,
         )
 
     def test_empty_equal(self) -> None:
