@@ -63,14 +63,14 @@ def build_parsers() -> concat.parse.ParserDict:
     return parsers
 
 
+attr_word = concat.parse.AttributeWordNode((0, 0), concat.lex.Token())
+
+
 class TestTypeChecker(unittest.TestCase):
     @given(
-        from_type(concat.parse.AttributeWordNode),
         strategies.individual_type_strategy(context),
     )
-    def test_attribute_word(
-        self, attr_word: concat.parse.AttributeWordNode, attr_ret_ty: Type
-    ) -> None:
+    def test_attribute_word(self, attr_ret_ty: Type) -> None:
         ty, _ = context.infer(
             concat.typecheck.Environment(),
             [attr_word],
@@ -94,12 +94,9 @@ class TestTypeChecker(unittest.TestCase):
         )
 
     @given(
-        from_type(concat.parse.AttributeWordNode),
         strategies.individual_type_strategy(context),
     )
-    def test_push_attribute_word(
-        self, attr_word: concat.parse.AttributeWordNode, attr_ty: Type
-    ) -> None:
+    def test_push_attribute_word(self, attr_ty: Type) -> None:
         ty, _ = context.infer(
             concat.typecheck.Environment(),
             [concat.parse.PushWordNode((0, 0), attr_word)],
@@ -120,12 +117,9 @@ class TestTypeChecker(unittest.TestCase):
         )
 
     @given(
-        from_type(concat.parse.AttributeWordNode),
         strategies.individual_type_strategy(context),
     )
-    def test_attribute_word_error(
-        self, attr_word: concat.parse.AttributeWordNode, attr_ty: Type
-    ) -> None:
+    def test_attribute_word_error(self, attr_ty: Type) -> None:
         try:
             context.infer(
                 concat.typecheck.Environment(),
