@@ -2110,7 +2110,8 @@ class QuotationType(StackEffect):
         try:
             with context.substitutions.push():
                 # FIXME: Don't present new variables every time.
-                # FIXME: Account for the types of the elements of the quotation.
+                # FIXME: Account for the types of the elements of the
+                # quotation.
                 in_var = ItemVariable(IndividualKind)
                 out_var = ItemVariable(IndividualKind)
                 quotation_iterable_type = context.iterable_type.apply(

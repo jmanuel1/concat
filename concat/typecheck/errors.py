@@ -106,7 +106,8 @@ class StackMismatchError(TypeError):
         super().__init__(
             f'The stack here is {
                 actual.to_user_string(context)
-            }, but sequence type {expected.to_user_string(context)} was expected',
+            }, but sequence type {expected.to_user_string(context)} was '
+            'expected',
             is_occurs_check_fail,
             rigid_variables,
         )
