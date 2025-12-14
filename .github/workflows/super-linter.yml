@@ -52,7 +52,7 @@ jobs:
           # To report GitHub Actions status checks
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VALIDATE_ALL_CODEBASE: "${{ github.event_name == 'pull_request' && 'false' || 'true' }}"
-          PYTHONPATH: "/github/workflow/.venv/lib/python3.12/site-packages:/github/workspace"
+          PYTHONPATH: "/github/workspace:/github/workflow/.venv/lib/python3.12/site-packages"
 
       - name: Commit and push linting fixes
         # Run only on:
