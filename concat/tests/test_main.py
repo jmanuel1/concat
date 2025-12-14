@@ -5,9 +5,10 @@ Test the main driver that you would run with `python -m concat`.
 import contextlib
 import subprocess
 import sys
-from typing import Iterator
-from typing_extensions import Protocol
 import unittest
+from typing import Iterator
+
+from typing_extensions import Protocol
 
 
 class SupportsReadline(Protocol):
