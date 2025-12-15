@@ -3,13 +3,12 @@ Test the main driver that you would run with `python -m concat`.
 """
 
 import contextlib
-import os
-import os.path
 import subprocess
 import sys
-from typing import Iterator, TextIO
-from typing_extensions import Protocol
 import unittest
+from typing import Iterator
+
+from typing_extensions import Protocol
 
 
 class SupportsReadline(Protocol):
@@ -49,7 +48,7 @@ else:
 
 class TestREPL(unittest.TestCase):
     def test_repl(self):
-        """Test that the REPL is activated when the input file to `concat` is a tty."""
+        """Test that REPL is activated when input file to `concat` is a tty."""
 
         with spawn(
             sys.executable,
@@ -63,3 +62,24 @@ class TestREPL(unittest.TestCase):
             first_line = process.readline()
 
         self.assertIn('Concat REPL', first_line)
+
+
+class TestTokenizer(unittest.TestCase):
+    def test_success(self):
+        subprocess.run(
+            [
+                sys.executable,
+                '-m',
+                'coverage',
+                'run',
+                '-m',
+                'concat',
+                '--tokenize',
+                'concat/examples/list.cat',
+            ],
+            check=True,
+            timeout=30,
+            capture_output=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
