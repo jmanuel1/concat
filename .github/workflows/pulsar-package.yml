@@ -14,11 +14,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout the Latest Package Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
       - name: Setup Pulsar Editor
         uses: pulsar-edit/action-pulsar-dependency@v3.4
       - name: Set up Python 3.12
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install dependencies using ppm

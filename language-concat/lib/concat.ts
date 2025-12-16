@@ -29,7 +29,7 @@ const Concat = {
           PYTHONIOENCODING: "utf-8",
         },
       },
-      line
+      line,
     );
     const tokens = JSON.parse(stdout);
     const remainingTokens = tokens.map((token) => {
@@ -74,14 +74,17 @@ const Concat = {
     editor: TextEditor | string,
     args: string[],
     options: ExecFileOptions & ObjectEncodingOptions,
-    input: string
+    input: string,
   ): Promise<{ stdout: string }> {
     for (const pythonPath of Concat.collectPossiblePythonPaths(editor)) {
       const promise = execFile(pythonPath, args, options);
       const process = promise.child;
       const stdin = process.stdin!;
       stdin.on("error", (error) => {
-        if (!isErrnoException(error) || !["EPIPE", "ERR_STREAM_DESTROYED"].includes(error.code)) {
+        if (
+          !isErrnoException(error) ||
+          !["EPIPE", "ERR_STREAM_DESTROYED"].includes(error.code)
+        ) {
           console.error(error);
         }
       });
@@ -89,7 +92,10 @@ const Concat = {
       try {
         await end(input);
       } catch (error) {
-        if (!isErrnoException(error) || !["EPIPE", "ERR_STREAM_DESTROYED"].includes(error.code)) {
+        if (
+          !isErrnoException(error) ||
+          !["EPIPE", "ERR_STREAM_DESTROYED"].includes(error.code)
+        ) {
           throw error;
         }
       }
