@@ -79,16 +79,22 @@ const Concat = {
     for (const pythonPath of Concat.collectPossiblePythonPaths(editor)) {
       const promise = execFile(pythonPath, args, options);
       const process = promise.child;
-
-      const notFoundPromise = new Promise<{ stdout: string }>((_, reject) =>
-        process.on("error", (error) => {
-          reject(error);
-        })
-      );
-      process.stdin?.write(input);
-      process.stdin?.end();
+      const stdin = process.stdin!;
+      stdin.on("error", (error) => {
+        if (!isErrnoException(error) || error.code !== "EPIPE") {
+          console.error(error);
+        }
+      });
+      const end = promisify(stdin.end.bind(stdin));
       try {
-        return await Promise.race([promise, notFoundPromise]);
+        await end(input);
+      } catch (error) {
+        if (!isErrnoException(error) || error.code !== "EPIPE") {
+          throw error;
+        }
+      }
+      try {
+        return await promise;
       } catch (error) {
         if (isErrnoException(error) && error.code === "ENOENT") {
           continue;
