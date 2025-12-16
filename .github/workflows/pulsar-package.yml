@@ -16,7 +16,7 @@ jobs:
       - name: Checkout the Latest Package Code
         uses: actions/checkout@v3
       - name: Setup Pulsar Editor
-        uses: pulsar-edit/action-pulsar-dependency@v3.3
+        uses: pulsar-edit/action-pulsar-dependency@v3.4
       - name: Set up Python 3.12
         uses: actions/setup-python@v3
         with:
