@@ -29,7 +29,7 @@ const Concat = {
           PYTHONIOENCODING: "utf-8",
         },
       },
-      line
+      line,
     );
     const tokens = JSON.parse(stdout);
     const remainingTokens = tokens.map((token) => {
@@ -71,24 +71,36 @@ const Concat = {
   },
 
   async execFoundPython(
-    editor: TextEditor,
+    editor: TextEditor | string,
     args: string[],
     options: ExecFileOptions & ObjectEncodingOptions,
-    input: string
+    input: string,
   ): Promise<{ stdout: string }> {
     for (const pythonPath of Concat.collectPossiblePythonPaths(editor)) {
       const promise = execFile(pythonPath, args, options);
       const process = promise.child;
-
-      const notFoundPromise = new Promise<{ stdout: string }>((_, reject) =>
-        process.on("error", (error) => {
-          reject(error);
-        })
-      );
-      process.stdin?.write(input);
-      process.stdin?.end();
+      const stdin = process.stdin!;
+      stdin.on("error", (error) => {
+        if (
+          !isErrnoException(error) ||
+          !["EPIPE", "ERR_STREAM_DESTROYED"].includes(error.code)
+        ) {
+          console.error(error);
+        }
+      });
+      const end = promisify(stdin.end.bind(stdin));
       try {
-        return await Promise.race([promise, notFoundPromise]);
+        await end(input);
+      } catch (error) {
+        if (
+          !isErrnoException(error) ||
+          !["EPIPE", "ERR_STREAM_DESTROYED"].includes(error.code)
+        ) {
+          throw error;
+        }
+      }
+      try {
+        return await promise;
       } catch (error) {
         if (isErrnoException(error) && error.code === "ENOENT") {
           continue;
