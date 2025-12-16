@@ -71,7 +71,7 @@ const Concat = {
   },
 
   async execFoundPython(
-    editor: TextEditor,
+    editor: TextEditor | string,
     args: string[],
     options: ExecFileOptions & ObjectEncodingOptions,
     input: string
@@ -81,7 +81,7 @@ const Concat = {
       const process = promise.child;
       const stdin = process.stdin!;
       stdin.on("error", (error) => {
-        if (!isErrnoException(error) || error.code !== "EPIPE") {
+        if (!isErrnoException(error) || !["EPIPE", "ERR_STREAM_DESTROYED"].includes(error.code)) {
           console.error(error);
         }
       });
@@ -89,7 +89,7 @@ const Concat = {
       try {
         await end(input);
       } catch (error) {
-        if (!isErrnoException(error) || error.code !== "EPIPE") {
+        if (!isErrnoException(error) || !["EPIPE", "ERR_STREAM_DESTROYED"].includes(error.code)) {
           throw error;
         }
       }
