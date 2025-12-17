@@ -47,7 +47,7 @@ jobs:
         run: /home/runner/work/_temp/_github_workflow/.venv/bin/pip install -e ".[test]"
 
       - name: Super-linter
-        uses: super-linter/super-linter@v7.3.0 # x-release-please-version
+        uses: super-linter/super-linter@v8
         env:
           # To report GitHub Actions status checks
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
