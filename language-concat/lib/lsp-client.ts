@@ -42,7 +42,7 @@ class ConcatLanguageClient extends AutoLanguageClient {
         return;
       }
 
-      const process = super.spawn(pythonPaths[0], ["-m", "concat.lsp"], {
+      const process = this.spawn(pythonPaths[0], ["-m", "concat.lsp"], {
         cwd: projectPath,
         windowsHide: true,
       });
