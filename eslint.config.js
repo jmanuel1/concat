@@ -1,7 +1,7 @@
-import globals from "globals";
-import { defineConfig } from "eslint/config";
+const globals = require("globals");
+const { defineConfig } = require("eslint/config");
 
-export default defineConfig([
+module.exports = defineConfig([
 	{
 		basePath: "language-concat/spec",
 		languageOptions: {
