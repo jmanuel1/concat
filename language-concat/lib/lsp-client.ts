@@ -1,6 +1,5 @@
 import { AutoLanguageClient, LanguageServerProcess } from "atom-languageclient";
 import Concat from "./concat";
-import { execFile as nodeExecFile, ExecFileOptions } from "child_process";
 import { isErrnoException } from "./error";
 import { promisify } from "util";
 

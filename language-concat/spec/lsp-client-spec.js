@@ -28,6 +28,6 @@ describe("The LSP client", () => {
       expect(error.message).toEqual("Could not find Python executable");
       return;
     }
-    expect(false).toEqual(true);
+    throw Error("Expected error to be thrown");
   });
 });
