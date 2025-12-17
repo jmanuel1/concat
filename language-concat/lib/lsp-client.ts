@@ -36,16 +36,19 @@ class ConcatLanguageClient extends AutoLanguageClient {
     pythonPaths: string[],
     projectPath: string,
   ) {
-    if (pythonPaths.length === 0) {
-      throw Error("Could not find Python executable");
-    }
-
-    const process = super.spawn(pythonPaths[0], ["-m", "concat.lsp"], {
-      cwd: projectPath,
-      windowsHide: true,
-    });
     return new Promise<LanguageServerProcess>((resolve, reject) => {
+      if (pythonPaths.length === 0) {
+        reject(Error("Could not find Python executable"));
+        return;
+      }
+
+      const process = super.spawn(pythonPaths[0], ["-m", "concat.lsp"], {
+        cwd: projectPath,
+        windowsHide: true,
+      });
+
       let alreadyResolved = false;
+
       process.on("error", (error) => {
         if (alreadyResolved) {
           console.error(error);
