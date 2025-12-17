@@ -2,7 +2,7 @@ import globals from "globals";
 
 export default [
   {
-    basePath: "language-concat/spec",
+    files: ["language-concat/spec/**/*.js"],
     languageOptions: {
       globals: {
         ...globals.atomtest,
