@@ -1,7 +1,6 @@
 import globals from "globals";
-import { defineConfig } from "eslint/config";
 
-export default defineConfig([
+export default [
   {
     basePath: "language-concat/spec",
     languageOptions: {
@@ -14,4 +13,4 @@ export default defineConfig([
       },
     },
   },
-]);
+];
