@@ -22,12 +22,13 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # super-linter needs the full git history to get the
           # list of files that changed across commits
           fetch-depth: 0
           token: ${{ secrets.CI_TOKEN }}
+          persist-credentials: false
 
       - name: Load super-linter configuration
         # Use grep inverse matching to exclude eventual comments in the .env file
@@ -47,7 +48,7 @@ jobs:
         run: /home/runner/work/_temp/_github_workflow/.venv/bin/pip install -e ".[test]"
 
       - name: Super-linter
-        uses: super-linter/super-linter@v7.3.0 # x-release-please-version
+        uses: super-linter/super-linter@47984f49b4e87383eed97890fe2dca6063bbd9c3
         env:
           # To report GitHub Actions status checks
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -62,7 +63,7 @@ jobs:
           always() &&
           github.event_name == 'pull_request' &&
           github.ref_name != github.event.repository.default_branch
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@b863ae1933cb653a53c021fe36dbb774e1fb9403
         with:
           branch: ${{ github.event.pull_request.head.ref || github.head_ref || github.ref }}
           commit_message: "Fix issues found by linters"

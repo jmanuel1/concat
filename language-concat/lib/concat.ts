@@ -3,6 +3,7 @@ import { ObjectEncodingOptions } from "fs";
 import { join } from "path";
 import { promisify } from "util";
 import { TextEditor } from "atom";
+import { isErrnoException } from "./error";
 
 const execFile = promisify(nodeExecFile);
 
@@ -115,7 +116,3 @@ const Concat = {
 type Concat = typeof Concat;
 
 export default Concat;
-
-function isErrnoException(error: Error): error is NodeJS.ErrnoException {
-  return Boolean((error as NodeJS.ErrnoException).code);
-}
