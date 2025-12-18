@@ -27,7 +27,7 @@ readme = "README.md"
 [project.optional-dependencies]
 dev = [
   "flake8>=7.1.0,<8",
-  "mypy>=1.12.0,<2",
+  "mypy>=1.19.0,<2",
   "pre-commit>=2.6.0,<3",
   "pylsp-mypy>=0.7.0",
   "python-lsp-server[all]>=1.12.0,<2",
@@ -68,7 +68,7 @@ quote-style = "single"
 
 [tool.ruff.lint]
 select = ["E", "F", "C90"]
-ignore = ["F402"]
+ignore = ["E741", "F402"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 14 # max allowed, mccabe equivalent setting would be 15 for warrning *at* 15

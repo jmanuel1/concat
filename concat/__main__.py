@@ -168,7 +168,8 @@ sys.argv = [sys.argv[0], *rest]
 
 if args.tokenize:
     code = args.file.read()
-    tokens = concat.lex.tokenize(code, should_preserve_comments=True)
+    token_results = concat.lex.tokenize(code, should_preserve_comments=True)
+    tokens = [r.token for r in token_results if r.type == 'token']
     json.dump(tokens, sys.stdout, cls=concat.lex.TokenEncoder)
     sys.exit()
 
