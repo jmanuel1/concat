@@ -622,7 +622,7 @@ def extension(parsers: ParserDict) -> None:
         location = (yield token('DEF')).start
         name = yield token('NAME')
         type_params = (yield type_parameters.optional()) or []
-        effect_ast = yield parsers['stack-effect-type']
+        effect_ast = yield parsers['type']
         decorators = yield decorator.many()
         annotation = yield annotation_parser.optional()
         yield token('COLON')
