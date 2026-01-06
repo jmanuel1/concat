@@ -1551,10 +1551,14 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
             'LSQB'
         ).optional()
         if left_square_bracket:
-            type_arguments = yield parsers['type'].sep_by(
-                concat.parse.token('COMMA'), min=1
+            type_arguments = (
+                yield parsers['type'].sep_by(
+                    concat.parse.token('COMMA'), min=0
+                )
+                << concat.parse.token('COMMA').optional()
             )
             end_location = (yield concat.parse.token('RSQB')).end
+            # TODO: Add end_location to all type nodes
             return _GenericTypeNode(
                 type_constructor_name.location,
                 end_location,
