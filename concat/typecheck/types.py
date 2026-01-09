@@ -620,6 +620,18 @@ class Type(abc.ABC):
             rigid_variables=None,
         )
 
+    @_whnf_self
+    def generalized_wrt(
+        self, context: TypeChecker, gamma: 'Environment'
+    ) -> Type:
+        parameters = list(
+            self.free_type_variables(context)
+            - gamma.free_type_variables(context)
+        )
+        if parameters:
+            return GenericType(parameters, self)
+        return self
+
 
 class IndividualType(Type):
     @property
@@ -1965,15 +1977,6 @@ class StackEffect(IndividualType):
     def to_iterator(self, _context: TypeChecker) -> Iterator[Type]:
         return iter((self.input, self.output))
 
-    def generalized_wrt(
-        self, context: TypeChecker, gamma: 'Environment'
-    ) -> Type:
-        parameters = list(
-            self.free_type_variables(context)
-            - gamma.free_type_variables(context)
-        )
-        return GenericType(parameters, self)
-
     @_constrain_on_whnf
     def constrain_and_bind_variables(
         self,
@@ -2830,20 +2833,14 @@ class PythonFunctionType(IndividualType):
         super().__init__()
         self._type_arguments: Sequence[Type] = [inputs, output]
         i, o = inputs, output
-        if i.kind != SequenceKind:
+        if not (i.kind <= IndividualKind):
             raise ConcatTypeError(
-                f'{i} must be a sequence type, but has kind {i.kind}',
+                format_wrong_arg_kind_error(
+                    context.py_function_type, 1, i, IndividualKind
+                ),
                 is_occurs_check_fail=None,
                 rigid_variables=None,
             )
-        # HACK: Sequence variables are introduced by the type sequence AST
-        # nodes
-        if (
-            isinstance(i, TypeSequence)
-            and i
-            and i.as_sequence()[0].kind == SequenceKind
-        ):
-            i = TypeSequence(context, i.as_sequence()[1:])
         _type_arguments = i, o
         if not (o.kind <= ItemKind):
             raise ConcatTypeError(

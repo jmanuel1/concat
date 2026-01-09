@@ -93,13 +93,35 @@ class TypeChecker:
         self.substitutions = MutableSubstitutions()
 
         with change_context(self):
+            _arg_type_var = ItemVariable(IndividualKind)
+            _return_type_var = ItemVariable(ItemKind)
+            self.py_function_type = GenericType(
+                [_arg_type_var, _return_type_var],
+                PythonFunctionType(
+                    self, inputs=_arg_type_var, output=_return_type_var
+                ),
+            )
+            self.py_function_type.set_internal_name('py_function_type')
+
+            self.no_return_type = NoReturnType()
+
+            _optional_type_var = BoundVariable(ItemKind)
+            self.optional_type = GenericType(
+                [_optional_type_var], OptionalType(_optional_type_var)
+            )
+            self.optional_type.set_internal_name('optional_type')
+
+            self._load_preamble0()
+
             _invert_result_var = ItemVariable(ItemKind)
             self.invertible_type = GenericType(
                 [_invert_result_var],
                 ObjectType(
                     {
                         '__invert__': PythonFunctionType(
-                            self, TypeSequence(self, []), _invert_result_var
+                            self,
+                            self.tuple_type.apply(self, ()),
+                            _invert_result_var,
                         )
                     },
                 ),
@@ -115,7 +137,18 @@ class TypeChecker:
                     {
                         '__sub__': PythonFunctionType(
                             self,
-                            TypeSequence(self, [_sub_operand_type]),
+                            self.tuple_type.apply(
+                                self,
+                                [
+                                    self.tuple_type.apply(
+                                        self,
+                                        [
+                                            OptionalType(self.str_type),
+                                            _sub_operand_type,
+                                        ],
+                                    ),
+                                ],
+                            ),
                             _sub_result_type,
                         )
                     },
@@ -135,7 +168,18 @@ class TypeChecker:
                             # type here is the interface that the object
                             # presents, not the type of the implementation.
                             self,
-                            TypeSequence(self, [_add_other_operand_type]),
+                            self.tuple_type.apply(
+                                self,
+                                [
+                                    self.tuple_type.apply(
+                                        self,
+                                        [
+                                            OptionalType(self.str_type),
+                                            _add_other_operand_type,
+                                        ],
+                                    ),
+                                ],
+                            ),
                             _add_result_type,
                         )
                     },
@@ -150,8 +194,6 @@ class TypeChecker:
             self.lt_comparable_type = self._create_comparable_type('lt')
             self.lt_comparable_type.set_internal_name('lt_comparable_type')
 
-            self.no_return_type = NoReturnType()
-
             _result_type = BoundVariable(ItemKind)
             _x = BoundVariable(ItemKind)
             self.iterator_type = GenericType(
@@ -161,10 +203,12 @@ class TypeChecker:
                     ObjectType(
                         {
                             '__iter__': PythonFunctionType(
-                                self, TypeSequence(self, []), _x
+                                self, self.tuple_type.apply(self, ()), _x
                             ),
                             '__next__': PythonFunctionType(
-                                self, TypeSequence(self, []), _result_type
+                                self,
+                                self.tuple_type.apply(self, ()),
+                                _result_type,
                             ),
                         },
                     ),
@@ -177,7 +221,7 @@ class TypeChecker:
                     {
                         '__iter__': PythonFunctionType(
                             self,
-                            TypeSequence(self, []),
+                            self.tuple_type.apply(self, ()),
                             self.iterator_type.apply(self, [_result_type]),
                         )
                     },
@@ -193,22 +237,23 @@ class TypeChecker:
                     {
                         '__getitem__': PythonFunctionType(
                             self,
-                            TypeSequence(self, [_index_type_var]),
+                            self.tuple_type.apply(
+                                self,
+                                [
+                                    self.tuple_type.apply(
+                                        self,
+                                        [
+                                            OptionalType(self.str_type),
+                                            _index_type_var,
+                                        ],
+                                    ),
+                                ],
+                            ),
                             _result_type_var,
                         ),
                     },
                 ),
             )
-
-            _arg_type_var = SequenceVariable()
-            _return_type_var = ItemVariable(ItemKind)
-            self.py_function_type = GenericType(
-                [_arg_type_var, _return_type_var],
-                PythonFunctionType(
-                    self, inputs=_arg_type_var, output=_return_type_var
-                ),
-            )
-            self.py_function_type.set_internal_name('py_function_type')
 
             _overloads_var = BoundVariable(
                 VariableArgumentKind(IndividualKind)
@@ -228,16 +273,6 @@ class TypeChecker:
             )
             self.context_manager_type.set_internal_name('context_manager_type')
 
-            self.float_type = NominalType(
-                Brand('float', IndividualKind, []), ObjectType({})
-            )
-
-            _optional_type_var = BoundVariable(ItemKind)
-            self.optional_type = GenericType(
-                [_optional_type_var], OptionalType(_optional_type_var)
-            )
-            self.optional_type.set_internal_name('optional_type')
-
     def _create_comparable_type(self, comparison: str) -> Type:
         _other_type = BoundVariable(ItemKind)
         _return_type = BoundVariable(ItemKind)
@@ -247,16 +282,33 @@ class TypeChecker:
             ObjectType(
                 {
                     f'__{comparison}__': PythonFunctionType(
-                        self, TypeSequence(self, [_other_type]), _return_type
+                        self,
+                        self.tuple_type.apply(
+                            self,
+                            [
+                                self.tuple_type.apply(
+                                    self,
+                                    [OptionalType(self.str_type), _other_type],
+                                )
+                            ],
+                        ),
+                        _return_type,
                     )
                 },
             ),
         )
 
-    def load_builtins_and_preamble(self) -> Environment:
-        env = self._check_stub(
+    def _load_preamble0(self) -> Environment:
+        return self._check_stub(
             pathlib.Path(__file__).with_name('preamble0.cati'),
+            initial_env=Environment(
+                concat.typecheck.preamble_types.types0(self)
+            ),
+            should_include_preamble_types=False,
         )
+
+    def load_builtins_and_preamble(self) -> Environment:
+        env = self._load_preamble0()
         env = self._check_stub(_builtins_stub_path, initial_env=env)
         env = self._check_stub(
             pathlib.Path(__file__).with_name('preamble.cati'),
@@ -272,14 +324,18 @@ class TypeChecker:
         self,
         path: pathlib.Path,
         initial_env: Optional['Environment'] = None,
+        should_include_preamble_types: bool = True,
     ) -> 'Environment':
         path = path.resolve()
-        return self._check_stub_resolved_path(path, initial_env)
+        return self._check_stub_resolved_path(
+            path, initial_env, should_include_preamble_types
+        )
 
     def _check_stub_resolved_path(
         self,
         path: pathlib.Path,
         initial_env: Optional['Environment'] = None,
+        should_include_preamble_types: bool = True,
     ) -> 'Environment':
         if path in self._module_namespaces:
             return self._module_namespaces[path]
@@ -345,6 +401,7 @@ class TypeChecker:
                 concat_ast.children,
                 str(path.parent),
                 _should_check_bodies=False,
+                _should_include_preamble_types=should_include_preamble_types,
             )
         except StaticAnalysisError as e:
             e.set_path_if_missing(path)
@@ -885,7 +942,7 @@ class TypeChecker:
                     rest = SequenceVariable()
                     current_effect.output.constrain_and_bind_variables(
                         self,
-                        TypeSequence(self, [rest, self.object_type]),
+                        TypeSequence(self, [rest, ItemVariable(ItemKind)]),
                         gamma.free_type_variables(self),
                         [],
                     )
@@ -1037,14 +1094,16 @@ class TypeChecker:
         program: Sequence[concat.parse.Node],
         source_dir: str = '.',
         _should_check_bodies: bool = True,
+        _should_include_preamble_types: bool = True,
     ) -> Environment:
         with change_context(self):
-            environment = Environment(
-                {
-                    **concat.typecheck.preamble_types.types(self),
-                    **environment,
-                }
-            )
+            if _should_include_preamble_types:
+                environment = Environment(
+                    {
+                        **concat.typecheck.preamble_types.types(self),
+                        **environment,
+                    }
+                )
             res = self.infer(
                 environment,
                 program,

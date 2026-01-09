@@ -1,16 +1,16 @@
 # FIXME: Exists only at compile time. Should probably be io.FileIO or something
 # in typing
 class file:
-  def seek(--) @cast (py_function[(int), int]):
+  def seek(--) @cast (py_function[tuple[tuple[none, int]], int]):
     ()
 
-  def read(--) @cast (py_function[*any, `any2]):
+  def read forall any: Item..., any2: Item. py_function[tuple[any], any2]:
     ()
 
-  def __enter__(--) @cast (py_function[*any, `any2]):
+  def __enter__ forall any: Item..., any2: Item. py_function[tuple[any], any2]:
     ()
 
-  def __exit__(--) @cast (py_function[*any, `any2]):
+  def __exit__ forall any: Item..., any2: Item. py_function[tuple[any], any2]:
     ()
 
 class ellipsis:
@@ -22,7 +22,10 @@ class not_implemented:
 def to_list(*rest_var i:iterable[`a_var] -- *rest_var l:list[`a_var]):
   ()
 
-def py_call(*rest_var kwargs:iterable[object] args:iterable[object] f:py_function[*seq_var, `a_var] -- *rest_var res:`a_var):
+def py_call(
+  *rest_var args:tuple[`t...] f:py_function[tuple[`t...], `a_var] --
+  *rest_var res:`a_var
+):
   ()
 
 def nip(*rest_var a:`_ b:`a_var -- *rest_var b:`a_var):
@@ -51,12 +54,14 @@ def to_int(*stack_type_var base:Optional[int] x:object -- *stack_type_var i:int)
 # ---
 # a b + => (... s)
 # FIXME: Implement the second type rule
-def +(*stack_type_var x:addable[`other, `c_var] y:`other -- *stack_type_var res:`c_var):
+def +((*stack_type_var x:addable[`other, `c_var] y:`other -- *stack_type_var res:`c_var) &
+      (*stack_type_var x:`other y:raddable[`other, `c_var] -- *stack_type_var res:`c_var)):
   ()
 
 # FIXME: We should check if the other operand supports __rsub__ if the
 # first operand doesn't support __sub__.
-def -(*stack_type_var x:subtractable[`b_var, `c_var] y:`b_var -- *stack_type_var res:`c_var):
+def -((*stack_type_var x:subtractable[`b_var, `c_var] y:`b_var -- *stack_type_var res:`c_var) &
+      (*stack_type_var x:`b_var y:rsubtractable[`b_var, `c_var] -- *stack_type_var res:`c_var)):
   ()
 
 def is(*stack_type_var a:object b:object -- *stack_type_var res:bool):
@@ -84,19 +89,19 @@ def loop(*rest_var body:(*rest_var -- *rest_var flag:bool) -- *rest_var):
 
 # Rule 1: first operand has __ge__(type(second operand))
 # Rule 2: second operand has __le__(type(first operand))
-# FIXME: Implement the second type rule
-def >=(*stack_type_var a:geq_comparable[`b_var, `ret] b:`b_var -- *stack_type_var res:`ret):
+def >=((*stack_type_var a:geq_comparable[`b_var, `ret] b:`b_var -- *stack_type_var res:`ret) &
+        (*stack_type_var a:`b_var b:leq_comparable[`b_var, `ret] -- *stack_type_var res:`ret)):
   ()
 
 # Rule 1: first operand has __lt__(type(second operand))
 # Rule 2: second operand has __gt__(type(first operand))
-# FIXME: Implement the second type rule
-# Also look at Python's note about when reflected method get's priority.
-def <(*stack_type_var a:lt_comparable[`b_var, `ret] b:`b_var -- *stack_type_var res:`ret):
+# FIXME: Also look at Python's note about when reflected method gets priority.
+def <((*stack_type_var a:lt_comparable[`b_var, `ret] b:`b_var -- *stack_type_var res:`ret) &
+      (*stack_type_var a:`b_var b:gt_comparable[`b_var, `ret] -- *stack_type_var res:`ret)):
   ()
 
-# FIXME: Implement the second type rule
-def <=(*stack_type_var a:leq_comparable[`b_var, `ret] b:`b_var -- *stack_type_var res:`ret):
+def <=((*stack_type_var a:leq_comparable[`b_var, `ret] b:`b_var -- *stack_type_var res:`ret) &
+        (*stack_type_var a:`b_var geq_comparable[`b_var, `ret] -- *stack_type_var res:`ret)):
   ()
 
 def choose(*rest_var b:bool t:(*rest_var -- *seq_var) f:(*rest_var -- *seq_var) -- *seq_var):

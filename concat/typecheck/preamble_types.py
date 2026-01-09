@@ -19,6 +19,13 @@ if TYPE_CHECKING:
 _a_var = BoundVariable(ItemKind)
 
 
+def types0(context: TypeChecker) -> Mapping[str, Type]:
+    return {
+        'Optional': context.optional_type,
+        'py_function': context.py_function_type,
+    }
+
+
 def types(context: TypeChecker) -> Mapping[str, Type]:
     return {
         'addable': context.addable_type,
@@ -32,9 +39,7 @@ def types(context: TypeChecker) -> Mapping[str, Type]:
         'subtractable': context.subtractable_type,
         'context_manager': context.context_manager_type,
         'iterator': context.iterator_type,
-        'py_function': context.py_function_type,
         'py_overloaded': context.py_overloaded_type,
-        'Optional': context.optional_type,
         'SupportsAbs': GenericType(
             [_a_var],
             ObjectType(
