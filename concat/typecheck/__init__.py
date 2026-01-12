@@ -1730,19 +1730,6 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
     )
 
     @concat.parser_combinators.generate
-    def generic_type_parser():
-        type = yield parsers['nonparameterized-type']
-        yield concat.parse.token('LSQB')
-        type_arguments = yield parsers['type'].sep_by(
-            concat.parse.token('COMMA'), min=1
-        )
-        end_location = (yield concat.parse.token('RSQB')).end
-        # TODO: Add end_location to all type nodes
-        return _GenericTypeNode(
-            type.location, end_location, type, type_arguments
-        )
-
-    @concat.parser_combinators.generate
     def forall_type_parser():
         forall = yield concat.parse.token('NAME')
         if forall.value != 'forall':
