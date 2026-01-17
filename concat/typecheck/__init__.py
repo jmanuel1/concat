@@ -62,6 +62,7 @@ from concat.typecheck.types import (
     GenericType,
     GenericTypeKind,
     IndividualKind,
+    IntersectionType,
     ItemKind,
     ItemVariable,
     Kind,
@@ -74,6 +75,7 @@ from concat.typecheck.types import (
     QuotationType,
     SequenceVariable,
     StackEffect,
+    TopKind,
     TupleKind,
     Type,
     TypeSequence,
@@ -110,6 +112,12 @@ class TypeChecker:
                 [_optional_type_var], OptionalType(_optional_type_var)
             )
             self.optional_type.set_internal_name('optional_type')
+
+            _var_arg = BoundVariable(VariableArgumentKind(TopKind))
+            self.intersection_type = GenericType(
+                [_var_arg], IntersectionType(self, _var_arg)
+            )
+            self.intersection_type.set_internal_name('Intersection')
 
             self._load_preamble0()
 

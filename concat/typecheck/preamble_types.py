@@ -21,6 +21,7 @@ _a_var = BoundVariable(ItemKind)
 
 def types0(context: TypeChecker) -> Mapping[str, Type]:
     return {
+        'Intersection': context.intersection_type,
         'Optional': context.optional_type,
         'py_function': context.py_function_type,
     }

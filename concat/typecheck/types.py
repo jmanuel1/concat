@@ -3447,6 +3447,153 @@ class _OptionalType(IndividualType):
         return [self._type_argument]
 
 
+class IntersectionType(Type):
+    def __init__(self, context: TypeChecker, types: Type) -> None:
+        super().__init__()
+        self._argument = types
+        self._types = types.arguments
+
+    def force(self, context: TypeChecker) -> Type | None:
+        # XXX: Changes kind...
+        # if len(self._types) == 0:
+        #     return context.object_type
+        if len(self._types) == 1 and not self._types[
+            0
+        ].kind <= VariableArgumentKind(TopKind):
+            return self._types[0]
+        types = []
+        attrs: dict[str, list[Type]] = {}
+        kinds: set[Kind] = set()
+        for ty in self._types:
+            ty = ty.force_if_possible(context)
+            kinds.add(ty.kind)
+            if isinstance(ty, ObjectType):
+                for attr, ty in ty.attributes(context).items():
+                    if attr in attrs:
+                        attrs[attr].append(ty)
+                    else:
+                        attrs[attr] = [ty]
+                continue
+            elif ty._type_id == context.no_return_type._type_id:
+                return context.no_return_type
+            elif ty.is_object_type(context) and ty.kind <= ItemKind:
+                continue
+            # XXX: Changes kind...
+            # elif not any(k <= ty.kind or k >= ty.kind for k in kinds):
+            #     return context.no_return_type
+            types.append(ty)
+        if attrs:
+            types.append(
+                ObjectType(
+                    {
+                        attr: IntersectionType(
+                            context, VariableArgumentPack(ts)
+                        )
+                        for attr, ts in attrs.items()
+                    }
+                )
+            )
+        if {t._type_id for t in types} == {t._type_id for t in self._types}:
+            return None
+        return IntersectionType(context, VariableArgumentPack(types))
+
+    @_whnf_self
+    def force_substitution(
+        self, context: TypeChecker, sub: Substitutions
+    ) -> Type:
+        return IntersectionType(
+            context,
+            VariableArgumentPack(
+                [t.force_substitution(context, sub) for t in self._types]
+            ),
+        )
+
+    @property
+    def kind(self) -> Kind:
+        context = current_context.get()
+        forced = self.force(context)
+        if forced is not None:
+            return forced.kind
+        return cast(
+            VariableArgumentKind,
+            self._argument.force_if_possible(context).kind,
+        )._argument_kind
+
+    @_whnf_self
+    def attributes(self, context: TypeChecker) -> Mapping[str, Type]:
+        attrs: dict[str, list[Type]] = {}
+        for ty in self._types:
+            try:
+                ty_attrs = ty.attributes(context)
+            except (
+                ConcatTypeError
+            ):  # FIXME: one of the classes raises builtins.TypeError instead
+                ty_attrs = {}
+            for attr, ty in ty_attrs.items():
+                if attr in attrs:
+                    attrs[attr].append(ty)
+                else:
+                    attrs[attr] = [ty]
+        return {
+            attr: IntersectionType(context, VariableArgumentPack(ts))
+            for attr, ts in attrs.items()
+        }
+
+    @_whnf_self
+    def force_repr(self, context: TypeChecker) -> str:
+        return f'IntersectionType({context!r}, [{', '.join(t.force_repr(context) for t in self._types)}])'
+
+    @_whnf_self
+    def to_user_string(self, context: TypeChecker) -> str:
+        return f'Intersection[{', '.join(t.to_user_string(context) for t in self._types)}]'
+
+    @_whnf_self
+    def _free_type_variables(
+        self, context: TypeChecker
+    ) -> InsertionOrderedSet[Variable]:
+        return functools.reduce(
+            operator.or_,
+            (t.free_type_variables(context) for t in self._types),
+            InsertionOrderedSet([]),
+        )
+
+    @_constrain_on_whnf
+    def constrain_and_bind_variables(
+        self,
+        context: TypeChecker,
+        supertype: Type,
+        rigid_variables: AbstractSet[Variable],
+        subtyping_assumptions: Sequence[tuple[Type, Type]],
+    ) -> None:
+        if self.kind <= ItemKind and supertype.is_object_type(context):
+            return
+        if _contains_assumption(subtyping_assumptions, self, supertype):
+            return
+
+        errors: list[ConcatTypeError] = []
+        for ty in self._types:
+            with context.substitutions.push():
+                try:
+                    ty.constrain_and_bind_variables(
+                        context,
+                        supertype,
+                        rigid_variables,
+                        subtyping_assumptions,
+                    )
+                    context.substitutions.commit()
+                    break
+                except ConcatTypeError as e:
+                    errors.append(e)
+        if errors:
+            raise ConcatTypeError(
+                format_subtyping_error(context, self, supertype),
+                is_occurs_check_fail=None,
+                rigid_variables=rigid_variables,
+            ) from ExceptionGroup(
+                'no component of intersection is a subtype', errors
+            )
+
+
 # TODO: Do an actual rename
 NoReturnType = _NoReturnType
 OptionalType = _OptionalType
@@ -3494,6 +3641,9 @@ class VariableArgumentKind(Kind):
             isinstance(other, VariableArgumentKind)
             and self._argument_kind == other._argument_kind
         )
+
+    def __hash__(self) -> int:
+        return hash(self._argument_kind)
 
     def __or__(self, other: Kind) -> Kind:
         if other is BottomKind:
@@ -3605,6 +3755,9 @@ class _TopKind(Kind):
     def __eq__(self, other: object) -> bool:
         return self is other
 
+    def __hash__(self) -> int:
+        return hash(id(self))
+
     def __or__(self, other: Kind) -> Kind:
         return self
 
@@ -3652,6 +3805,9 @@ class _IndividualKind(Kind):
 
     def __eq__(self, other: object) -> bool:
         return self is other
+
+    def __hash__(self) -> int:
+        return hash(id(self))
 
     def __or__(self, other: Kind) -> Kind:
         if other is self or other is BottomKind:
