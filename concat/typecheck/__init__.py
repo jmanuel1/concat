@@ -1283,6 +1283,9 @@ class _GenericTypeNode(TypeNode):
             rigid_variables=None,
         )
 
+    def __repr__(self) -> str:
+        return f'_GenericTypeNode({self.location!r}, {self.end_location!r}, {self._generic_type!r}, {self._type_arguments!r})'
+
 
 class _TypeSequenceIndividualTypeNode(TypeNode):
     def __init__(
