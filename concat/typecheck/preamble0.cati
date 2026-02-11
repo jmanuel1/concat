@@ -3,6 +3,11 @@
 class none:
   ()
 
+class object:
+  ()
+
+!@@concat.typecheck.builtin_object object
+
 class tuple[`t...]:
   # NOTE: Will need a new feature to get the type of __getitem__ right.
   def __getitem__(--) @cast (py_function[tuple[tuple[none, int]], object]):
@@ -31,11 +36,6 @@ class int:
 
 !@@concat.typecheck.builtin_int int
 
-class object:
-  ()
-
-!@@concat.typecheck.builtin_object object
-
 class bool:
   ()
 
@@ -57,7 +57,7 @@ class str:
   def find(--) @cast (py_function[tuple[tuple[none, str], tuple[none, Optional[int]], tuple[none, Optional[int]]], int]):
     ()
 
-  def join(--) @cast (py_function[tuple[tuple[none, str], tuple[none, iterable[str]]], str]):
+  def join(--) @cast (py_function[tuple[tuple[none, iterable[str]]], str]):
     ()
 
   def __iter__(--) @cast (py_function[tuple[], iterator[str]]):

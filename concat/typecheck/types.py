@@ -1485,7 +1485,7 @@ class GenericType(Type):
         self._type_parameters = type_parameters
         self._body = body
         self._instantiations: Dict[Tuple[int, ...], Type] = {}
-        self.is_variadic = type_parameters and isinstance(
+        self.is_variadic = len(type_parameters) == 1 and isinstance(
             type_parameters[0].kind, VariableArgumentKind
         )
 
@@ -2589,8 +2589,9 @@ class DelayedSubstitution(Type):
     def force_repr(self, context: TypeChecker) -> str:
         return self.force(context).force_repr(context)
 
+    @_whnf_self
     def to_user_string(self, context: TypeChecker) -> str:
-        return str(self.force(context))
+        raise AssertionError('DelayedSubstitution is never whnf')
 
     def _free_type_variables(
         self, context: TypeChecker
@@ -2626,7 +2627,8 @@ class DelayedSubstitution(Type):
 
     @property
     def kind(self) -> Kind:
-        return self._ty.kind
+        context = current_context.get()
+        return self.force(context).kind
 
     def force(self, context: TypeChecker) -> Type:
         if not self._forced:
@@ -2648,9 +2650,9 @@ class VariableArgumentPack(Type):
         self._types = types
 
     @_whnf_self
-    def to_user_string(self, _context: TypeChecker) -> str:
+    def to_user_string(self, context: TypeChecker) -> str:
         return f'variable-length arguments {
-            ', '.join(str(t) for t in self._types)
+            ', '.join(t.to_user_string(context) for t in self._types)
         }'
 
     def __repr__(self) -> str:
@@ -2671,7 +2673,14 @@ class VariableArgumentPack(Type):
 
     @property
     def arguments(self) -> Sequence[Type]:
-        return self._types
+        args: list[Type] = []
+        for t in self._types:
+            t = t.force_if_possible(current_context.get())
+            if t.kind <= VariableArgumentKind(TopKind):
+                args += t.arguments
+                continue
+            args.append(t)
+        return args
 
     @classmethod
     def collect_arguments(
@@ -2878,8 +2887,8 @@ class PythonFunctionType(IndividualType):
             f'output={self.output.force_repr(context)})'
         )
 
-    def to_user_string(self, _context: TypeChecker | None) -> str:
-        return f'py_function_type[{self.input}, {self.output}]'
+    def to_user_string(self, context: TypeChecker) -> str:
+        return f'py_function_type[{self.input.to_user_string(context)}, {self.output.to_user_string(context)}]'
 
     def attributes(
         self, context: TypeChecker | None = None
@@ -2905,11 +2914,33 @@ class PythonFunctionType(IndividualType):
 
     def bind(self) -> 'PythonFunctionType':
         context = current_context.get()
-        inputs = self.input.index(context, slice(1, None))
+        inputs = self.input
+        this = ItemVariable(ItemKind)
+        rest = VariableArgumentVariable(ItemKind)
+        unbound_args = context.tuple_type.apply(
+            context,
+            [
+                this,
+                rest,
+            ],
+        )
+        inputs.constrain_and_bind_variables(
+            context,
+            unbound_args,
+            # FIXME: Need env here, or use levels
+            set(),
+            [],
+        )
+        new_inputs = context.tuple_type.apply(
+            context,
+            [
+                rest,
+            ],
+        )
         output = self.output
         return PythonFunctionType(
             context,
-            inputs=inputs,
+            inputs=new_inputs,
             output=output,
         )
 
@@ -3571,7 +3602,8 @@ class IntersectionType(Type):
             return
 
         errors: list[ConcatTypeError] = []
-        for ty in self._types:
+        # XXX: Ambiguity
+        for ty in self._argument.force_if_possible(context).arguments:
             with context.substitutions.push():
                 try:
                     ty.constrain_and_bind_variables(

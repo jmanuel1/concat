@@ -62,7 +62,9 @@ class TestREPLFunctions(unittest.TestCase):
         )
 
     def test_repl(self):
-        with replace_stdin(io.StringIO('[,] [,] $input py_call\nhi there')):
+        with replace_stdin(
+            io.StringIO('((None, ""),) $input py_call\nhi there')
+        ):
             concat.stdlib.repl.repl([], [])
             self.assertEqual(
                 sys.stdin.read(), '', msg='repl did not consume all input'

@@ -35,13 +35,18 @@ def to_py_function(stack: List[object], stash: List[object]) -> None:
 
 
 def py_call(stack, stash):
-    """sequence_of_pairs sequence $function -- return_value"""
-    function, sequence, sequence_of_pairs = (
-        stack.pop(),
+    """args $function -- return_value"""
+    function, args = (
         stack.pop(),
         stack.pop(),
     )
-    mapping = dict(sequence_of_pairs)
+    sequence = []
+    mapping = {}
+    for name, arg in args:
+        if name is None:
+            sequence.append(arg)
+            continue
+        mapping[name] = arg
     stack.append(function(*sequence, **mapping))
 
 

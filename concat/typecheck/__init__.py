@@ -28,6 +28,7 @@ from typing import (
 import concat.graph
 import concat.parse
 import concat.parser_combinators
+import concat.parser_combinators.recovery
 import concat.typecheck.preamble_types
 from concat.error_reporting import (
     create_indentation_error_message,
@@ -49,13 +50,19 @@ from concat.typecheck.errors import (
     format_cannot_find_module_path_error,
     format_expected_item_kinded_variable_error,
     format_item_type_expected_in_type_sequence_error,
+    format_kind_does_not_accept_arguments_error,
+    format_kind_requires_arguments,
     format_name_reassigned_in_type_sequence_error,
     format_not_a_variable_error,
     format_not_generic_type_error,
+    format_too_few_args_to_generic_kind_error,
     format_too_many_params_for_variadic_type_error,
+    format_unknown_kind_error,
+    format_wrong_number_of_args_for_vararg_kind,
 )
 from concat.typecheck.substitutions import MutableSubstitutions
 from concat.typecheck.types import (
+    BottomKind,
     BoundVariable,
     Brand,
     Fix,
@@ -73,6 +80,7 @@ from concat.typecheck.types import (
     PythonFunctionType,
     PythonOverloadedType,
     QuotationType,
+    SequenceKind,
     SequenceVariable,
     StackEffect,
     TopKind,
@@ -119,6 +127,49 @@ class TypeChecker:
             )
             self.intersection_type.set_internal_name('Intersection')
 
+            self._tuple_forward_var = ItemVariable(
+                GenericTypeKind(
+                    [VariableArgumentKind(ItemKind)], IndividualKind
+                )
+            )
+
+            _result_type = BoundVariable(ItemKind)
+            _x = BoundVariable(ItemKind)
+            self.iterator_type = GenericType(
+                [_result_type],
+                Fix(
+                    _x,
+                    ObjectType(
+                        {
+                            '__iter__': PythonFunctionType(
+                                self,
+                                self._tuple_forward_var.apply(self, ()),
+                                _x,
+                            ),
+                            '__next__': PythonFunctionType(
+                                self,
+                                self._tuple_forward_var.apply(self, ()),
+                                _result_type,
+                            ),
+                        },
+                    ),
+                ),
+            )
+            self.iterator_type.set_internal_name('iterator_type')
+            self.iterable_type = GenericType(
+                [_result_type],
+                ObjectType(
+                    {
+                        '__iter__': PythonFunctionType(
+                            self,
+                            self._tuple_forward_var.apply(self, ()),
+                            self.iterator_type.apply(self, [_result_type]),
+                        )
+                    },
+                ),
+            )
+            self.iterable_type.set_internal_name('iterable_type')
+
             self._load_preamble0()
 
             _invert_result_var = ItemVariable(ItemKind)
@@ -138,7 +189,6 @@ class TypeChecker:
 
             _sub_operand_type = BoundVariable(ItemKind)
             _sub_result_type = BoundVariable(ItemKind)
-            # FIXME: Add reverse_substractable_type for __rsub__
             self.subtractable_type = GenericType(
                 [_sub_operand_type, _sub_result_type],
                 ObjectType(
@@ -163,6 +213,31 @@ class TypeChecker:
                 ),
             )
             self.subtractable_type.set_internal_name('subtractable_type')
+
+            self.rsubtractable_type = GenericType(
+                [_sub_operand_type, _sub_result_type],
+                ObjectType(
+                    {
+                        '__rsub__': PythonFunctionType(
+                            self,
+                            self.tuple_type.apply(
+                                self,
+                                [
+                                    self.tuple_type.apply(
+                                        self,
+                                        [
+                                            OptionalType(self.str_type),
+                                            _sub_operand_type,
+                                        ],
+                                    ),
+                                ],
+                            ),
+                            _sub_result_type,
+                        )
+                    },
+                ),
+            )
+            self.rsubtractable_type.set_internal_name('rsubtractable_type')
 
             _add_other_operand_type = BoundVariable(ItemKind)
             _add_result_type = BoundVariable(ItemKind)
@@ -195,47 +270,39 @@ class TypeChecker:
             )
             self.addable_type.set_internal_name('addable_type')
 
+            self.raddable_type = GenericType(
+                [_add_other_operand_type, _add_result_type],
+                ObjectType(
+                    {
+                        '__radd__': PythonFunctionType(
+                            self,
+                            self.tuple_type.apply(
+                                self,
+                                [
+                                    self.tuple_type.apply(
+                                        self,
+                                        [
+                                            OptionalType(self.str_type),
+                                            _add_other_operand_type,
+                                        ],
+                                    ),
+                                ],
+                            ),
+                            _add_result_type,
+                        ),
+                    },
+                ),
+            )
+            self.raddable_type.set_internal_name('raddable_type')
+
             self.geq_comparable_type = self._create_comparable_type('ge')
             self.geq_comparable_type.set_internal_name('geq_comparable_type')
             self.leq_comparable_type = self._create_comparable_type('le')
             self.leq_comparable_type.set_internal_name('leq_comparable_type')
             self.lt_comparable_type = self._create_comparable_type('lt')
             self.lt_comparable_type.set_internal_name('lt_comparable_type')
-
-            _result_type = BoundVariable(ItemKind)
-            _x = BoundVariable(ItemKind)
-            self.iterator_type = GenericType(
-                [_result_type],
-                Fix(
-                    _x,
-                    ObjectType(
-                        {
-                            '__iter__': PythonFunctionType(
-                                self, self.tuple_type.apply(self, ()), _x
-                            ),
-                            '__next__': PythonFunctionType(
-                                self,
-                                self.tuple_type.apply(self, ()),
-                                _result_type,
-                            ),
-                        },
-                    ),
-                ),
-            )
-            self.iterator_type.set_internal_name('iterator_type')
-            self.iterable_type = GenericType(
-                [_result_type],
-                ObjectType(
-                    {
-                        '__iter__': PythonFunctionType(
-                            self,
-                            self.tuple_type.apply(self, ()),
-                            self.iterator_type.apply(self, [_result_type]),
-                        )
-                    },
-                ),
-            )
-            self.iterable_type.set_internal_name('iterable_type')
+            self.gt_comparable_type = self._create_comparable_type('gt')
+            self.gt_comparable_type.set_internal_name('gt_comparable_type')
 
             _index_type_var = BoundVariable(ItemKind)
             _result_type_var = BoundVariable(ItemKind)
@@ -396,6 +463,7 @@ class TypeChecker:
                         file, tokens, e.args[0].failures
                     )
                 )
+                print(repr(e.args[0].failures))
             self._module_namespaces[path] = env
             return env
         recovered_parsing_failures = concat_ast.parsing_failures
@@ -403,6 +471,7 @@ class TypeChecker:
             for failure in recovered_parsing_failures:
                 print('Parse Error:')
                 print(create_parsing_failure_message(file, tokens, failure))
+                print(repr(failure))
         try:
             env = self.check(
                 env,
@@ -532,12 +601,18 @@ class TypeChecker:
                     if pragma == 'builtin_tuple':
                         name = node.args[0]
                         self._tuple_type = gamma[name]
+                        self._tuple_forward_var.constrain_and_bind_variables(
+                            self, gamma[name], set(), []
+                        )
                     if pragma == 'builtin_none':
                         name = node.args[0]
                         self._none_type = gamma[name]
                     if pragma == 'builtin_module':
                         name = node.args[0]
                         self._module_type = gamma[name]
+                    if pragma == 'builtin_float':
+                        name = node.args[0]
+                        self._float_type = gamma[name]
                 elif isinstance(node, concat.parse.PushWordNode):
                     child = node.children[0]
                     if isinstance(child, concat.parse.FreezeWordNode):
@@ -1065,6 +1140,12 @@ class TypeChecker:
     def module_type(self) -> Type:
         return self._module_type
 
+    _float_type: SetOnce[Type] = SetOnce()
+
+    @property
+    def float_type(self) -> Type:
+        return self._float_type
+
     _list_type: SetOnce[Type] = SetOnce()
 
     @property
@@ -1095,6 +1176,10 @@ class TypeChecker:
     @property
     def none_type(self) -> Type:
         return self._none_type
+
+    @property
+    def tuple_forward_var(self) -> Variable:
+        return self._tuple_forward_var
 
     def check(
         self,
@@ -1222,6 +1307,75 @@ class TypeNode(concat.parse.Node, abc.ABC):
     @abc.abstractmethod
     def to_type(self, env: Environment) -> Tuple['Type', Environment]:
         pass
+
+
+class _KindedVariableNode(TypeNode):
+    def __init__(
+        self,
+        location: Location,
+        name: str,
+        kind: _KindNode,
+        end_location: Location,
+    ) -> None:
+        super().__init__(location, end_location, [kind])
+        self._name = name
+        self._kind = kind
+
+    def to_type(self, env: Environment) -> tuple[BoundVariable, Environment]:
+        kind = self._kind.to_kind()
+        variable = BoundVariable(kind)
+        env = Environment({**env, self._name: variable})
+        return variable, env
+
+
+class _KindNode(concat.parse.Node):
+    def __init__(
+        self,
+        location: Location,
+        name: str,
+        args: Sequence[_KindNode] | None,
+        end_location: Location,
+    ) -> None:
+        super().__init__(location, end_location, args or [])
+        self._name = name
+        self._args = args
+
+    def to_kind(self) -> Kind:
+        mapping = {
+            'Individual': IndividualKind,
+            'Item': ItemKind,
+            'Sequence': SequenceKind,
+            'Bottom': BottomKind,
+            'Top': TopKind,
+        }
+        if self._name in mapping:
+            if self._args is None:
+                return mapping[self._name]
+            raise StaticAnalysisError(
+                format_kind_does_not_accept_arguments_error(self)
+            )
+        if self._args is None:
+            raise StaticAnalysisError(format_kind_requires_arguments(self))
+        args = [k.to_kind() for k in self._args]
+        if self._name == 'Generic':
+            if len(args) < 1:
+                raise StaticAnalysisError(
+                    format_too_few_args_to_generic_kind_error(self)
+                )
+            return GenericTypeKind(args[:-1], args[-1])
+        if self._name == 'VariableArgument':
+            if len(args) != 1:
+                raise StaticAnalysisError(
+                    format_wrong_number_of_args_for_vararg_kind(self)
+                )
+            return VariableArgumentKind(args[0])
+        raise StaticAnalysisError(format_unknown_kind_error(self))
+
+    def __str__(self) -> str:
+        string = self._name
+        if self._args is not None:
+            string += '[' + ', '.join(str(k) for k in self._args) + ']'
+        return string
 
 
 # A dataclass is not used here because making this a subclass of an abstract
@@ -1594,21 +1748,21 @@ class _ObjectTypeNode(TypeNode):
 
 
 def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
-    @concat.parser_combinators.generate
+    @concat.parser_combinators.generate('name that is not star (*)')
     def non_star_name_parser():
         name = yield concat.parse.token('NAME')
         if name.value == '*':
             yield concat.parser_combinators.fail('name that is not star (*)')
         return name
 
-    @concat.parser_combinators.generate
+    @concat.parser_combinators.generate('type name')
     def named_type_parser():
         name_token = yield non_star_name_parser
         return NamedTypeNode(
             name_token.start, name_token.end, name_token.value
         )
 
-    @concat.parser_combinators.generate
+    @concat.parser_combinators.generate('type name or type application')
     def possibly_nullary_generic_type_parser() -> (
         Generator[
             concat.parser_combinators.Parser,
@@ -1637,23 +1791,23 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
             )
         return type_constructor_name
 
-    @concat.parser_combinators.generate
+    @concat.parser_combinators.generate('item type variable')
     def individual_type_variable_parser():
         yield concat.parse.token('BACKTICK')
         name = yield non_star_name_parser
 
         return _ItemVariableNode(name)
 
-    @concat.parser_combinators.generate
+    @concat.parser_combinators.generate('sequence type variable')
     def sequence_type_variable_parser():
-        star = yield concat.parse.token('NAME')
-        if star.value != '*':
-            yield concat.parser_combinators.fail('star (*)')
+        yield concat.parser_combinators.test_item(
+            lambda t: t.type == 'NAME' and t.value == '*', 'star (*)'
+        )
         name = yield non_star_name_parser
 
         return _SequenceVariableNode(name)
 
-    @concat.parser_combinators.generate
+    @concat.parser_combinators.generate('type sequence in stack effect')
     def stack_effect_type_sequence_parser():
         type = parsers['type']
 
@@ -1691,7 +1845,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
 
     parsers['stack-effect-type-sequence'] = stack_effect_type_sequence_parser
 
-    @concat.parser_combinators.generate
+    @concat.parser_combinators.generate('type sequence')
     def type_sequence_parser():
         type = parsers['type']
 
@@ -1723,7 +1877,7 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
 
         return TypeSequenceNode(location, end_location, seq_var_parsed, i)
 
-    @concat.parser_combinators.generate
+    @concat.parser_combinators.generate('stack effect')
     def stack_effect_type_parser():
         separator = concat.parse.token('MINUSMINUS')
 
@@ -1736,18 +1890,20 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
 
         return StackEffectTypeNode(location, i, o)
 
-    parsers['stack-effect-type'] = stack_effect_type_parser.desc(
-        'stack effect type'
-    )
+    parsers['stack-effect-type'] = stack_effect_type_parser
 
-    @concat.parser_combinators.generate
+    @concat.parser_combinators.generate('forall')
     def forall_type_parser():
-        forall = yield concat.parse.token('NAME')
-        if forall.value != 'forall':
-            yield concat.parser_combinators.fail('the word "forall"')
+        forall = yield concat.parser_combinators.test_item(
+            lambda t: t.type == 'NAME' and t.value == 'forall',
+            'the word "forall"',
+        )
 
+        # see kind-poly.md
         type_variables = yield (
-            individual_type_variable_parser | sequence_type_variable_parser
+            individual_type_variable_parser
+            | sequence_type_variable_parser
+            | kinded_variable_parser
         ).at_least(1)
 
         yield concat.parse.token('DOT')
@@ -1756,17 +1912,44 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
 
         return _ForallTypeNode(forall.start, type_variables, ty)
 
+    @concat.parser_combinators.generate('type variable with kind annotation')
+    def kinded_variable_parser():
+        curr_token: Token = yield concat.parser_combinators.peek
+        location = curr_token.start
+        body = yield concat.parser_combinators.recovery.bracketed(
+            concat.parse.token('LPAR'),
+            concat.parser_combinators.seq(
+                concat.parse.token('NAME') << concat.parse.token('COLON'),
+                kind_parser,
+            ),
+            concat.parse.token('RPAR'),
+        ).map(concat.parse.handle_recovery)
+        if isinstance(body, tuple):
+            name, kind = body
+            curr_token = yield concat.parser_combinators.peek_prev
+            end_location = curr_token.end
+            return _KindedVariableNode(
+                location, name.value, kind, end_location
+            )
+        return body[0]
+
+    @concat.parser_combinators.generate('kind')
+    def kind_parser():
+        name: Token = yield concat.parse.token('NAME')
+        args = yield (
+            concat.parse.token('LSQB')
+            >> kind_parser.sep_by(concat.parse.token('COMMA'))
+            << concat.parse.token('RSQB')
+        ).optional()
+        end_location = (yield concat.parser_combinators.peek_prev).end
+        return _KindNode(name.start, name.value, args, end_location)
+
     parsers['type-variable'] = concat.parser_combinators.alt(
         sequence_type_variable_parser,
         individual_type_variable_parser,
     )
 
-    parsers['nonparameterized-type'] = concat.parser_combinators.alt(
-        named_type_parser.desc('named type'),
-        parsers.ref_parser('stack-effect-type'),
-    )
-
-    @concat.parser_combinators.generate
+    @concat.parser_combinators.generate('structural object type')
     def object_type_parser():
         location = (yield concat.parse.token('LBRACE')).start
         attribute_type_pair = concat.parser_combinators.seq(
@@ -1778,25 +1961,23 @@ def typecheck_extension(parsers: concat.parse.ParserDict) -> None:
         return _ObjectTypeNode(pairs, location, end_location)
 
     individual_type_parser = concat.parser_combinators.alt(
-        possibly_nullary_generic_type_parser.desc(
-            'named type or generic type',
-        ),
+        possibly_nullary_generic_type_parser.commit(),
         parsers.ref_parser('stack-effect-type'),
-        object_type_parser.desc('object type'),
-        individual_type_variable_parser,
+        object_type_parser.commit(),
+        individual_type_variable_parser.commit(),
     ).desc('individual type')
 
     parsers['type'] = concat.parser_combinators.alt(
         # NOTE: There's a parsing ambiguity that might come back to bite me...
-        forall_type_parser.desc('forall type'),
+        forall_type_parser.desc('forall type').commit(),
         individual_type_parser,
-        concat.parse.token('LPAR')
-        >> parsers.ref_parser('type-sequence')
-        << concat.parse.token('RPAR'),
-        sequence_type_variable_parser,
-    )
+        # (concat.parse.token('LPAR')
+        # >> parsers.ref_parser('type-sequence')
+        # << concat.parse.token('RPAR')).commit(),
+        sequence_type_variable_parser.commit(),
+    ).desc('type')
 
-    parsers['type-sequence'] = type_sequence_parser.desc('type sequence')
+    parsers['type-sequence'] = type_sequence_parser
 
 
 _seq_var = SequenceVariable()

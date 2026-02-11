@@ -1,10 +1,12 @@
 class float:
   ()
 
-def eval(--) @cast (py_function[(str), object]):
+!@@concat.typecheck.builtin_float float
+
+def eval(--) @cast (py_function[tuple[tuple[none, str]], object]):
   ()
 
-def print(--) @cast (py_function[(), none]):
+def print(--) @cast (py_function[tuple[tuple[none, str]], none]):
   ()
 
 class BaseException:
@@ -13,11 +15,11 @@ class BaseException:
 class Exception($BaseException,):
   ()
 
-def input(--) @cast (py_function[(str), str]):
+def input(--) @cast (py_function[tuple[tuple[none, str]], str]):
   ()
 
 class dict[`key, `value]:
-  def __iter__(--) @cast (py_function[(), iterator[`key]]):
+  def __iter__(--) @cast (py_function[tuple[], iterator[`key]]):
     ()
 
 class list[`element]:

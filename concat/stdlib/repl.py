@@ -172,6 +172,7 @@ def _exec_init_file(
     except FileNotFoundError:
         print('No startup initialization file found.')
     else:
+        # TODO: Type check.
         concat.execute.execute(
             init_file_name, python_ast, global_env, local_env
         )

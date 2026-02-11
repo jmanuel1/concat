@@ -1,6 +1,6 @@
 import unittest
 from textwrap import dedent
-from typing import Dict, List, cast
+from typing import Dict, List, Sequence, cast
 
 import concat.astutils
 import concat.lex as lex
@@ -61,6 +61,22 @@ def build_parsers() -> concat.parse.ParserDict:
     parsers.extend_with(concat.parse.extension)
     parsers.extend_with(concat.typecheck.typecheck_extension)
     return parsers
+
+
+def py_fun_type(arg_tys: Sequence[Type], ret_ty: Type) -> Type:
+    return context.py_function_type.apply(
+        context,
+        [
+            context.tuple_type.apply(
+                context,
+                [
+                    context.tuple_type.apply(context, [context.none_type, t])
+                    for t in arg_tys
+                ],
+            ),
+            ret_ty,
+        ],
+    )
 
 
 attr_word = concat.parse.AttributeWordNode((0, 0), concat.lex.Token())
@@ -234,7 +250,7 @@ class TestTypeChecker(unittest.TestCase):
             dedent(
                 """\
                     def seek_file(file:file offset:int whence:int --):
-                        swap [(), (),] [,] swap pick $.seek py_call drop drop
+                        swap ((None, ()), (None, ())) swap $.seek py_call drop
                 """
             )
         )
@@ -348,6 +364,18 @@ class TestStackEffectParser(unittest.TestCase):
                 self.assertTrue(
                     actual.equals(context, expected),
                 )
+
+
+class TestForAllParser(unittest.TestCase):
+    def test_forall_with_explicit_kinds_parsers(self) -> None:
+        ty_string = 'forall (any : VariableArgument[Item]) (any2 : Item). py_function[tuple[any], any2]'
+        tokens = lex_string(ty_string)
+        # exclude ENCODING, NEWLINE and ENDMARKER
+        tokens = tokens[1:-2]
+        try:
+            build_parsers()['type'].parse(tokens)
+        except concat.parser_combinators.ParseError as e:
+            self.fail(f'could not parse {ty_string}\n{e}')
 
 
 class TestNamedTypeNode(unittest.TestCase):
@@ -526,7 +554,18 @@ class TestSubtyping(unittest.TestCase):
     )
     def test_object_subtype_of_py_function(self, type1, type2) -> None:
         py_function = context.py_function_type.apply(
-            context, [TypeSequence(context, [type1]), type2]
+            context,
+            [
+                context.tuple_type.apply(
+                    context,
+                    [
+                        context.tuple_type.apply(
+                            context, [context.none_type, type1]
+                        )
+                    ],
+                ),
+                type2,
+            ],
         )
         object = ObjectType({'__call__': py_function})
         with context.substitutions.push() as subs:
@@ -559,12 +598,8 @@ class TestSubtyping(unittest.TestCase):
     )
     def test_class_subtype_of_py_function(self, type1, type2) -> None:
         x = ItemVariable(IndividualKind)
-        py_function = context.py_function_type.apply(
-            context, [TypeSequence(context, [type1]), type2]
-        )
-        unbound_py_function = context.py_function_type.apply(
-            context, [TypeSequence(context, [x, type1]), type2]
-        )
+        py_function = py_fun_type([type1], type2)
+        unbound_py_function = py_fun_type([x, type1], type2)
         cls = Fix(x, ClassType({'__init__': unbound_py_function}))
         with context.substitutions.push() as subs:
             cls.constrain_and_bind_variables(context, py_function, set(), [])

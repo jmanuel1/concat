@@ -5,6 +5,7 @@ from concat.typecheck.types import (
     IndividualType,
     ItemVariable,
     ObjectType,
+    OptionalType,
     PythonFunctionType,
     PythonOverloadedType,
     SequenceVariable,
@@ -71,18 +72,37 @@ def _object_type_strategy(
     )
 
 
+def _py_arg_type_strategy(
+    context: TypeChecker,
+    individual_type_strategy: SearchStrategy[IndividualType],
+) -> SearchStrategy[ConcatType]:
+    return builds(
+        lambda ty: context.tuple_type.apply(
+            context,
+            [OptionalType(context.str_type), ty],
+        ),
+        individual_type_strategy,
+    )
+
+
+def _py_args_type_strategy(
+    context: TypeChecker,
+    individual_type_strategy: SearchStrategy[IndividualType],
+) -> SearchStrategy[ConcatType]:
+    return builds(
+        lambda args: context.tuple_type.apply(context, args),
+        lists(_py_arg_type_strategy(context, individual_type_strategy)),
+    )
+
+
 def _py_function_strategy(
     context: TypeChecker,
     individual_type_strategy: SearchStrategy[IndividualType],
 ) -> SearchStrategy[PythonFunctionType]:
     return builds(
-        lambda args: PythonFunctionType(context, *args),
-        tuples(
-            _type_sequence_strategy(
-                context, individual_type_strategy, no_rest_var=True
-            ),
-            individual_type_strategy,
-        ),
+        lambda args, ret: PythonFunctionType(context, args, ret),
+        _py_arg_type_strategy(context, individual_type_strategy),
+        individual_type_strategy,
     )
 
 

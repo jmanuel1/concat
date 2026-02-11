@@ -7,7 +7,7 @@ def to_dict(*stack_type_var it:Optional[iterable[tuple[`x, `y]]] -- *stack_type_
 def to_str(*stack_type_var errors:object encoding:object obj:object -- *stack_type_var string:str):
   ()
 
-def to_py_function(*rest_var f:(*rest_var_2 -- *rest_var_3) -- *rest_var py_f:py_function[*any_args, `any_ret]):
+def to_py_function forall rest_var: Sequence, rest_var_2: Sequence, rest_var_3: Sequence, any_args: Item..., any_ret: Item. (rest_var f:(rest_var_2 -- rest_var_3) -- rest_var py_f:py_function[any_args, any_ret]):
   ()
 
 def to_slice(*stack_type_var step:Optional[`x] stop:Optional[`y] start:Optional[`z] -- *stack_type_var slice_:slice[`z, `y, `x]):

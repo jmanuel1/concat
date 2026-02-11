@@ -135,9 +135,10 @@ class UnhandledNodeTypeError(builtins.NotImplementedError):
 
 
 def format_item_type_expected_in_type_sequence_error(ty: Type) -> str:
+    context = current_context.get()
     return (
         'an item type was expected in this part of a type sequence, got '
-        f'{ty}'
+        f'{ty.to_user_string(context)} of kind {ty.kind}'
     )
 
 
@@ -221,6 +222,32 @@ def format_rigid_variable_error(var: Variable, ty: Type) -> str:
     return f'{var} is rigid and cannot be unified with {ty}'
 
 
+def format_unknown_kind_error(kind_node: concat.parse.Node) -> str:
+    return f'Unknown kind: {kind_node}'
+
+
+def format_too_few_args_to_generic_kind_error(
+    kind_node: concat.parse.Node,
+) -> str:
+    return f'"Generic" requires at least one kind argument, got {kind_node}'
+
+
+def format_wrong_number_of_args_for_vararg_kind(
+    kind_node: concat.parse.Node,
+) -> str:
+    return f'"VariableArgumentKind" accepts exactly one kind argument, got {kind_node}'
+
+
+def format_kind_does_not_accept_arguments_error(
+    kind_node: concat.parse.Node,
+) -> str:
+    return f'This kind must not have arguments: {kind_node}'
+
+
+def format_kind_requires_arguments(kind_node: concat.parse.Node) -> str:
+    return f'The kind {kind_node} requires arguments'
+
+
 def format_wrong_arg_kind_error(
     head: Type, i: int, arg: Type, param_kind: Kind
 ):
@@ -235,9 +262,10 @@ def format_decorator_result_kind_error(ty: Type) -> str:
 
 
 def format_subkinding_error(sub: Type, sup: Type) -> str:
+    context = current_context.get()
     return (
-        f'The kind of {sub} ({sub.kind}) is incompatible with the kind of '
-        f'{sup} ({sup.kind})'
+        f'The kind of {sub.to_user_string(context)} ({sub.kind}) is incompatible with the kind of '
+        f'{sup.to_user_string(context)} ({sup.kind})'
     )
 
 

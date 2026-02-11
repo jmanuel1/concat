@@ -46,6 +46,7 @@ def skip_until(p: Parser[_T, Any]) -> Parser[_T, List[_T]]:
     return parser
 
 
+# FIXME: Inaccurate return type annotation
 def bracketed(
     left: Parser[_T, Any], inside: Parser[_T, _U], right: Parser[_T, Any]
 ) -> Parser[_T, Union[_U, List[_T]]]:

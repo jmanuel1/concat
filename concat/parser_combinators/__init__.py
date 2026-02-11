@@ -360,7 +360,7 @@ class Parser(Generic[_T_contra, _U_co]):
                 result.current_index,
                 result.is_success,
                 result.failures,
-                is_committed=True,
+                is_committed=result.current_index > index,
             )
 
         return new_parser
@@ -447,6 +447,17 @@ def peek_prev(stream: Sequence[T], index: int) -> Result[T]:
         return Result(stream[index - 1], index, True)
     return Result(
         None, index, False, FailureTree('not the start of file', index, [])
+    )
+
+
+@Parser
+def peek(stream: Sequence[T], index: int) -> Result[T | None]:
+    if index < len(stream):
+        return Result(stream[index], index, True)
+    return Result(
+        None,
+        index,
+        True,
     )
 
 

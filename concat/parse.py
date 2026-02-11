@@ -439,7 +439,7 @@ def extension(parsers: ParserDict) -> None:
         newline = token('NEWLINE')
         statement = parsers['statement']
         word = parsers['word']
-        children = yield (word | statement | newline).commit().many()
+        children = yield (word.commit() | statement.commit() | newline).many()
         children = [
             child
             for child in children
@@ -459,7 +459,7 @@ def extension(parsers: ParserDict) -> None:
     # This parses one of many types of statement.
     # The specific statement node is returned.
     # statement = import statement ;
-    parsers['statement'] = parsers.ref_parser('import-statement')
+    parsers['statement'] = parsers.ref_parser('import-statement').commit()
 
     # This parses one of many types of word.
     # The specific word node is returned.
@@ -586,8 +586,8 @@ def extension(parsers: ParserDict) -> None:
         return element_words
 
     parsers['statement'] |= concat.parser_combinators.alt(
-        parsers.ref_parser('classdef-statement'),
-        parsers.ref_parser('funcdef-statement'),
+        parsers.ref_parser('classdef-statement').commit(),
+        parsers.ref_parser('funcdef-statement').commit(),
     )
 
     from concat.astutils import flatten
@@ -662,20 +662,18 @@ def extension(parsers: ParserDict) -> None:
 
     annotation_parser = token('RARROW') >> parsers.ref_parser('word').many()
 
-    @concat.parser_combinators.generate
+    @concat.parser_combinators.generate('suite')
     def suite():
-        words = parsers['word'].at_least(1)
+        words = parsers['word'].commit().at_least(1)
         statement = concat.parser_combinators.seq(parsers['statement'])
         block_content = (
-            parsers['word'] << token('NEWLINE').optional()
-            | parsers['statement'] << token('NEWLINE').optional()
+            (parsers['word'] << token('NEWLINE').optional()).commit()
+            | (parsers['statement'] << token('NEWLINE').optional()).commit()
         ).at_least(1)
         indented_block = token('NEWLINE').optional() >> bracketed(
             token('INDENT'), block_content, token('DEDENT')
         ).map(lambda x: [ParseError(x[1])] if isinstance(x, tuple) else x)
         return (yield indented_block | statement | words)
-
-    suite = suite.desc('suite')
 
     @concat.parser_combinators.generate('module')
     def module():
@@ -820,7 +818,7 @@ def extension(parsers: ParserDict) -> None:
         return PragmaNode(location, end_location, pragma_name, args)
 
     parsers['pragma'] = pragma_parser
-    parsers['statement'] |= parsers.ref_parser('pragma')
+    parsers['statement'] |= parsers.ref_parser('pragma').commit()
 
     parsers['word'] |= parsers.ref_parser('cast-word')
 
